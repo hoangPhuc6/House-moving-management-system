@@ -1,70 +1,78 @@
 package com.example.house_moving_service.dto.response;
 
-import java.time.LocalDateTime;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
-import lombok.Setter;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
 
 @Getter
-@Setter
+@Builder
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
-    private String status;
+
+    @Builder.Default
+    private Integer code = 1000;
+
     private String message;
     private T data;
-    private String errorCode;
-    private LocalDateTime timestamp = LocalDateTime.now();
+    private Object errors;
+    private String path;
 
-    public ApiResponse(HttpStatus httpStatus, String message, T data, String errorCode) {
-        this.status = httpStatus.is2xxSuccessful() ? "success" : "error";
-        this.message = message;
-        this.data = data;
-        this.errorCode = errorCode;
-        this.timestamp = LocalDateTime.now();
+    @Builder.Default
+    private Instant timestamp = Instant.now();
+
+    // 1. Trả về thành công kèm dữ liệu
+    public static <T> ApiResponse<T> success(T data) {
+        return ApiResponse.<T>builder()
+                .code(1000)
+                .message("Success")
+                .data(data)
+                .build();
     }
 
-    // 1. Success: Trả về HTTP 200 OK + Data
-    public static <T> ResponseEntity<ApiResponse<T>> success(T data) {
-        ApiResponse<T> response = new ApiResponse<>(HttpStatus.OK, "Call API success.", data, null);
-        return ResponseEntity.ok(response);
+    public static <T> ApiResponse<T> ok(T data) {
+        return success(data);
     }
 
-    // 2. Success: Trả về HTTP 200 OK + Data + Message tùy chỉnh
-    public static <T> ResponseEntity<ApiResponse<T>> success(T data, String message) {
-        ApiResponse<T> response = new ApiResponse<>(HttpStatus.OK, message, data, null);
-        return ResponseEntity.ok(response);
+    // 2. Trả về thành công kèm thông điệp tùy biến
+    public static <T> ApiResponse<T> success(String message, T data) {
+        return ApiResponse.<T>builder()
+                .code(1000)
+                .message(message)
+                .data(data)
+                .build();
     }
 
-    // 3. Created: Trả về HTTP 201 Created (Dùng cho tạo mới)
-    public static <T> ResponseEntity<ApiResponse<T>> created(T data) {
-        ApiResponse<T> response = new ApiResponse<>(HttpStatus.CREATED, "Created successfully", data, null);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    // 3. Trả về thành công không cần dữ liệu (Delete, Update trạng thái...)
+    public static <T> ApiResponse<T> success(String message) {
+        return ApiResponse.<T>builder()
+                .code(1000)
+                .message(message)
+                .build();
     }
 
-    public static <T> ResponseEntity<ApiResponse<T>> created(T data, String message) {
-        ApiResponse<T> response = new ApiResponse<>(HttpStatus.CREATED, message, data, null);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    // 4. Trả về lỗi nghiệp vụ (AppException)
+    public static <T> ApiResponse<T> error(int code, String message, String path) {
+        return ApiResponse.<T>builder()
+                .code(code)
+                .message(message)
+                .path(path)
+                .build();
     }
 
-    // 4. Error: Trả về HTTP Status tùy chỉnh (400, 404, 500...) + Error Code
-    public static <T> ResponseEntity<ApiResponse<T>> error(HttpStatus status, String message, String errorCode) {
-        ApiResponse<T> response = new ApiResponse<>(status, message, null, errorCode);
-        return ResponseEntity.status(status).body(response);
-    }
-
-    // 5. Error cơ bản: Chỉ cần Status và Message
-    public static <T> ResponseEntity<ApiResponse<T>> error(HttpStatus status, String message) {
-        return error(status, message, String.valueOf(status.value()));
-    }
-
-    public static <T> ResponseEntity<ApiResponse<T>> error(
-            HttpStatus status,
-            String message,
-            T data,
-            String errorCode) {
-        ApiResponse<T> response = new ApiResponse<>(status, message, data, errorCode);
-        return ResponseEntity.status(status).body(response);
+    // 5. Trả về lỗi kèm danh sách validation chi tiết
+    public static <T> ApiResponse<T> error(int code, String message, Object errors, String path) {
+        return ApiResponse.<T>builder()
+                .code(code)
+                .message(message)
+                .errors(errors)
+                .path(path)
+                .build();
     }
 }

@@ -20,6 +20,6 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getCurrentUser(Authentication authentication) {
         UserResponse response = userService.getCurrentUser(authentication.getName());
-        return ApiResponse.success(response, "Lấy thông tin người dùng thành công");
+        return ResponseEntity.ok(ApiResponse.success("Lấy thông tin người dùng thành công", response));
     }
 }

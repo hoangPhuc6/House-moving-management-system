@@ -9,6 +9,7 @@ public enum ErrorCode {
     ERR_INVALID_INPUT(1001, HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ: %s"),
     ERR_UNAUTHORIZED(1002, HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không chính xác!"),
     ERR_FORBIDDEN(1006, HttpStatus.FORBIDDEN, "Bạn không có quyền thực hiện hành động này"),
+    ERR_CUSTOMER_NOT_FOUND(1007, HttpStatus.NOT_FOUND, "Không tìm thấy thông tin khách hàng cho tài khoản này"),
     ERR_SERVICE_TYPE_NOT_FOUND(2001, HttpStatus.NOT_FOUND, "Không tìm thấy loại dịch vụ với ID: %s"),
     ERR_SERVICE_NOT_FOUND(2002, HttpStatus.NOT_FOUND, "Không tìm thấy dịch vụ với ID: %s"),
     ERR_SERVICE_TYPE_INACTIVE(2003, HttpStatus.BAD_REQUEST, "Không thể tạo hoặc kích hoạt dịch vụ thuộc nhóm loại dịch vụ đang bị vô hiệu hóa"),

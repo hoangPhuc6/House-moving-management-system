@@ -16,6 +16,8 @@ public interface BookingRepository extends JpaRepository<Booking, Integer> {
 
     Optional<Booking> findByBookingCode(String bookingCode);
 
+    boolean existsByBookingCode(String bookingCode);
+
     @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId")
     Page<Booking> findAllByCustomerId(@Param("customerId") Long customerId, Pageable pageable);
 

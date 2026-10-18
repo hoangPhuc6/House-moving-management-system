@@ -16,5 +16,9 @@ public interface VoucherRepository extends JpaRepository<Voucher, Integer> {
     Optional<Voucher> findByCodeAndIsActiveTrue(String code);
 
     boolean existsByCode(String code);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT v FROM Voucher v WHERE UPPER(v.code) = UPPER(:code)")
+    Optional<Voucher> findByCodeWithLock(@org.springframework.data.repository.query.Param("code") String code);
 }
 

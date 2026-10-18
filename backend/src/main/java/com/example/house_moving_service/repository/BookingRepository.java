@@ -1,0 +1,31 @@
+package com.example.house_moving_service.repository;
+
+import com.example.house_moving_service.entity.Booking;
+import com.example.house_moving_service.enums.BookingStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface BookingRepository extends JpaRepository<Booking, Integer> {
+
+    Optional<Booking> findByBookingCode(String bookingCode);
+
+    @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId")
+    Page<Booking> findAllByCustomerId(@Param("customerId") Long customerId, Pageable pageable);
+
+    @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId AND b.status = :status")
+    Page<Booking> findAllByCustomerIdAndStatus(
+            @Param("customerId") Long customerId,
+            @Param("status") BookingStatus status,
+            Pageable pageable);
+
+    @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.customer.id = :customerId")
+    Optional<Booking> findByIdAndCustomerId(@Param("id") Integer id, @Param("customerId") Long customerId);
+}
+

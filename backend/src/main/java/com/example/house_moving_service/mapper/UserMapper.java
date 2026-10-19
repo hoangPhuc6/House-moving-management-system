@@ -32,13 +32,14 @@ public class UserMapper {
     /**
      * Chuyển đổi từ Entity User và Token sang DTO AuthResponse
      */
-    public AuthResponse toAuthResponse(User user, String token) {
+    public AuthResponse toAuthResponse(User user, String accessToken, String refreshToken) {
         if (user == null) {
             return null;
         }
 
         return AuthResponse.builder()
-                .accessToken(token)
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .userId(user.getId())
                 .email(user.getEmail())

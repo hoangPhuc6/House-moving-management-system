@@ -36,3 +36,10 @@ build/
 .env
 .env.*
 !.env.example
+
+
+
+/docs/
+/graphify-out/
+/CLAUDE.local.md
+/.claude/

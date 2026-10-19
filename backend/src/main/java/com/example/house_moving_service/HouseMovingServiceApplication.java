@@ -7,8 +7,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class HouseMovingServiceApplication {
 
 	public static void main(String[] args) {
-
 		SpringApplication.run(HouseMovingServiceApplication.class, args);
 	}
 
 }
+

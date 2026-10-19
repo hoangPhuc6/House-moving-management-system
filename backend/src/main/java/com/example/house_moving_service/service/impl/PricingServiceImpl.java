@@ -153,7 +153,7 @@ public class PricingServiceImpl implements PricingService {
                 .add(terrainSurchargeFee)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // 6. Cỗ máy tính toán Khuyến mãi (Voucher Engine - Read-Only)
+        // 6. Tính toán Khuyến mãi (Read-Only)
         AppliedVoucherDto appliedVoucher = null;
         BigDecimal discountAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 

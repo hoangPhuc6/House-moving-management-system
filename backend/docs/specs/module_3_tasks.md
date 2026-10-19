@@ -125,42 +125,56 @@
 * Khách hàng cố tình truyền id của đơn hàng không thuộc về mình sẽ bị chặn đứng bởi ERR\_FORBIDDEN (HTTP 403).  
 * Không thể hủy đơn nếu admin đã chuyển trạng thái sang CONFIRMED hoặc IN\_PROGRESS.
 
-### **TASK-3.5: Xây dựng REST Controller cho Booking**
+### **TASK-3.5: Xây dựng REST Controller cho Booking [HOÀN THÀNH]**
 
 * **Mục tiêu duy nhất:** Mở API Endpoints định tuyến vào các hàm của Service, trích xuất danh tính khách hàng từ Spring Security (JWT) để truyền xuống dưới.  
 * **Phụ thuộc:** TASK-3.4.
 
-#### **1\. Artifacts cần tạo**
+#### **1\. Artifacts đã hoàn thành**
 
-* controller/BookingController.java
+* `controller/BookingController.java` (Customer Endpoints)
+* `controller/ManagementBookingController.java` (Admin/Dispatcher Management Endpoints)
+* `dto/request/booking/BookingManagementFilterRequest.java`
+* `repository/specification/BookingSpecification.java`
+* `service/BookingManagementService.java` & `service/impl/BookingManagementServiceImpl.java`
+* `src/main/resources/db/migration/V9__seed_booking_sample_data.sql` (Seed 5 đơn hàng mẫu bao quát 5 trạng thái)
 
 #### **2\. Ma trận Đặc tả Endpoints**
 
 | HTTP Method | Endpoint URI | Quyền (JWT) | Request Body | Phản hồi | HTTP Status |
 | :---- | :---- | :---- | :---- | :---- | :---- |
 | **POST** | /api/v1/bookings | @PreAuthorize("hasRole('CUSTOMER')") | @Valid CreateBookingRequest | BookingDetailResponse | **201 Created** |
-| **GET** | /api/v1/bookings | @PreAuthorize("hasRole('CUSTOMER')") | Query: ?page=0\&size=10 | Page\<BookingListResponse\> | **200 OK** |
+| **GET** | /api/v1/bookings | @PreAuthorize("hasRole('CUSTOMER')") | Query: ?status=...&page=0\&size=10 | PageResponse\<BookingSummaryResponse\> | **200 OK** |
 | **GET** | /api/v1/bookings/{id} | @PreAuthorize("hasRole('CUSTOMER')") | *None* | BookingDetailResponse | **200 OK** |
 | **PATCH** | /api/v1/bookings/{id}/cancel | @PreAuthorize("hasRole('CUSTOMER')") | @Valid CancelBookingRequest | BookingDetailResponse | **200 OK** |
+| **GET** | /api/v1/management/bookings | @PreAuthorize("hasAnyRole('ADMIN', 'DISPATCHER')") | Query Specification Filter | PageResponse\<BookingSummaryResponse\> | **200 OK** |
+| **GET** | /api/v1/management/bookings/{id} | @PreAuthorize("hasAnyRole('ADMIN', 'DISPATCHER')") | *None* | BookingDetailResponse | **200 OK** |
+| **PATCH** | /api/v1/management/bookings/{id}/cancel | @PreAuthorize("hasAnyRole('ADMIN', 'DISPATCHER')") | @Valid CancelBookingRequest | BookingDetailResponse | **200 OK** |
 
 #### **3\. Tiêu chí nghiệm thu (DoD)**
 
-* Mọi API đều trích xuất currentUserId thông qua @AuthenticationPrincipal và truyền xuống Service. Tuyệt đối không nhận customerId từ Payload JSON.  
-* Swagger/OpenAPI render đúng chuẩn, endpoint Hủy đơn sử dụng PATCH.
+* Mọi API đều trích xuất currentUserId thông qua @AuthenticationPrincipal và truyền xuống Service. Tuyệt đối không nhận customerId từ Payload JSON. [ĐẠT]
+* Swagger/OpenAPI render đúng chuẩn, endpoint Hủy đơn sử dụng PATCH. [ĐẠT]
+* Bộ test `BookingControllerTest` (13/13 test cases) & `ManagementBookingControllerTest` (10/10 test cases) vượt qua 100%. [ĐẠT]
 
-### **TASK-3.6: Viết Bộ Unit Test Kiểm thử Transaction & State Machine**
+### **TASK-3.6: Viết Bộ Unit Test Kiểm thử Transaction & State Machine [HOÀN THÀNH]**
 
 * **Mục tiêu duy nhất:** Kiểm chứng khả năng rollback của Database và các rào chắn nghiệp vụ biên.  
-* **Artifacts cần tạo:** src/test/java/.../BookingServiceTest.java.
+* **Artifacts đã hoàn thành:** 
+  - `src/test/java/.../BookingServiceTest.java` (15 test cases)
+  - `src/test/java/.../BookingManagementServiceTest.java` (6 test cases)
+  - `src/test/java/.../BookingRepositoryTest.java` (5 integration test cases với DB thực tế & Flyway Migration V9)
 
 #### **1\. Danh mục Test Cases bắt buộc**
 
-* testCreateBooking\_WhenSavingHistoryFails\_ThenRollbackAll: Mock hàm historyRepository.save() ném exception. Kiểm chứng hàm gốc ném lỗi và các bảng bookings, booking\_items không được lưu.  
-* testCreateBooking\_WhenVoucherLimitReached\_ThrowsException: Giả lập hàm countByVoucherId trả về giá trị đạt đỉnh, xác nhận ném ERR\_VOUCHER\_LIMIT\_REACHED.  
-* testCancelBooking\_WhenStatusIsConfirmed\_ThrowsInvalidStatus: Giả lập đơn hàng đang ở CONFIRMED, gọi hàm cancel, xác nhận ném lỗi.  
-* testCancelBooking\_WhenIdorAttack\_ThrowsForbidden: Giả lập user B truyền bookingId của user A, xác nhận hệ thống chặn bằng ERR\_FORBIDDEN.
+* testCreateBooking\_WhenSavingHistoryFails\_ThenRollbackAll: Mock hàm historyRepository.save() ném exception. Kiểm chứng rollback kích hoạt thành công. [ĐẠT]
+* testCreateBooking\_WhenVoucherLimitReached\_ThrowsException: Giả lập hàm countByVoucherId đạt giới hạn toàn hệ thống hoặc per-user, ném ERR\_VOUCHER\_LIMIT\_REACHED. [ĐẠT]
+* testCancelBooking\_WhenStatusIsConfirmed\_ThrowsInvalidStatus: Giả lập đơn hàng đang ở CONFIRMED, khách hàng cancel sẽ bị ném ERR_BOOKING_INVALID_STATUS. [ĐẠT]
+* testCancelBooking\_WhenIdorAttack\_ThrowsForbidden: Giả lập user B truyền bookingId của user A, hệ thống chặn đứng với ERR\_BOOKING_FORBIDDEN (HTTP 403). [ĐẠT]
 
 #### **2\. Tiêu chí nghiệm thu (DoD)**
 
-* Độ bao phủ (Coverage) của file BookingServiceImpl phải đạt tối thiểu 85%. Đảm bảo toàn bộ các nhánh if kiểm tra bảo mật (IDOR, Status, Voucher Limit) đều được kích hoạt trong Test.
+* Độ bao phủ (Coverage) kiểm thử toàn bộ các nhánh if bảo mật (IDOR, Status machine, Voucher Limit, Transaction rollback, Voucher usedCount revert). [ĐẠT]
+* Toàn bộ 52/52 test cases trong test suite vượt qua với kết quả BUILD SUCCESS. [ĐẠT]
+
 

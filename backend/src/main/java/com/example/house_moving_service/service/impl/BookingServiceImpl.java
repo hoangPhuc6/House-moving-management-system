@@ -38,6 +38,7 @@ import com.example.house_moving_service.service.PricingService;
 import com.example.house_moving_service.util.BookingCodeGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,7 +51,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Service
-@RequiredArgsConstructor
 @Slf4j
 public class BookingServiceImpl implements BookingService {
 
@@ -67,6 +67,35 @@ public class BookingServiceImpl implements BookingService {
     private final PricingService pricingService;
     private final BookingCodeGenerator bookingCodeGenerator;
     private final BookingMapper bookingMapper;
+
+    public BookingServiceImpl(
+            BookingRepository bookingRepository,
+            BookingRouteRepository bookingRouteRepository,
+            BookingItemRepository bookingItemRepository,
+            BookingServiceRepository bookingServiceRepository,
+            BookingVoucherRepository bookingVoucherRepository,
+            BookingStatusHistoryRepository bookingStatusHistoryRepository,
+            CustomerRepository customerRepository,
+            UserRepository userRepository,
+            VoucherRepository voucherRepository,
+            ServiceRepository serviceRepository,
+            PricingService pricingService,
+            BookingCodeGenerator bookingCodeGenerator,
+            BookingMapper bookingMapper) {
+        this.bookingRepository = bookingRepository;
+        this.bookingRouteRepository = bookingRouteRepository;
+        this.bookingItemRepository = bookingItemRepository;
+        this.bookingServiceRepository = bookingServiceRepository;
+        this.bookingVoucherRepository = bookingVoucherRepository;
+        this.bookingStatusHistoryRepository = bookingStatusHistoryRepository;
+        this.customerRepository = customerRepository;
+        this.userRepository = userRepository;
+        this.voucherRepository = voucherRepository;
+        this.serviceRepository = serviceRepository;
+        this.pricingService = pricingService;
+        this.bookingCodeGenerator = bookingCodeGenerator;
+        this.bookingMapper = bookingMapper;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -112,7 +141,7 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        // 3. Gọi ngầm PricingService (Module 2) để tính giá chính thức
+        // 3. Gọi PricingService để tính giá chính thức
         PricingCalculationRequest pricingRequest = PricingCalculationRequest.builder()
                 .schedule(request.getSchedule())
                 .route(request.getRoute())
@@ -254,7 +283,7 @@ public class BookingServiceImpl implements BookingService {
 
         log.info("Successfully created booking code: {} across all 6 tables", savedBooking.getBookingCode());
 
-        // 10. Trả về Response DTO trọn vẹn, không kích hoạt Lazy load
+
         return bookingMapper.toDetailResponse(
                 savedBooking,
                 savedRoute,
@@ -268,18 +297,131 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public BookingDetailResponse getBookingById(Integer id, Long currentUserId) {
-        throw new UnsupportedOperationException("Tính năng getBookingById sẽ được triển khai trong TASK-3.4");
+        log.info("Fetching booking id: {} for user: {}", id, currentUserId);
+
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_BOOKING_NOT_FOUND, id));
+
+        // 1. Kiểm tra quyền sở hữu (chống tấn công IDOR)
+        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(currentUserId)) {
+            throw new AppException(ErrorCode.ERR_BOOKING_FORBIDDEN);
+        }
+
+        // 2. Nạp dữ liệu các bảng con tường minh để tránh LazyInitializationException & MultipleBagFetchException
+        BookingRoute route = bookingRouteRepository.findByBookingId(id).orElse(null);
+        List<BookingItem> items = bookingItemRepository.findAllByBookingId(id);
+        List<com.example.house_moving_service.entity.BookingService> services = bookingServiceRepository.findAllByBookingId(id);
+        List<BookingVoucher> vouchers = bookingVoucherRepository.findAllByBookingId(id);
+        List<BookingStatusHistory> histories = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(id);
+
+        return bookingMapper.toDetailResponse(
+                booking,
+                route,
+                items,
+                services,
+                vouchers,
+                histories
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<BookingSummaryResponse> getCustomerBookings(Long currentUserId, BookingStatus status, Pageable pageable) {
+        log.info("Fetching customer bookings for user: {}, status: {}, page: {}", currentUserId, status, pageable.getPageNumber());
+
+        Page<Booking> bookingPage;
+        if (status != null) {
+            bookingPage = bookingRepository.findAllByCustomerIdAndStatus(currentUserId, status, pageable);
+        } else {
+            bookingPage = bookingRepository.findAllByCustomerId(currentUserId, pageable);
+        }
+
+        List<BookingSummaryResponse> summaryList = bookingPage.getContent().stream()
+                .map(bookingMapper::toSummaryResponse)
+                .toList();
+
+        return PageResponse.<BookingSummaryResponse>builder()
+                .pageNo(bookingPage.getNumber() + 1)
+                .pageSize(bookingPage.getSize())
+                .totalPages(bookingPage.getTotalPages())
+                .totalElements(bookingPage.getTotalElements())
+                .last(bookingPage.isLast())
+                .items(summaryList)
+                .build();
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<BookingSummaryResponse> getCustomerBookings(Long currentUserId, Pageable pageable) {
-        throw new UnsupportedOperationException("Tính năng getCustomerBookings sẽ được triển khai trong TASK-3.4");
+        return getCustomerBookings(currentUserId, null, pageable);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BookingDetailResponse cancelBooking(Integer id, CancelBookingRequest request, Long currentUserId) {
-        throw new UnsupportedOperationException("Tính năng cancelBooking sẽ được triển khai trong TASK-3.4");
+        log.info("Processing cancelBooking for id: {} by user: {}", id, currentUserId);
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_UNAUTHORIZED));
+
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_BOOKING_NOT_FOUND, id));
+
+        // 1. Kiểm tra quyền sở hữu (chống tấn công IDOR)
+        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(currentUserId)) {
+            throw new AppException(ErrorCode.ERR_BOOKING_FORBIDDEN);
+        }
+
+        // 2. Kiểm tra trạng thái: Chỉ cho phép hủy khi đang ở PENDING_SURVEY
+        if (booking.getStatus() != BookingStatus.PENDING_SURVEY) {
+            throw new AppException(ErrorCode.ERR_BOOKING_INVALID_STATUS);
+        }
+
+        // 3. Cập nhật trạng thái Booking sang CANCELLED
+        BookingStatus oldStatus = booking.getStatus();
+        booking.setStatus(BookingStatus.CANCELLED);
+        Booking updatedBooking = bookingRepository.save(booking);
+
+        // 4. Ghi lịch sử chuyển đổi trạng thái vào booking_status_history
+        BookingStatusHistory history = BookingStatusHistory.builder()
+                .booking(updatedBooking)
+                .oldStatus(oldStatus)
+                .newStatus(BookingStatus.CANCELLED)
+                .changedBy(currentUser)
+                .note(request != null ? request.getReason() : "Khách hàng hủy đơn")
+                .build();
+        bookingStatusHistoryRepository.save(history);
+
+        // 5. Hoàn trả lượt dùng voucher (nếu đơn có áp dụng voucher)
+        List<BookingVoucher> bookingVouchers = bookingVoucherRepository.findAllByBookingId(id);
+        if (bookingVouchers != null && !bookingVouchers.isEmpty()) {
+            for (BookingVoucher bv : bookingVouchers) {
+                if (bv.getVoucher() != null) {
+                    Voucher voucher = voucherRepository.findById(bv.getVoucher().getId()).orElse(null);
+                    if (voucher != null && voucher.getUsedCount() != null && voucher.getUsedCount() > 0) {
+                        voucher.setUsedCount(voucher.getUsedCount() - 1);
+                        voucherRepository.save(voucher);
+                        log.info("Reverted usedCount for voucher: {}", voucher.getCode());
+                    }
+                }
+            }
+        }
+
+        // 6. Nạp đầy đủ các quan hệ để trả về BookingDetailResponse chuẩn
+        BookingRoute route = bookingRouteRepository.findByBookingId(id).orElse(null);
+        List<BookingItem> items = bookingItemRepository.findAllByBookingId(id);
+        List<com.example.house_moving_service.entity.BookingService> services = bookingServiceRepository.findAllByBookingId(id);
+        List<BookingStatusHistory> histories = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(id);
+
+        log.info("Successfully cancelled booking code: {}", updatedBooking.getBookingCode());
+
+        return bookingMapper.toDetailResponse(
+                updatedBooking,
+                route,
+                items,
+                services,
+                bookingVouchers != null ? bookingVouchers : Collections.emptyList(),
+                histories
+        );
     }
 }

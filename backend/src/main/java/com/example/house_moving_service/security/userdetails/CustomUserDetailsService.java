@@ -1,4 +1,4 @@
-package com.example.house_moving_service.security;
+package com.example.house_moving_service.security.userdetails;
 
 import com.example.house_moving_service.entity.User;
 import com.example.house_moving_service.repository.UserRepository;

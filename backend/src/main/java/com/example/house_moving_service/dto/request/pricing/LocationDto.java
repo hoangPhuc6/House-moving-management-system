@@ -1,6 +1,6 @@
 package com.example.house_moving_service.dto.request.pricing;
 
-import com.example.house_moving_service.enums.PropertyType;
+import com.example.house_moving_service.common.enums.PropertyType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

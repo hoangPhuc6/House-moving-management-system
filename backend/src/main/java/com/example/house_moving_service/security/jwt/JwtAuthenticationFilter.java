@@ -1,5 +1,6 @@
-package com.example.house_moving_service.security;
+package com.example.house_moving_service.security.jwt;
 
+import com.example.house_moving_service.security.userdetails.CustomUserDetailsService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

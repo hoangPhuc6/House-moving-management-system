@@ -1,4 +1,4 @@
-package com.example.house_moving_service.exception;
+package com.example.house_moving_service.common.exception;
 
 import lombok.Getter;
 

@@ -1,6 +1,6 @@
-package com.example.house_moving_service.exception;
+package com.example.house_moving_service.common.exception;
 
-import com.example.house_moving_service.dto.response.ApiResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

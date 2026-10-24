@@ -1,4 +1,4 @@
-package com.example.house_moving_service.config;
+package com.example.house_moving_service.common.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;

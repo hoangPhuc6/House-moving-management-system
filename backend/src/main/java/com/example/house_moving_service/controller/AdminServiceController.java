@@ -3,7 +3,7 @@ package com.example.house_moving_service.controller;
 import com.example.house_moving_service.dto.request.CreateServiceRequest;
 import com.example.house_moving_service.dto.request.UpdateServiceRequest;
 import com.example.house_moving_service.dto.request.UpdateServiceStatusRequest;
-import com.example.house_moving_service.dto.response.ApiResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.dto.response.ServiceResponse;
 import com.example.house_moving_service.enums.ServiceStatus;
 import com.example.house_moving_service.service.ServiceCatalogService;

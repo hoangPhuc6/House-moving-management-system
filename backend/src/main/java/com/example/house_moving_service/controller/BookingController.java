@@ -9,6 +9,7 @@ import com.example.house_moving_service.dto.response.booking.BookingSummaryRespo
 import com.example.house_moving_service.enums.BookingStatus;
 import com.example.house_moving_service.security.CustomUserDetails;
 import com.example.house_moving_service.service.BookingService;
+import com.example.house_moving_service.security.access.CustomerOnly;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -22,7 +23,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/bookings")
 @Slf4j
-@PreAuthorize("hasRole('CUSTOMER')")
+@CustomerOnly
 @Tag(name = "Booking", description = "APIs quản lý đơn đặt dịch vụ chuyển nhà dành cho Khách hàng")
 @SecurityRequirement(name = "bearerAuth")
 public class BookingController {

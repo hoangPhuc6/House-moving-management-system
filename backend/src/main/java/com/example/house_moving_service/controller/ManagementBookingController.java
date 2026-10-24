@@ -2,11 +2,11 @@ package com.example.house_moving_service.controller;
 
 import com.example.house_moving_service.dto.request.booking.BookingManagementFilterRequest;
 import com.example.house_moving_service.dto.request.booking.CancelBookingRequest;
-import com.example.house_moving_service.dto.response.ApiResponse;
-import com.example.house_moving_service.dto.response.PageResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
+import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.dto.response.booking.BookingDetailResponse;
 import com.example.house_moving_service.dto.response.booking.BookingSummaryResponse;
-import com.example.house_moving_service.security.CustomUserDetails;
+import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import com.example.house_moving_service.service.BookingManagementService;
 import com.example.house_moving_service.security.access.StaffOnly;
 import io.swagger.v3.oas.annotations.Operation;

@@ -2,7 +2,7 @@ package com.example.house_moving_service.controller;
 
 import com.example.house_moving_service.dto.request.CreateServiceTypeRequest;
 import com.example.house_moving_service.dto.request.UpdateServiceTypeRequest;
-import com.example.house_moving_service.dto.response.ApiResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.dto.response.ServiceTypeResponse;
 import com.example.house_moving_service.service.ServiceTypeService;
 import com.example.house_moving_service.security.access.AdminOnly;

@@ -1,6 +1,6 @@
 package com.example.house_moving_service.dto.response.booking;
 
-import com.example.house_moving_service.enums.PropertyType;
+import com.example.house_moving_service.common.enums.PropertyType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,4 +1,4 @@
-package com.example.house_moving_service.enums;
+package com.example.house_moving_service.common.enums;
 
 public enum PropertyType {
     HOUSE,

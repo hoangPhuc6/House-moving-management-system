@@ -1,9 +1,9 @@
-package com.example.house_moving_service.config;
+package com.example.house_moving_service.security;
 
 import com.example.house_moving_service.enums.RoleCode;
-import com.example.house_moving_service.security.CustomAccessDeniedHandler;
-import com.example.house_moving_service.security.JwtAuthenticationEntryPoint;
-import com.example.house_moving_service.security.JwtAuthenticationFilter;
+import com.example.house_moving_service.security.handler.CustomAccessDeniedHandler;
+import com.example.house_moving_service.security.jwt.JwtAuthenticationEntryPoint;
+import com.example.house_moving_service.security.jwt.JwtAuthenticationFilter;
 import com.example.house_moving_service.security.access.AccessZones;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

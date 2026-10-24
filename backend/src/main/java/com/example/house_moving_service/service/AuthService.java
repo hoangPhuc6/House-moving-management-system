@@ -14,7 +14,7 @@ import com.example.house_moving_service.mapper.UserMapper;
 import com.example.house_moving_service.repository.CustomerRepository;
 import com.example.house_moving_service.repository.RoleRepository;
 import com.example.house_moving_service.repository.UserRepository;
-import com.example.house_moving_service.security.JwtTokenProvider;
+import com.example.house_moving_service.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;

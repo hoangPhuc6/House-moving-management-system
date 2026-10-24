@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response;
+package com.example.house_moving_service.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AccessLevel;

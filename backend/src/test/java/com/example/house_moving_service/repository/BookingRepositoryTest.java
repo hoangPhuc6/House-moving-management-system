@@ -1,6 +1,6 @@
 package com.example.house_moving_service.repository;
 
-import com.example.house_moving_service.dto.response.PageResponse;
+import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.entity.Booking;
 import com.example.house_moving_service.entity.BookingItem;
 import com.example.house_moving_service.entity.BookingRoute;
@@ -14,7 +14,7 @@ import com.example.house_moving_service.entity.User;
 import com.example.house_moving_service.entity.Voucher;
 import com.example.house_moving_service.enums.BookingStatus;
 import com.example.house_moving_service.enums.DiscountType;
-import com.example.house_moving_service.enums.PropertyType;
+import com.example.house_moving_service.common.enums.PropertyType;
 import com.example.house_moving_service.enums.ServiceStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -1,9 +1,9 @@
 package com.example.house_moving_service.controller;
 
 import com.example.house_moving_service.dto.request.pricing.PricingCalculationRequest;
-import com.example.house_moving_service.dto.response.ApiResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
-import com.example.house_moving_service.security.CustomUserDetails;
+import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import com.example.house_moving_service.service.PricingService;
 import com.example.house_moving_service.security.access.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;

@@ -10,7 +10,7 @@ import com.example.house_moving_service.dto.response.pricing.BreakdownItemDto;
 import com.example.house_moving_service.dto.response.pricing.CategoryFeesDto;
 import com.example.house_moving_service.dto.response.pricing.FinancialSummaryDto;
 import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
-import com.example.house_moving_service.enums.PropertyType;
+import com.example.house_moving_service.common.enums.PropertyType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.validation.ConstraintViolation;

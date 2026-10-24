@@ -1,6 +1,6 @@
 package com.example.house_moving_service.controller;
 
-import com.example.house_moving_service.dto.response.ApiResponse;
+import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.dto.response.UserResponse;
 import com.example.house_moving_service.service.UserService;
 import lombok.RequiredArgsConstructor;

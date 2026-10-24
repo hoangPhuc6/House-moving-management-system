@@ -1,4 +1,4 @@
-package com.example.house_moving_service.security;
+package com.example.house_moving_service.security.jwt;
 
 import com.example.house_moving_service.entity.User;
 import io.jsonwebtoken.Claims;

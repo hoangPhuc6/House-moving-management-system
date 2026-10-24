@@ -5,6 +5,7 @@ import com.example.house_moving_service.dto.response.ApiResponse;
 import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
 import com.example.house_moving_service.security.CustomUserDetails;
 import com.example.house_moving_service.service.PricingService;
+import com.example.house_moving_service.security.access.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -12,7 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,7 +29,7 @@ public class PricingController {
     private final PricingService pricingService;
 
     @PostMapping("/estimate")
-    @PreAuthorize("isAuthenticated()")
+    @AuthenticatedUser
     @Operation(
             summary = "Tính bảng giá tham khảo dự kiến",
             description = "Tiếp nhận lộ trình, đồ đạc, lịch hẹn và voucher của khách hàng đã đăng nhập để tính toán 5 cấu phần chi phí."

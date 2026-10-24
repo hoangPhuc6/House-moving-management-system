@@ -4,11 +4,11 @@ import com.example.house_moving_service.dto.response.ApiResponse;
 import com.example.house_moving_service.dto.response.ServiceResponse;
 import com.example.house_moving_service.dto.response.ServiceTypeResponse;
 import com.example.house_moving_service.service.ServiceCatalogService;
+import com.example.house_moving_service.security.access.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,7 +19,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/services")
-@PreAuthorize("isAuthenticated()")
+@AuthenticatedUser
 @RequiredArgsConstructor
 @Tag(name = "Services Catalog", description = "APIs tra cứu danh mục dịch vụ niêm yết dành cho người dùng đã đăng nhập")
 public class PublicServiceController {

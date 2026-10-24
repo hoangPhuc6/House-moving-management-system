@@ -7,13 +7,13 @@ import com.example.house_moving_service.dto.response.ApiResponse;
 import com.example.house_moving_service.dto.response.ServiceResponse;
 import com.example.house_moving_service.enums.ServiceStatus;
 import com.example.house_moving_service.service.ServiceCatalogService;
+import com.example.house_moving_service.security.access.AdminOnly;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,7 +29,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/admin/services")
-@PreAuthorize("hasRole('ADMIN')")
+@AdminOnly
 @RequiredArgsConstructor
 @Tag(name = "Admin - Services", description = "APIs quản lý dịch vụ và giá niêm yết dành cho Quản trị viên")
 public class AdminServiceController {

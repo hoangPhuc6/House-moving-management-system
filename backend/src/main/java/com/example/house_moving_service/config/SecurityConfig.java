@@ -1,8 +1,10 @@
 package com.example.house_moving_service.config;
 
+import com.example.house_moving_service.enums.RoleCode;
 import com.example.house_moving_service.security.CustomAccessDeniedHandler;
 import com.example.house_moving_service.security.JwtAuthenticationEntryPoint;
 import com.example.house_moving_service.security.JwtAuthenticationFilter;
+import com.example.house_moving_service.security.access.AccessZones;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,12 +37,6 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
-    private static final String[] PUBLIC_ENDPOINTS = {
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html"
-    };
-    
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -62,10 +58,11 @@ public class SecurityConfig {
                         .accessDeniedHandler(customAccessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/services/**").authenticated()
+                        // Chặn thô theo vùng URL (xem AccessZones); quyền chi tiết đặt bằng annotation ở controller
+                        .requestMatchers(AccessZones.AUTH).permitAll()
+                        .requestMatchers(AccessZones.DOCS).permitAll()
+                        .requestMatchers(AccessZones.ADMIN).hasRole(RoleCode.ADMIN.name())
+                        .requestMatchers(AccessZones.MANAGEMENT).hasAnyRole(RoleCode.ADMIN.name(), RoleCode.DISPATCHER.name())
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

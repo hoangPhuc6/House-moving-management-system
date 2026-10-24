@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response.pricing;
+package com.example.house_moving_service.modules.pricing.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
@@ -14,21 +14,15 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CategoryFeesDto {
+public class FinancialSummaryDto {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal baseTransportFee;
+    private BigDecimal subtotal;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal laborFee;
+    private BigDecimal discountAmount;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal technicalFee;
-
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal materialFee;
-
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal terrainSurchargeFee;
+    private BigDecimal finalTotal;
 }
 

@@ -1,8 +1,8 @@
 package com.example.house_moving_service.dto.request.booking;
 
-import com.example.house_moving_service.dto.request.pricing.RouteDto;
-import com.example.house_moving_service.dto.request.pricing.ScheduleDto;
-import com.example.house_moving_service.dto.request.pricing.ServiceItemDto;
+import com.example.house_moving_service.modules.pricing.dto.request.RouteDto;
+import com.example.house_moving_service.modules.pricing.dto.request.ScheduleDto;
+import com.example.house_moving_service.modules.pricing.dto.request.ServiceItemDto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

@@ -1,15 +1,15 @@
-package com.example.house_moving_service.dto;
+package com.example.house_moving_service.modules.pricing.dto;
 
-import com.example.house_moving_service.dto.request.pricing.LocationDto;
-import com.example.house_moving_service.dto.request.pricing.PricingCalculationRequest;
-import com.example.house_moving_service.dto.request.pricing.RouteDto;
-import com.example.house_moving_service.dto.request.pricing.ScheduleDto;
-import com.example.house_moving_service.dto.request.pricing.ServiceItemDto;
-import com.example.house_moving_service.dto.response.pricing.AppliedVoucherDto;
-import com.example.house_moving_service.dto.response.pricing.BreakdownItemDto;
-import com.example.house_moving_service.dto.response.pricing.CategoryFeesDto;
-import com.example.house_moving_service.dto.response.pricing.FinancialSummaryDto;
-import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
+import com.example.house_moving_service.modules.pricing.dto.request.LocationDto;
+import com.example.house_moving_service.modules.pricing.dto.request.PricingCalculationRequest;
+import com.example.house_moving_service.modules.pricing.dto.request.RouteDto;
+import com.example.house_moving_service.modules.pricing.dto.request.ScheduleDto;
+import com.example.house_moving_service.modules.pricing.dto.request.ServiceItemDto;
+import com.example.house_moving_service.modules.pricing.dto.response.AppliedVoucherDto;
+import com.example.house_moving_service.modules.pricing.dto.response.BreakdownItemDto;
+import com.example.house_moving_service.modules.pricing.dto.response.CategoryFeesDto;
+import com.example.house_moving_service.modules.pricing.dto.response.FinancialSummaryDto;
+import com.example.house_moving_service.modules.pricing.dto.response.PricingCalculationResponse;
 import com.example.house_moving_service.common.enums.PropertyType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;

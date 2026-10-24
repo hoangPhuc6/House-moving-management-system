@@ -1,7 +1,7 @@
-package com.example.house_moving_service.service;
+package com.example.house_moving_service.modules.pricing.service;
 
-import com.example.house_moving_service.dto.request.pricing.PricingCalculationRequest;
-import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
+import com.example.house_moving_service.modules.pricing.dto.request.PricingCalculationRequest;
+import com.example.house_moving_service.modules.pricing.dto.response.PricingCalculationResponse;
 
 public interface PricingService {
 

@@ -1,6 +1,6 @@
-package com.example.house_moving_service.entity;
+package com.example.house_moving_service.modules.voucher.entity;
 
-import com.example.house_moving_service.enums.DiscountType;
+import com.example.house_moving_service.modules.voucher.enums.DiscountType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

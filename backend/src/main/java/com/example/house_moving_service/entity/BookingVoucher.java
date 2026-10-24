@@ -1,5 +1,6 @@
 package com.example.house_moving_service.entity;
 
+import com.example.house_moving_service.modules.voucher.entity.Voucher;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;

@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response.pricing;
+package com.example.house_moving_service.modules.pricing.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

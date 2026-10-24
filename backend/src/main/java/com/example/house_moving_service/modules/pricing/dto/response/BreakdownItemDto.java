@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response.pricing;
+package com.example.house_moving_service.modules.pricing.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
@@ -14,17 +14,20 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class AppliedVoucherDto {
+public class BreakdownItemDto {
 
-    private Integer voucherId;
-    private String code;
-    private String title;
-    private String discountType;
-
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal discountValue;
+    private Integer serviceId;
+    private Integer serviceTypeId;
+    private String serviceTypeName;
+    private String serviceName;
+    private BigDecimal quantity;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private BigDecimal discountAmount;
+    private BigDecimal unitPrice;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    private BigDecimal totalPrice;
+
+    private String note;
 }
 

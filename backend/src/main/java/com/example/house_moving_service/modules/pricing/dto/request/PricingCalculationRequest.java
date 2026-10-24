@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.request.pricing;
+package com.example.house_moving_service.modules.pricing.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;

@@ -1,9 +1,9 @@
-package com.example.house_moving_service.service.helper;
+package com.example.house_moving_service.modules.pricing.helper;
 
-import com.example.house_moving_service.config.MapApiProperties;
-import com.example.house_moving_service.config.PricingProperties;
-import com.example.house_moving_service.dto.request.pricing.LocationDto;
-import com.example.house_moving_service.dto.request.pricing.RouteDto;
+import com.example.house_moving_service.modules.pricing.config.MapApiProperties;
+import com.example.house_moving_service.modules.pricing.config.PricingProperties;
+import com.example.house_moving_service.modules.pricing.dto.request.LocationDto;
+import com.example.house_moving_service.modules.pricing.dto.request.RouteDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

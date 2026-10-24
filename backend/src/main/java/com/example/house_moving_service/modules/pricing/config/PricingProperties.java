@@ -1,4 +1,4 @@
-package com.example.house_moving_service.config;
+package com.example.house_moving_service.modules.pricing.config;
 
 import lombok.Getter;
 import lombok.Setter;

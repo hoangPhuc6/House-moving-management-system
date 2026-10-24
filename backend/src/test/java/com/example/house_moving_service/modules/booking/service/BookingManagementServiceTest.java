@@ -25,6 +25,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingStatus
 import com.example.house_moving_service.modules.booking.repository.BookingVoucherRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
+import com.example.house_moving_service.modules.voucher.service.impl.VoucherServiceImpl;
 import com.example.house_moving_service.modules.booking.service.impl.BookingManagementServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -82,6 +84,9 @@ class BookingManagementServiceTest {
 
     @BeforeEach
     void setUp() {
+        // VoucherServiceImpl thật bọc VoucherRepository mock: các stub/verify trên voucherRepository vẫn có hiệu lực
+        ReflectionTestUtils.setField(bookingManagementService, "voucherService", new VoucherServiceImpl(voucherRepository));
+
         adminUserId = 99L;
         adminUser = User.builder().id(adminUserId).email("admin@housemoving.vn").isActive(true).build();
         customer = Customer.builder().id(1L).fullName("Le Van B").phoneNumber("0988776655").build();

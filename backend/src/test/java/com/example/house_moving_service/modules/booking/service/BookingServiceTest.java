@@ -44,6 +44,7 @@ import com.example.house_moving_service.modules.identity.repository.CustomerRepo
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
+import com.example.house_moving_service.modules.voucher.service.impl.VoucherServiceImpl;
 import com.example.house_moving_service.modules.booking.service.impl.BookingServiceImpl;
 import com.example.house_moving_service.modules.booking.util.BookingCodeGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +54,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -107,6 +109,9 @@ class BookingServiceTest {
 
     @BeforeEach
     void setUp() {
+        // VoucherServiceImpl thật bọc VoucherRepository mock: các stub/verify trên voucherRepository vẫn có hiệu lực
+        ReflectionTestUtils.setField(bookingService, "voucherService", new VoucherServiceImpl(voucherRepository));
+
         userId = 1L;
         user = User.builder().id(userId).email("customer@example.com").isActive(true).build();
         customer = Customer.builder().id(userId).user(user).fullName("Nguyen Van A").phoneNumber("0912345678").build();

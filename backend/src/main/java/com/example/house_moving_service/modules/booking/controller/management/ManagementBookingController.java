@@ -35,13 +35,10 @@ import org.springframework.web.bind.annotation.RestController;
 @StaffOnly
 @Tag(name = "Management - Bookings", description = "APIs quản lý và điều phối đơn hàng dành cho Quản trị viên & Điều phối viên")
 @SecurityRequirement(name = "bearerAuth")
+@RequiredArgsConstructor
 public class ManagementBookingController {
 
     private final BookingManagementService bookingManagementService;
-
-    public ManagementBookingController(BookingManagementService bookingManagementService) {
-        this.bookingManagementService = bookingManagementService;
-    }
 
     @GetMapping
     @Operation(

@@ -1,8 +1,8 @@
-package com.example.house_moving_service.controller;
+package com.example.house_moving_service.modules.identity.controller;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
-import com.example.house_moving_service.dto.response.UserResponse;
-import com.example.house_moving_service.service.UserService;
+import com.example.house_moving_service.modules.identity.dto.response.UserResponse;
+import com.example.house_moving_service.modules.identity.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;

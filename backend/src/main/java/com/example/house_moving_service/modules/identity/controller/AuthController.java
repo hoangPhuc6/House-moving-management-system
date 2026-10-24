@@ -1,13 +1,13 @@
-package com.example.house_moving_service.controller;
+package com.example.house_moving_service.modules.identity.controller;
 
-import com.example.house_moving_service.dto.request.LoginRequest;
-import com.example.house_moving_service.dto.request.RefreshTokenRequest;
-import com.example.house_moving_service.dto.request.RegisterRequest;
+import com.example.house_moving_service.modules.identity.dto.request.LoginRequest;
+import com.example.house_moving_service.modules.identity.dto.request.RefreshTokenRequest;
+import com.example.house_moving_service.modules.identity.dto.request.RegisterRequest;
 import com.example.house_moving_service.common.dto.ApiResponse;
-import com.example.house_moving_service.dto.response.AuthResponse;
-import com.example.house_moving_service.dto.response.TokenRefreshResponse;
-import com.example.house_moving_service.dto.response.UserResponse;
-import com.example.house_moving_service.service.AuthService;
+import com.example.house_moving_service.modules.identity.dto.response.AuthResponse;
+import com.example.house_moving_service.modules.identity.dto.response.TokenRefreshResponse;
+import com.example.house_moving_service.modules.identity.dto.response.UserResponse;
+import com.example.house_moving_service.modules.identity.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

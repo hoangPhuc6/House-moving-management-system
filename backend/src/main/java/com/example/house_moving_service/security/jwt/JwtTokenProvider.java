@@ -1,6 +1,6 @@
 package com.example.house_moving_service.security.jwt;
 
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;

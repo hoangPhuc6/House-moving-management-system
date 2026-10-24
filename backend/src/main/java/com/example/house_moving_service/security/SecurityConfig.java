@@ -1,6 +1,6 @@
 package com.example.house_moving_service.security;
 
-import com.example.house_moving_service.enums.RoleCode;
+import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import com.example.house_moving_service.security.handler.CustomAccessDeniedHandler;
 import com.example.house_moving_service.security.jwt.JwtAuthenticationEntryPoint;
 import com.example.house_moving_service.security.jwt.JwtAuthenticationFilter;

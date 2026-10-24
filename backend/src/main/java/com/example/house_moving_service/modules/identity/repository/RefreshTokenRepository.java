@@ -1,7 +1,7 @@
-package com.example.house_moving_service.repository;
+package com.example.house_moving_service.modules.identity.repository;
 
-import com.example.house_moving_service.entity.RefreshToken;
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.entity.RefreshToken;
+import com.example.house_moving_service.modules.identity.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

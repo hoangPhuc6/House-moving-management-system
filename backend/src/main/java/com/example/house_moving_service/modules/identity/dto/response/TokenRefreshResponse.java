@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response;
+package com.example.house_moving_service.modules.identity.dto.response;
 
 import lombok.Builder;
 import lombok.Data;

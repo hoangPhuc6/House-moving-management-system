@@ -1,4 +1,4 @@
-package com.example.house_moving_service.entity;
+package com.example.house_moving_service.modules.identity.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,13 +19,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "staff")
+@Table(name = "customers")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Staff {
+public class Customer {
 
     // Khóa ngoại user_id đóng vai trò là khóa chính luôn (Shared Primary Key)
     @Id
@@ -37,20 +37,14 @@ public class Staff {
     @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(name = "staff_code", unique = true, length = 30)
-    private String staffCode;
-
-    @Column(name = "full_name", nullable = false)
+    @Column(name = "full_name", nullable = false, length = 255)
     private String fullName;
 
-    @Column(name = "hire_date")
-    private LocalDate hireDate;
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
 
-    @Column(name = "employment_status", nullable = false, length = 30)
-    private String employmentStatus;
-
-    @Column(name = "note", columnDefinition = "TEXT")
-    private String note;
+    @Column(name = "birthday")
+    private LocalDate birthday;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

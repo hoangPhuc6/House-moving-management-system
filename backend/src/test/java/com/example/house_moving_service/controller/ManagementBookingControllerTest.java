@@ -5,10 +5,10 @@ import com.example.house_moving_service.dto.request.booking.CancelBookingRequest
 import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.dto.response.booking.BookingDetailResponse;
 import com.example.house_moving_service.dto.response.booking.BookingSummaryResponse;
-import com.example.house_moving_service.entity.Role;
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.entity.Role;
+import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.enums.BookingStatus;
-import com.example.house_moving_service.enums.RoleCode;
+import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;

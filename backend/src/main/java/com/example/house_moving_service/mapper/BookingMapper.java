@@ -12,6 +12,7 @@ import com.example.house_moving_service.entity.BookingItem;
 import com.example.house_moving_service.entity.BookingRoute;
 import com.example.house_moving_service.entity.BookingStatusHistory;
 import com.example.house_moving_service.entity.BookingVoucher;
+import com.example.house_moving_service.modules.identity.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

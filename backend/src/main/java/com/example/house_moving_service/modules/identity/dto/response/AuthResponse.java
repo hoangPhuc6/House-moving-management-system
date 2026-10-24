@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.response;
+package com.example.house_moving_service.modules.identity.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -14,13 +13,20 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserResponse {
+public class AuthResponse {
 
-    private Long id;
+    private String accessToken;
+
+    private String refreshToken;
+
+    @Builder.Default
+    private String tokenType = "Bearer";
+
+    private Long userId;
+
     private String email;
+
     private String fullName;
-    private String phoneNumber;
-    private Boolean isActive;
+
     private List<String> roles;
-    private LocalDateTime createdAt;
 }

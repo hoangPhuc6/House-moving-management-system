@@ -30,7 +30,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingServic
 import com.example.house_moving_service.modules.booking.repository.BookingStatusHistoryRepository;
 import com.example.house_moving_service.modules.booking.repository.BookingVoucherRepository;
 import com.example.house_moving_service.modules.identity.repository.CustomerRepository;
-import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
+import com.example.house_moving_service.modules.catalog.service.ServiceLookupService;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.voucher.service.VoucherService;
 import com.example.house_moving_service.modules.booking.service.BookingService;
@@ -63,7 +63,7 @@ public class BookingServiceImpl implements BookingService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final VoucherService voucherService;
-    private final ServiceRepository serviceRepository;
+    private final ServiceLookupService serviceLookupService;
     private final PricingService pricingService;
     private final BookingCodeGenerator bookingCodeGenerator;
     private final BookingMapper bookingMapper;
@@ -194,7 +194,7 @@ public class BookingServiceImpl implements BookingService {
         List<com.example.house_moving_service.modules.booking.entity.BookingService> bookingServicesToSave = new ArrayList<>();
         if (pricingResponse.getBreakdownItems() != null) {
             for (BreakdownItemDto breakdown : pricingResponse.getBreakdownItems()) {
-                Service serviceProxy = serviceRepository.getReferenceById(breakdown.getServiceId());
+                Service serviceProxy = serviceLookupService.getReference(breakdown.getServiceId());
                 int quantity = breakdown.getQuantity() != null ? breakdown.getQuantity().intValue() : 1;
 
                 com.example.house_moving_service.modules.booking.entity.BookingService bs = com.example.house_moving_service.modules.booking.entity.BookingService.builder()

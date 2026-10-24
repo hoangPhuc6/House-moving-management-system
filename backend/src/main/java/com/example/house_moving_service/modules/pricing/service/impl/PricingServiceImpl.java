@@ -14,7 +14,7 @@ import com.example.house_moving_service.modules.voucher.enums.DiscountType;
 import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
-import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
+import com.example.house_moving_service.modules.catalog.service.ServiceLookupService;
 import com.example.house_moving_service.modules.voucher.service.VoucherService;
 import com.example.house_moving_service.modules.pricing.service.PricingService;
 import com.example.house_moving_service.modules.pricing.helper.RouteDistanceHelper;
@@ -41,7 +41,7 @@ public class PricingServiceImpl implements PricingService {
 
     private final PricingProperties pricingProperties;
     private final RouteDistanceHelper routeDistanceHelper;
-    private final ServiceRepository serviceRepository;
+    private final ServiceLookupService serviceLookupService;
     private final VoucherService voucherService;
 
     private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
@@ -81,7 +81,7 @@ public class PricingServiceImpl implements PricingService {
                 .map(ServiceItemDto::getServiceId)
                 .collect(Collectors.toSet());
 
-        List<Service> services = serviceRepository.findAllByIdIn(requestedServiceIds);
+        List<Service> services = serviceLookupService.findAllByIds(requestedServiceIds);
         Map<Integer, Service> serviceMap = services.stream()
                 .collect(Collectors.toMap(Service::getId, s -> s));
 

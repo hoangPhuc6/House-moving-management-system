@@ -1,8 +1,8 @@
-package com.example.house_moving_service.mapper;
+package com.example.house_moving_service.modules.identity.mapper;
 
-import com.example.house_moving_service.dto.response.AuthResponse;
-import com.example.house_moving_service.dto.response.UserResponse;
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.dto.response.AuthResponse;
+import com.example.house_moving_service.modules.identity.dto.response.UserResponse;
+import com.example.house_moving_service.modules.identity.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

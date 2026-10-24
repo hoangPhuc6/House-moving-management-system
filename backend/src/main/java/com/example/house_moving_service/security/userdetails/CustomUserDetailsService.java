@@ -1,7 +1,7 @@
 package com.example.house_moving_service.security.userdetails;
 
-import com.example.house_moving_service.entity.User;
-import com.example.house_moving_service.repository.UserRepository;
+import com.example.house_moving_service.modules.identity.entity.User;
+import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

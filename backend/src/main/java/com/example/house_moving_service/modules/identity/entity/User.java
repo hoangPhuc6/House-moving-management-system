@@ -1,4 +1,4 @@
-package com.example.house_moving_service.entity;
+package com.example.house_moving_service.modules.identity.entity;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;

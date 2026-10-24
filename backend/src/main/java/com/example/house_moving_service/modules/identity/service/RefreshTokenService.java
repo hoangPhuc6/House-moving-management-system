@@ -1,8 +1,8 @@
-package com.example.house_moving_service.service;
+package com.example.house_moving_service.modules.identity.service;
 
-import com.example.house_moving_service.entity.RefreshToken;
-import com.example.house_moving_service.entity.User;
-import com.example.house_moving_service.repository.RefreshTokenRepository;
+import com.example.house_moving_service.modules.identity.entity.RefreshToken;
+import com.example.house_moving_service.modules.identity.entity.User;
+import com.example.house_moving_service.modules.identity.repository.RefreshTokenRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

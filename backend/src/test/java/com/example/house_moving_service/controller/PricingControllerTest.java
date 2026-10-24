@@ -9,7 +9,7 @@ import com.example.house_moving_service.dto.response.pricing.BreakdownItemDto;
 import com.example.house_moving_service.dto.response.pricing.CategoryFeesDto;
 import com.example.house_moving_service.dto.response.pricing.FinancialSummaryDto;
 import com.example.house_moving_service.dto.response.pricing.PricingCalculationResponse;
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.common.enums.PropertyType;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;

@@ -7,7 +7,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import com.example.house_moving_service.entity.User;
+import com.example.house_moving_service.modules.identity.entity.User;
 
 import lombok.Getter;
 

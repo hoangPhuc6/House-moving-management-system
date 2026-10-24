@@ -1,6 +1,6 @@
-package com.example.house_moving_service.entity;
+package com.example.house_moving_service.modules.identity.entity;
 
-import com.example.house_moving_service.enums.RoleCode;
+import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

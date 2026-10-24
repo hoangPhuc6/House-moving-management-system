@@ -1,8 +1,8 @@
-package com.example.house_moving_service.seeder;
+package com.example.house_moving_service.modules.identity.seeder;
 
-import com.example.house_moving_service.entity.Role;
-import com.example.house_moving_service.enums.RoleCode;
-import com.example.house_moving_service.repository.RoleRepository;
+import com.example.house_moving_service.modules.identity.entity.Role;
+import com.example.house_moving_service.modules.identity.enums.RoleCode;
+import com.example.house_moving_service.modules.identity.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;

@@ -1,4 +1,4 @@
-package com.example.house_moving_service.dto.request;
+package com.example.house_moving_service.modules.identity.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

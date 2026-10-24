@@ -1,6 +1,6 @@
-package com.example.house_moving_service.repository;
+package com.example.house_moving_service.modules.voucher.repository;
 
-import com.example.house_moving_service.entity.Voucher;
+import com.example.house_moving_service.modules.voucher.entity.Voucher;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

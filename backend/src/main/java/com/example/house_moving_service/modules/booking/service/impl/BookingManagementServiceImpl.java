@@ -11,7 +11,6 @@ import com.example.house_moving_service.modules.booking.entity.BookingRoute;
 import com.example.house_moving_service.modules.booking.entity.BookingStatusHistory;
 import com.example.house_moving_service.modules.booking.entity.BookingVoucher;
 import com.example.house_moving_service.modules.identity.entity.User;
-import com.example.house_moving_service.modules.voucher.entity.Voucher;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
@@ -23,7 +22,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingServic
 import com.example.house_moving_service.modules.booking.repository.BookingStatusHistoryRepository;
 import com.example.house_moving_service.modules.booking.repository.BookingVoucherRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
-import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
+import com.example.house_moving_service.modules.voucher.service.VoucherService;
 import com.example.house_moving_service.modules.booking.repository.specification.BookingSpecification;
 import com.example.house_moving_service.modules.booking.service.BookingManagementService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +38,7 @@ import java.util.List;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class BookingManagementServiceImpl implements BookingManagementService {
 
     private final BookingRepository bookingRepository;
@@ -48,29 +48,8 @@ public class BookingManagementServiceImpl implements BookingManagementService {
     private final BookingVoucherRepository bookingVoucherRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
     private final UserRepository userRepository;
-    private final VoucherRepository voucherRepository;
+    private final VoucherService voucherService;
     private final BookingMapper bookingMapper;
-
-    public BookingManagementServiceImpl(
-            BookingRepository bookingRepository,
-            BookingRouteRepository bookingRouteRepository,
-            BookingItemRepository bookingItemRepository,
-            BookingServiceRepository bookingServiceRepository,
-            BookingVoucherRepository bookingVoucherRepository,
-            BookingStatusHistoryRepository bookingStatusHistoryRepository,
-            UserRepository userRepository,
-            VoucherRepository voucherRepository,
-            BookingMapper bookingMapper) {
-        this.bookingRepository = bookingRepository;
-        this.bookingRouteRepository = bookingRouteRepository;
-        this.bookingItemRepository = bookingItemRepository;
-        this.bookingServiceRepository = bookingServiceRepository;
-        this.bookingVoucherRepository = bookingVoucherRepository;
-        this.bookingStatusHistoryRepository = bookingStatusHistoryRepository;
-        this.userRepository = userRepository;
-        this.voucherRepository = voucherRepository;
-        this.bookingMapper = bookingMapper;
-    }
 
     @Override
     @Transactional(readOnly = true)
@@ -157,12 +136,7 @@ public class BookingManagementServiceImpl implements BookingManagementService {
         if (bookingVouchers != null && !bookingVouchers.isEmpty()) {
             for (BookingVoucher bv : bookingVouchers) {
                 if (bv.getVoucher() != null) {
-                    Voucher voucher = voucherRepository.findById(bv.getVoucher().getId()).orElse(null);
-                    if (voucher != null && voucher.getUsedCount() != null && voucher.getUsedCount() > 0) {
-                        voucher.setUsedCount(voucher.getUsedCount() - 1);
-                        voucherRepository.save(voucher);
-                        log.info("Reverted usedCount for voucher: {} upon management cancellation", voucher.getCode());
-                    }
+                    voucherService.releaseUsage(bv.getVoucher().getId());
                 }
             }
         }

@@ -27,7 +27,7 @@ com.example.house_moving_service/
 └── modules/
     ├── identity/           # Tài khoản, đăng nhập, role, refresh token        (23 file)
     ├── catalog/            # Danh mục dịch vụ và nhóm dịch vụ, giá niêm yết   (19 file)
-    ├── voucher/            # Mã giảm giá                                      (3 file)
+    ├── voucher/            # Mã giảm giá                                      (5 file)
     ├── pricing/            # Bộ tính giá (5 cấu phần chi phí, khoảng cách)    (16 file)
     └── booking/            # Đơn hàng: khách đặt/hủy, nhân viên quản lý       (33 file)
 ```
@@ -58,7 +58,7 @@ Hiện trạng từng module:
 |---|---|
 | identity | controller, dto, entity, enums, mapper, repository, seeder, service |
 | catalog | controller/{admin,client}, dto, entity, enums, repository, service(+impl) |
-| voucher | entity, enums, repository |
+| voucher | entity, enums, repository, service(+impl) |
 | pricing | config, controller, dto, helper, service(+impl) |
 | booking | controller/{client,management}, dto, entity, enums, mapper, repository(+specification), service(+impl), util |
 
@@ -132,13 +132,15 @@ security ◄──► identity        (ngoại lệ được chấp nhận)
 3. **Module khác chỉ được gọi vào `service/` của một module**, không gọi thẳng `repository/` của module đó. Được phép dùng entity của module khác để tạo quan hệ JPA, ví dụ `Booking` → `Customer`.
 4. **Ngoại lệ `security ↔ identity`:** `CustomUserDetailsService` cần `UserRepository` để nạp tài khoản, còn `AuthService` cần `JwtTokenProvider` để cấp token. Hai phần này gắn chặt với nhau theo bản chất nên được chấp nhận.
 
-### Hiện trạng chưa đạt quy tắc 3 (đang xử lý ở task 8.3 / 8.4)
+### Hiện trạng chưa đạt quy tắc 3 (đang xử lý ở task 8.4)
 
 | Module | Class | Đang gọi thẳng |
 |---|---|---|
-| pricing | `PricingServiceImpl` | `catalog.ServiceRepository`, `voucher.VoucherRepository` |
-| booking | `BookingServiceImpl` | `catalog.ServiceRepository`, `identity.UserRepository`, `identity.CustomerRepository`, `voucher.VoucherRepository` |
-| booking | `BookingManagementServiceImpl` | `identity.UserRepository`, `voucher.VoucherRepository` |
+| pricing | `PricingServiceImpl` | `catalog.ServiceRepository` |
+| booking | `BookingServiceImpl` | `catalog.ServiceRepository`, `identity.UserRepository`, `identity.CustomerRepository` |
+| booking | `BookingManagementServiceImpl` | `identity.UserRepository` |
+
+Module `voucher` đã đạt quy tắc này: pricing và booking thao tác voucher qua `VoucherService` (task 8.3).
 
 Code mới **không được** thêm vào danh sách này.
 

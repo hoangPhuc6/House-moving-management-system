@@ -32,7 +32,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingVouche
 import com.example.house_moving_service.modules.identity.repository.CustomerRepository;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
-import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
+import com.example.house_moving_service.modules.voucher.service.VoucherService;
 import com.example.house_moving_service.modules.booking.service.BookingService;
 import com.example.house_moving_service.modules.pricing.service.PricingService;
 import com.example.house_moving_service.modules.booking.util.BookingCodeGenerator;
@@ -43,7 +43,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -52,6 +51,7 @@ import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Service
 @Slf4j
+@RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
@@ -62,40 +62,11 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
-    private final VoucherRepository voucherRepository;
+    private final VoucherService voucherService;
     private final ServiceRepository serviceRepository;
     private final PricingService pricingService;
     private final BookingCodeGenerator bookingCodeGenerator;
     private final BookingMapper bookingMapper;
-
-    public BookingServiceImpl(
-            BookingRepository bookingRepository,
-            BookingRouteRepository bookingRouteRepository,
-            BookingItemRepository bookingItemRepository,
-            BookingServiceRepository bookingServiceRepository,
-            BookingVoucherRepository bookingVoucherRepository,
-            BookingStatusHistoryRepository bookingStatusHistoryRepository,
-            CustomerRepository customerRepository,
-            UserRepository userRepository,
-            VoucherRepository voucherRepository,
-            ServiceRepository serviceRepository,
-            PricingService pricingService,
-            BookingCodeGenerator bookingCodeGenerator,
-            BookingMapper bookingMapper) {
-        this.bookingRepository = bookingRepository;
-        this.bookingRouteRepository = bookingRouteRepository;
-        this.bookingItemRepository = bookingItemRepository;
-        this.bookingServiceRepository = bookingServiceRepository;
-        this.bookingVoucherRepository = bookingVoucherRepository;
-        this.bookingStatusHistoryRepository = bookingStatusHistoryRepository;
-        this.customerRepository = customerRepository;
-        this.userRepository = userRepository;
-        this.voucherRepository = voucherRepository;
-        this.serviceRepository = serviceRepository;
-        this.pricingService = pricingService;
-        this.bookingCodeGenerator = bookingCodeGenerator;
-        this.bookingMapper = bookingMapper;
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -112,17 +83,8 @@ public class BookingServiceImpl implements BookingService {
         // 2. Kiểm tra Voucher (nếu có cung cấp mã voucher)
         Voucher voucher = null;
         if (request.getVoucherCode() != null && !request.getVoucherCode().trim().isEmpty()) {
-            String code = request.getVoucherCode().trim().toUpperCase();
-
-            voucher = voucherRepository.findByCodeWithLock(code)
-                    .orElseThrow(() -> new AppException(ErrorCode.ERR_VOUCHER_NOT_FOUND, code));
-
-            LocalDateTime now = LocalDateTime.now();
-            if (!Boolean.TRUE.equals(voucher.getIsActive())
-                    || now.isBefore(voucher.getStartDate())
-                    || now.isAfter(voucher.getEndDate())) {
-                throw new AppException(ErrorCode.ERR_VOUCHER_EXPIRED, code);
-            }
+            // Tồn tại + còn hiệu lực, khóa dòng voucher đến hết transaction để chống dùng vượt lượt
+            voucher = voucherService.lockValidVoucher(request.getVoucherCode());
 
             // Kiểm tra tổng lượt dùng toàn hệ thống
             if (voucher.getTotalUsageLimit() != null) {
@@ -251,7 +213,7 @@ public class BookingServiceImpl implements BookingService {
         // 8. Lưu bảng 5: booking_vouchers (Nếu có áp dụng voucher thành công)
         List<BookingVoucher> savedVouchers = new ArrayList<>();
         if (pricingResponse.getAppliedVoucher() != null && pricingResponse.getAppliedVoucher().getVoucherId() != null) {
-            Voucher appliedVoucherRef = voucherRepository.getReferenceById(pricingResponse.getAppliedVoucher().getVoucherId());
+            Voucher appliedVoucherRef = voucherService.getReference(pricingResponse.getAppliedVoucher().getVoucherId());
             BookingVoucher bookingVoucher = BookingVoucher.builder()
                     .booking(savedBooking)
                     .voucher(appliedVoucherRef)
@@ -263,9 +225,7 @@ public class BookingServiceImpl implements BookingService {
 
             // Cập nhật used_count của Voucher
             if (voucher != null) {
-                int currentUsedCount = voucher.getUsedCount() != null ? voucher.getUsedCount() : 0;
-                voucher.setUsedCount(currentUsedCount + 1);
-                voucherRepository.save(voucher);
+                voucherService.increaseUsage(voucher);
             }
         }
 
@@ -282,7 +242,6 @@ public class BookingServiceImpl implements BookingService {
         List<BookingStatusHistory> savedHistories = savedHistory != null ? List.of(savedHistory) : Collections.emptyList();
 
         log.info("Successfully created booking code: {} across all 6 tables", savedBooking.getBookingCode());
-
 
         return bookingMapper.toDetailResponse(
                 savedBooking,
@@ -397,12 +356,7 @@ public class BookingServiceImpl implements BookingService {
         if (bookingVouchers != null && !bookingVouchers.isEmpty()) {
             for (BookingVoucher bv : bookingVouchers) {
                 if (bv.getVoucher() != null) {
-                    Voucher voucher = voucherRepository.findById(bv.getVoucher().getId()).orElse(null);
-                    if (voucher != null && voucher.getUsedCount() != null && voucher.getUsedCount() > 0) {
-                        voucher.setUsedCount(voucher.getUsedCount() - 1);
-                        voucherRepository.save(voucher);
-                        log.info("Reverted usedCount for voucher: {}", voucher.getCode());
-                    }
+                    voucherService.releaseUsage(bv.getVoucher().getId());
                 }
             }
         }

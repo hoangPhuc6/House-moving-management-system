@@ -15,7 +15,7 @@ import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
-import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
+import com.example.house_moving_service.modules.voucher.service.VoucherService;
 import com.example.house_moving_service.modules.pricing.service.PricingService;
 import com.example.house_moving_service.modules.pricing.helper.RouteDistanceHelper;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +42,7 @@ public class PricingServiceImpl implements PricingService {
     private final PricingProperties pricingProperties;
     private final RouteDistanceHelper routeDistanceHelper;
     private final ServiceRepository serviceRepository;
-    private final VoucherRepository voucherRepository;
+    private final VoucherService voucherService;
 
     private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
@@ -158,18 +158,8 @@ public class PricingServiceImpl implements PricingService {
         BigDecimal discountAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
         if (request.getVoucherCode() != null && !request.getVoucherCode().trim().isEmpty()) {
-            String code = request.getVoucherCode().trim().toUpperCase();
-            Voucher voucher = voucherRepository.findByCode(code)
-                    .orElseThrow(() -> new AppException(ErrorCode.ERR_VOUCHER_NOT_FOUND, code));
-
-            LocalDateTime now = LocalDateTime.now();
-
-            // Kiểm tra hiệu lực thời gian và trạng thái
-            if (!Boolean.TRUE.equals(voucher.getIsActive())
-                    || now.isBefore(voucher.getStartDate())
-                    || now.isAfter(voucher.getEndDate())) {
-                throw new AppException(ErrorCode.ERR_VOUCHER_EXPIRED, code);
-            }
+            // Tồn tại + còn hiệu lực (thời gian, trạng thái) do VoucherService kiểm tra
+            Voucher voucher = voucherService.getValidVoucher(request.getVoucherCode());
 
             // Kiểm tra giá trị đơn hàng tối thiểu
             if (voucher.getMinOrderValue() != null && subtotal.compareTo(voucher.getMinOrderValue()) < 0) {

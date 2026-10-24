@@ -17,6 +17,7 @@ import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
+import com.example.house_moving_service.modules.catalog.service.impl.ServiceLookupServiceImpl;
 import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
 import com.example.house_moving_service.modules.voucher.service.impl.VoucherServiceImpl;
 import com.example.house_moving_service.modules.pricing.helper.RouteDistanceHelper;
@@ -72,7 +73,8 @@ class PricingServiceTest {
         mapApiProperties.setEnabled(false);
 
         routeDistanceHelper = new RouteDistanceHelper(pricingProperties, mapApiProperties);
-        pricingService = new PricingServiceImpl(pricingProperties, routeDistanceHelper, serviceRepository,
+        pricingService = new PricingServiceImpl(pricingProperties, routeDistanceHelper,
+                new ServiceLookupServiceImpl(serviceRepository),
                 new VoucherServiceImpl(voucherRepository));
 
         ServiceType typeTransport = ServiceType.builder().id(1).name("Xe tải vận chuyển").isActive(true).build();

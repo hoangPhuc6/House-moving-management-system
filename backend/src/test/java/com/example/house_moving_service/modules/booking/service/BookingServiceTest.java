@@ -42,6 +42,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingStatus
 import com.example.house_moving_service.modules.booking.repository.BookingVoucherRepository;
 import com.example.house_moving_service.modules.identity.repository.CustomerRepository;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
+import com.example.house_moving_service.modules.catalog.service.impl.ServiceLookupServiceImpl;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
 import com.example.house_moving_service.modules.voucher.service.impl.VoucherServiceImpl;
@@ -111,6 +112,8 @@ class BookingServiceTest {
     void setUp() {
         // VoucherServiceImpl thật bọc VoucherRepository mock: các stub/verify trên voucherRepository vẫn có hiệu lực
         ReflectionTestUtils.setField(bookingService, "voucherService", new VoucherServiceImpl(voucherRepository));
+        ReflectionTestUtils.setField(bookingService, "serviceLookupService",
+                new ServiceLookupServiceImpl(serviceRepository));
 
         userId = 1L;
         user = User.builder().id(userId).email("customer@example.com").isActive(true).build();

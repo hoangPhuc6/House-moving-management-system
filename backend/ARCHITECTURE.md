@@ -26,7 +26,7 @@ com.example.house_moving_service/
 │   └── userdetails/        CustomUserDetails, CustomUserDetailsService
 └── modules/
     ├── identity/           # Tài khoản, đăng nhập, role, refresh token        (23 file)
-    ├── catalog/            # Danh mục dịch vụ và nhóm dịch vụ, giá niêm yết   (19 file)
+    ├── catalog/            # Danh mục dịch vụ và nhóm dịch vụ, giá niêm yết   (21 file)
     ├── voucher/            # Mã giảm giá                                      (5 file)
     ├── pricing/            # Bộ tính giá (5 cấu phần chi phí, khoảng cách)    (16 file)
     └── booking/            # Đơn hàng: khách đặt/hủy, nhân viên quản lý       (33 file)
@@ -132,15 +132,23 @@ security ◄──► identity        (ngoại lệ được chấp nhận)
 3. **Module khác chỉ được gọi vào `service/` của một module**, không gọi thẳng `repository/` của module đó. Được phép dùng entity của module khác để tạo quan hệ JPA, ví dụ `Booking` → `Customer`.
 4. **Ngoại lệ `security ↔ identity`:** `CustomUserDetailsService` cần `UserRepository` để nạp tài khoản, còn `AuthService` cần `JwtTokenProvider` để cấp token. Hai phần này gắn chặt với nhau theo bản chất nên được chấp nhận.
 
-### Hiện trạng chưa đạt quy tắc 3 (đang xử lý ở task 8.4)
+### Interface tra cứu dùng chung
 
-| Module | Class | Đang gọi thẳng |
-|---|---|---|
-| pricing | `PricingServiceImpl` | `catalog.ServiceRepository` |
-| booking | `BookingServiceImpl` | `catalog.ServiceRepository`, `identity.UserRepository`, `identity.CustomerRepository` |
-| booking | `BookingManagementServiceImpl` | `identity.UserRepository` |
+Module khác thao tác dữ liệu của `catalog` và `voucher` qua các interface hẹp sau:
 
-Module `voucher` đã đạt quy tắc này: pricing và booking thao tác voucher qua `VoucherService` (task 8.3).
+| Module cung cấp | Interface | Dùng bởi | Method |
+|---|---|---|---|
+| catalog | `ServiceLookupService` | pricing, booking | `findAllByIds`, `getReference` |
+| voucher | `VoucherService` | pricing, booking | `getValidVoucher`, `lockValidVoucher`, `getReference`, `increaseUsage`, `releaseUsage` |
+
+`ServiceLookupService` tách riêng khỏi `ServiceCatalogService` (API cho controller), nên module khác chỉ phụ thuộc đúng phần cần dùng. Interface này do một bean riêng (`ServiceLookupServiceImpl`) cài đặt, không dùng chung bean với `ServiceCatalogServiceImpl`: mock hay thay đổi một bên không ảnh hưởng bên kia.
+
+### Ngoại lệ tạm thời của quy tắc 3
+
+| Module | Class | Đang gọi thẳng | Ghi chú |
+|---|---|---|---|
+| booking | `BookingServiceImpl` | `identity.UserRepository`, `identity.CustomerRepository` | Thuộc phạm vi module identity (người phụ trách khác); chờ identity cung cấp interface tra cứu |
+| booking | `BookingManagementServiceImpl` | `identity.UserRepository` | Như trên |
 
 Code mới **không được** thêm vào danh sách này.
 

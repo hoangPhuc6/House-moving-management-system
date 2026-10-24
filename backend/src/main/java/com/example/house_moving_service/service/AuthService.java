@@ -3,7 +3,10 @@ package com.example.house_moving_service.service;
 import com.example.house_moving_service.dto.request.LoginRequest;
 import com.example.house_moving_service.dto.request.RegisterRequest;
 import com.example.house_moving_service.dto.response.AuthResponse;
+import com.example.house_moving_service.dto.response.TokenRefreshResponse;
+import com.example.house_moving_service.dto.response.UserResponse;
 import com.example.house_moving_service.entity.Customer;
+import com.example.house_moving_service.entity.RefreshToken;
 import com.example.house_moving_service.entity.Role;
 import com.example.house_moving_service.entity.User;
 import com.example.house_moving_service.enums.RoleCode;
@@ -30,9 +33,10 @@ public class AuthService {
         private final JwtTokenProvider tokenProvider;
         private final RoleRepository roleRepository;
         private final UserMapper userMapper;
+        private final RefreshTokenService refreshTokenService;
 
         @Transactional
-        public AuthResponse register(RegisterRequest request) {
+        public UserResponse register(RegisterRequest request) {
                 if (userRepository.existsByEmail(request.getEmail())) {
                         throw new IllegalArgumentException("Email đã được sử dụng!");
                 }
@@ -59,13 +63,10 @@ public class AuthService {
                 customerRepository.save(customer);
                 user.setCustomer(customer);
 
-                // Sinh token
-                String token = tokenProvider.generateToken(user);
-
-                return userMapper.toAuthResponse(user, token);
+                return userMapper.toUserResponse(user);
         }
 
-        @Transactional(readOnly = true)
+        @Transactional
         public AuthResponse login(LoginRequest request) {
                 authenticationManager.authenticate(
                                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
@@ -76,6 +77,19 @@ public class AuthService {
 
                 String token = tokenProvider.generateToken(user);
 
-                return userMapper.toAuthResponse(user, token);
+                String refreshToken = refreshTokenService.createRefreshToken(user);
+
+                return userMapper.toAuthResponse(user, token, refreshToken);
+        }
+
+        @Transactional
+        public TokenRefreshResponse refreshToken(String refreshToken) {
+            RefreshToken validToken = refreshTokenService.verifyRefreshToken(refreshToken);
+            User user = validToken.getUser();
+            String accessToken = tokenProvider.generateToken(user);
+            return TokenRefreshResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .build();
         }
 }

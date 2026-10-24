@@ -38,12 +38,8 @@ build/
 !.env.example
 
 
-# Tài liệu cá nhân
+
 /docs/
-
-# Graphify generated files
 /graphify-out/
-
-# Claude Code 
 /CLAUDE.local.md
 /.claude/

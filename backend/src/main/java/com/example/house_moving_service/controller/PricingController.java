@@ -34,12 +34,6 @@ public class PricingController {
             summary = "Tính bảng giá tham khảo dự kiến",
             description = "Tiếp nhận lộ trình, đồ đạc, lịch hẹn và voucher của khách hàng đã đăng nhập để tính toán 5 cấu phần chi phí."
     )
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tính toán thành công, trả về bảng phân rã chi tiết"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu đầu vào sai, vi phạm lịch trình hoặc voucher không hợp lệ"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc JWT token không hợp lệ"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy dịch vụ hoặc mã voucher")
-    })
     public ResponseEntity<ApiResponse<PricingCalculationResponse>> estimatePrice(
             @Valid @RequestBody PricingCalculationRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {

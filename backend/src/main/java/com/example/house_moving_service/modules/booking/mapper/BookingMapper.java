@@ -12,6 +12,7 @@ import com.example.house_moving_service.modules.booking.entity.BookingItem;
 import com.example.house_moving_service.modules.booking.entity.BookingRoute;
 import com.example.house_moving_service.modules.booking.entity.BookingStatusHistory;
 import com.example.house_moving_service.modules.booking.entity.BookingVoucher;
+import com.example.house_moving_service.modules.booking.util.RouteAccessNoteCodec;
 import com.example.house_moving_service.modules.identity.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -132,6 +133,8 @@ public class BookingMapper {
                 .dropoffPropertyType(route.getDropoffPropertyType())
                 .dropoffNote(route.getDropoffNote())
                 .estimatedDistanceKm(route.getEstimatedDistanceKm())
+                .pickupAccess(RouteAccessNoteCodec.parse(route.getPickupNote()))
+                .dropoffAccess(RouteAccessNoteCodec.parse(route.getDropoffNote()))
                 .build();
     }
 

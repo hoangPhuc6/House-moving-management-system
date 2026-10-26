@@ -3,6 +3,10 @@ package com.example.house_moving_service.modules.booking.service.impl;
 import com.example.house_moving_service.modules.booking.dto.request.BookingItemRequest;
 import com.example.house_moving_service.modules.booking.dto.request.CancelBookingRequest;
 import com.example.house_moving_service.modules.booking.dto.request.CreateBookingRequest;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
+import com.example.house_moving_service.modules.booking.event.BookingCancelledEvent;
+import com.example.house_moving_service.modules.booking.util.RouteAccessNoteCodec;
+import com.example.house_moving_service.modules.pricing.dto.request.LocationDto;
 import com.example.house_moving_service.modules.pricing.dto.request.PricingCalculationRequest;
 import com.example.house_moving_service.modules.pricing.dto.request.ServiceItemDto;
 import com.example.house_moving_service.common.dto.PageResponse;
@@ -38,6 +42,7 @@ import com.example.house_moving_service.modules.pricing.service.PricingService;
 import com.example.house_moving_service.modules.booking.util.BookingCodeGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,6 +72,7 @@ public class BookingServiceImpl implements BookingService {
     private final PricingService pricingService;
     private final BookingCodeGenerator bookingCodeGenerator;
     private final BookingMapper bookingMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -141,19 +147,8 @@ public class BookingServiceImpl implements BookingService {
         var pickup = request.getRoute().getPickup();
         var dropoff = request.getRoute().getDropoff();
 
-        String pickupNote = pickup != null
-                ? String.format("Tầng: %d, Thang máy: %s, Cự ly hẻm: %dm",
-                pickup.getFloorNumber() != null ? pickup.getFloorNumber() : 0,
-                Boolean.TRUE.equals(pickup.getHasElevator()) ? "Có" : "Không",
-                pickup.getWalkingDistanceMeters() != null ? pickup.getWalkingDistanceMeters() : 0)
-                : null;
-
-        String dropoffNote = dropoff != null
-                ? String.format("Tầng: %d, Thang máy: %s, Cự ly hẻm: %dm",
-                dropoff.getFloorNumber() != null ? dropoff.getFloorNumber() : 0,
-                Boolean.TRUE.equals(dropoff.getHasElevator()) ? "Có" : "Không",
-                dropoff.getWalkingDistanceMeters() != null ? dropoff.getWalkingDistanceMeters() : 0)
-                : null;
+        String pickupNote = pickup != null ? RouteAccessNoteCodec.format(toRouteAccessInfo(pickup)) : null;
+        String dropoffNote = dropoff != null ? RouteAccessNoteCodec.format(toRouteAccessInfo(dropoff)) : null;
 
         BookingRoute route = BookingRoute.builder()
                 .booking(savedBooking)
@@ -351,6 +346,9 @@ public class BookingServiceImpl implements BookingService {
                 .build();
         bookingStatusHistoryRepository.save(history);
 
+        // Báo cho module khác (survey...) dọn dữ liệu liên quan, chạy cùng transaction này
+        eventPublisher.publishEvent(new BookingCancelledEvent(id, currentUserId, history.getNote()));
+
         // 5. Hoàn trả lượt dùng voucher (nếu đơn có áp dụng voucher)
         List<BookingVoucher> bookingVouchers = bookingVoucherRepository.findAllByBookingId(id);
         if (bookingVouchers != null && !bookingVouchers.isEmpty()) {
@@ -377,5 +375,13 @@ public class BookingServiceImpl implements BookingService {
                 bookingVouchers != null ? bookingVouchers : Collections.emptyList(),
                 histories
         );
+    }
+
+    private RouteAccessInfo toRouteAccessInfo(LocationDto location) {
+        return new RouteAccessInfo(
+                location.getFloorNumber() != null ? location.getFloorNumber() : 0,
+                Boolean.TRUE.equals(location.getHasElevator()),
+                location.getWalkingDistanceMeters() != null ? location.getWalkingDistanceMeters() : 0,
+                null);
     }
 }

@@ -34,6 +34,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.house_moving_service.modules.booking.event.BookingCancelledEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -49,6 +51,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +76,8 @@ class BookingManagementServiceTest {
     private VoucherRepository voucherRepository;
     @Mock
     private BookingMapper bookingMapper;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private BookingManagementServiceImpl bookingManagementService;
@@ -209,6 +214,9 @@ class BookingManagementServiceTest {
         verify(bookingStatusHistoryRepository).save(any(BookingStatusHistory.class));
         assertThat(voucher.getUsedCount()).isEqualTo(4);
         verify(voucherRepository).save(voucher);
+
+        // Verify event báo hủy đơn cho module khác
+        verify(eventPublisher).publishEvent(new BookingCancelledEvent(100, adminUserId, "Dispatcher hủy theo yêu cầu"));
     }
 
     @Test
@@ -236,6 +244,7 @@ class BookingManagementServiceTest {
         assertThatThrownBy(() -> bookingManagementService.cancelBookingByManagement(100, cancelReq, adminUserId))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_BOOKING_INVALID_STATUS);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }
 

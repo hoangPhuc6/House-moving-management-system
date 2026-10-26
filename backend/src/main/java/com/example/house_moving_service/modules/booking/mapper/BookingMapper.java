@@ -18,7 +18,6 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -38,8 +37,7 @@ public class BookingMapper {
             List<BookingItem> items,
             List<com.example.house_moving_service.modules.booking.entity.BookingService> services,
             List<BookingVoucher> vouchers,
-            List<BookingStatusHistory> statusHistories
-    ) {
+            List<BookingStatusHistory> statusHistories) {
         if (booking == null) {
             return null;
         }
@@ -68,14 +66,19 @@ public class BookingMapper {
                 .updatedAt(booking.getUpdatedAt())
                 .route(toRouteResponse(route))
                 .items(items != null ? items.stream().map(this::toItemResponse).toList() : Collections.emptyList())
-                .services(services != null ? services.stream().map(this::toServiceResponse).toList() : Collections.emptyList())
-                .vouchers(vouchers != null ? vouchers.stream().map(this::toVoucherResponse).toList() : Collections.emptyList())
-                .statusHistories(statusHistories != null ? statusHistories.stream().map(this::toStatusHistoryResponse).toList() : Collections.emptyList())
+                .services(services != null ? services.stream().map(this::toServiceResponse).toList()
+                        : Collections.emptyList())
+                .vouchers(vouchers != null ? vouchers.stream().map(this::toVoucherResponse).toList()
+                        : Collections.emptyList())
+                .statusHistories(
+                        statusHistories != null ? statusHistories.stream().map(this::toStatusHistoryResponse).toList()
+                                : Collections.emptyList())
                 .build();
     }
 
     /**
-     * Chuyển đổi Entity Booking sang BookingDetailResponse dựa trên các quan hệ có sẵn của Entity
+     * Chuyển đổi Entity Booking sang BookingDetailResponse dựa trên các quan hệ có
+     * sẵn của Entity
      */
     public BookingDetailResponse toDetailResponse(Booking booking) {
         if (booking == null) {
@@ -87,8 +90,7 @@ public class BookingMapper {
                 booking.getItems(),
                 booking.getServices(),
                 booking.getVouchers(),
-                booking.getStatusHistories()
-        );
+                booking.getStatusHistories());
     }
 
     /**
@@ -151,7 +153,8 @@ public class BookingMapper {
                 .build();
     }
 
-    public BookingServiceResponse toServiceResponse(com.example.house_moving_service.modules.booking.entity.BookingService bs) {
+    public BookingServiceResponse toServiceResponse(
+            com.example.house_moving_service.modules.booking.entity.BookingService bs) {
         if (bs == null) {
             return null;
         }
@@ -210,4 +213,3 @@ public class BookingMapper {
                 .build();
     }
 }
-

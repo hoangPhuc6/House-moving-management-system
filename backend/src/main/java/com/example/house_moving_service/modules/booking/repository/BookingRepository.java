@@ -9,22 +9,20 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-@Repository
 public interface BookingRepository extends JpaRepository<Booking, Integer>, JpaSpecificationExecutor<Booking> {
 
     Optional<Booking> findByBookingCode(String bookingCode);
 
     boolean existsByBookingCode(String bookingCode);
 
-    @EntityGraph(attributePaths = {"route"})
+    @EntityGraph(attributePaths = { "route" })
     @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId")
     Page<Booking> findAllByCustomerId(@Param("customerId") Long customerId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"route"})
+    @EntityGraph(attributePaths = { "route" })
     @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId AND b.status = :status")
     Page<Booking> findAllByCustomerIdAndStatus(
             @Param("customerId") Long customerId,
@@ -34,4 +32,3 @@ public interface BookingRepository extends JpaRepository<Booking, Integer>, JpaS
     @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.customer.id = :customerId")
     Optional<Booking> findByIdAndCustomerId(@Param("id") Integer id, @Param("customerId") Long customerId);
 }
-

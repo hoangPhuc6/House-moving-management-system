@@ -17,18 +17,18 @@ import java.util.Set;
  */
 public interface BookingWorkflowService {
 
-    /** Reference (proxy) tới đơn hàng để gắn quan hệ JPA. */
+    // Reference (proxy) tới đơn hàng để gắn quan hệ JPA. 
     Booking getReference(Integer bookingId);
 
     BookingSnapshot getSnapshot(Integer bookingId);
 
-    /** Đồ đạc khách đã khai báo khi đặt đơn. */
+    // Đồ đạc khách đã khai báo khi đặt đơn. 
     List<BookingItemSnapshot> getItems(Integer bookingId);
 
-    /** Lộ trình kèm điều kiện ra vào đã tách từ chuỗi (pickupAccess / dropoffAccess). */
+    // Lộ trình kèm điều kiện ra vào đã tách từ chuỗi (pickupAccess / dropoffAccess). 
     BookingRouteResponse getRoute(Integer bookingId);
 
-    /** Ghi đè điều kiện ra vào; truyền null cho đầu nào thì giữ nguyên đầu đó. */
+    // Ghi đè điều kiện ra vào; truyền null cho đầu nào thì giữ nguyên đầu đó. 
     void updateRouteAccess(Integer bookingId, RouteAccessInfo pickup, RouteAccessInfo dropoff);
 
     /**

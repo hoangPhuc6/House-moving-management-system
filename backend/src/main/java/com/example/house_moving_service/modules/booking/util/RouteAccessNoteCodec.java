@@ -2,13 +2,14 @@ package com.example.house_moving_service.modules.booking.util;
 
 import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Nơi duy nhất giữ định dạng chuỗi điều kiện ra vào lưu trong booking_routes.pickup_note / dropoff_note:
- * {@code Tầng: 3, Thang máy: Không, Cự ly hẻm: 15m (ghi chú tự do)}.
- */
+
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class RouteAccessNoteCodec {
 
     private static final String FLOOR_LABEL = "Tầng";
@@ -23,8 +24,6 @@ public final class RouteAccessNoteCodec {
             FLOOR_LABEL + ":\\s*(\\d+),\\s*" + ELEVATOR_LABEL + ":\\s*(" + YES + "|" + NO + "),\\s*"
                     + WALKING_LABEL + ":\\s*(\\d+)m");
 
-    private RouteAccessNoteCodec() {
-    }
 
     public static String format(RouteAccessInfo info) {
         if (info == null) {
@@ -37,10 +36,7 @@ public final class RouteAccessNoteCodec {
         return base + " (" + info.extraNote().trim() + ")";
     }
 
-    /**
-     * Không ném lỗi: chuỗi rỗng trả {@link RouteAccessInfo#EMPTY}; chuỗi không đúng định dạng (nhập tay, dữ liệu cũ)
-     * trả giá trị mặc định và giữ nguyên toàn bộ chuỗi ở extraNote để không mất dữ liệu.
-     */
+
     public static RouteAccessInfo parse(String note) {
         if (note == null || note.isBlank()) {
             return RouteAccessInfo.EMPTY;

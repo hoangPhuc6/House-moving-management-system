@@ -20,7 +20,7 @@ import com.example.house_moving_service.modules.booking.service.impl.BookingWork
 import com.example.house_moving_service.modules.identity.entity.Customer;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.mapper.UserMapper;
-import jakarta.persistence.EntityManager;
+import com.example.house_moving_service.modules.identity.service.UserLookupService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,7 +55,7 @@ class BookingWorkflowServiceTest {
     @Mock
     private BookingStatusHistoryRepository bookingStatusHistoryRepository;
     @Mock
-    private EntityManager entityManager;
+    private UserLookupService userLookupService;
 
     private BookingWorkflowServiceImpl bookingWorkflowService;
 
@@ -71,7 +71,7 @@ class BookingWorkflowServiceTest {
                 bookingItemRepository,
                 bookingStatusHistoryRepository,
                 bookingMapper,
-                entityManager);
+                userLookupService);
 
         Customer customer = Customer.builder().id(7L).fullName("Võ Minh Khách").build();
         booking = Booking.builder()
@@ -207,7 +207,7 @@ class BookingWorkflowServiceTest {
         User actor = User.builder().id(3L).build();
         when(bookingRepository.findByIdForUpdate(100)).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(entityManager.getReference(User.class, 3L)).thenReturn(actor);
+        when(userLookupService.getUserReference(3L)).thenReturn(actor);
 
         bookingWorkflowService.changeStatus(100, Set.of(BookingStatus.PENDING_SURVEY), BookingStatus.SURVEYING, 3L, "Bắt đầu khảo sát");
 

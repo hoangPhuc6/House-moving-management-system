@@ -18,7 +18,7 @@ import com.example.house_moving_service.modules.booking.repository.BookingStatus
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.booking.util.RouteAccessNoteCodec;
 import com.example.house_moving_service.modules.identity.entity.User;
-import jakarta.persistence.EntityManager;
+import com.example.house_moving_service.modules.identity.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,9 +38,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final BookingItemRepository bookingItemRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
     private final BookingMapper bookingMapper;
-    // Tạm dùng để lấy User reference cho changed_by, tránh gọi thẳng UserRepository của identity.
-    // Đổi sang StaffLookupService#getUserReference khi task 4.2 được merge.
-    private final EntityManager entityManager;
+    private final UserLookupService userLookupService;
 
     @Override
     public Booking getReference(Integer bookingId) {
@@ -130,7 +128,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         booking.setStatus(to);
         Booking updatedBooking = bookingRepository.save(booking);
 
-        User actor = actorUserId != null ? entityManager.getReference(User.class, actorUserId) : null;
+        User actor = actorUserId != null ? userLookupService.getUserReference(actorUserId) : null;
         BookingStatusHistory history = BookingStatusHistory.builder()
                 .booking(updatedBooking)
                 .oldStatus(oldStatus)

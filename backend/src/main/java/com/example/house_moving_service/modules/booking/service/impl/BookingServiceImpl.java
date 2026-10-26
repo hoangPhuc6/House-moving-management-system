@@ -1,10 +1,8 @@
 package com.example.house_moving_service.modules.booking.service.impl;
 
-import com.example.house_moving_service.modules.booking.dto.request.BookingItemRequest;
 import com.example.house_moving_service.modules.booking.dto.request.CancelBookingRequest;
 import com.example.house_moving_service.modules.booking.dto.request.CreateBookingRequest;
 import com.example.house_moving_service.modules.pricing.dto.request.PricingCalculationRequest;
-import com.example.house_moving_service.modules.pricing.dto.request.ServiceItemDto;
 import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingDetailResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSummaryResponse;
@@ -46,8 +44,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Service
 @Slf4j
@@ -83,7 +79,8 @@ public class BookingServiceImpl implements BookingService {
         // 2. Kiểm tra Voucher (nếu có cung cấp mã voucher)
         Voucher voucher = null;
         if (request.getVoucherCode() != null && !request.getVoucherCode().trim().isEmpty()) {
-            // Tồn tại + còn hiệu lực, khóa dòng voucher đến hết transaction để chống dùng vượt lượt
+            // Tồn tại + còn hiệu lực, khóa dòng voucher đến hết transaction để chống dùng
+            // vượt lượt
             voucher = voucherService.lockValidVoucher(request.getVoucherCode());
 
             // Kiểm tra tổng lượt dùng toàn hệ thống
@@ -96,7 +93,8 @@ public class BookingServiceImpl implements BookingService {
 
             // Kiểm tra lượt dùng của từng khách hàng
             if (voucher.getUsagePerUserLimit() != null) {
-                long userUsed = bookingVoucherRepository.countByVoucherIdAndBooking_CustomerId(voucher.getId(), customer.getId());
+                long userUsed = bookingVoucherRepository.countByVoucherIdAndBooking_CustomerId(voucher.getId(),
+                        customer.getId());
                 if (userUsed >= voucher.getUsagePerUserLimit()) {
                     throw new AppException(ErrorCode.ERR_VOUCHER_LIMIT_REACHED);
                 }
@@ -143,16 +141,16 @@ public class BookingServiceImpl implements BookingService {
 
         String pickupNote = pickup != null
                 ? String.format("Tầng: %d, Thang máy: %s, Cự ly hẻm: %dm",
-                pickup.getFloorNumber() != null ? pickup.getFloorNumber() : 0,
-                Boolean.TRUE.equals(pickup.getHasElevator()) ? "Có" : "Không",
-                pickup.getWalkingDistanceMeters() != null ? pickup.getWalkingDistanceMeters() : 0)
+                        pickup.getFloorNumber() != null ? pickup.getFloorNumber() : 0,
+                        Boolean.TRUE.equals(pickup.getHasElevator()) ? "Có" : "Không",
+                        pickup.getWalkingDistanceMeters() != null ? pickup.getWalkingDistanceMeters() : 0)
                 : null;
 
         String dropoffNote = dropoff != null
                 ? String.format("Tầng: %d, Thang máy: %s, Cự ly hẻm: %dm",
-                dropoff.getFloorNumber() != null ? dropoff.getFloorNumber() : 0,
-                Boolean.TRUE.equals(dropoff.getHasElevator()) ? "Có" : "Không",
-                dropoff.getWalkingDistanceMeters() != null ? dropoff.getWalkingDistanceMeters() : 0)
+                        dropoff.getFloorNumber() != null ? dropoff.getFloorNumber() : 0,
+                        Boolean.TRUE.equals(dropoff.getHasElevator()) ? "Có" : "Không",
+                        dropoff.getWalkingDistanceMeters() != null ? dropoff.getWalkingDistanceMeters() : 0)
                 : null;
 
         BookingRoute route = BookingRoute.builder()
@@ -197,7 +195,8 @@ public class BookingServiceImpl implements BookingService {
                 Service serviceProxy = serviceLookupService.getReference(breakdown.getServiceId());
                 int quantity = breakdown.getQuantity() != null ? breakdown.getQuantity().intValue() : 1;
 
-                com.example.house_moving_service.modules.booking.entity.BookingService bs = com.example.house_moving_service.modules.booking.entity.BookingService.builder()
+                com.example.house_moving_service.modules.booking.entity.BookingService bs = com.example.house_moving_service.modules.booking.entity.BookingService
+                        .builder()
                         .booking(savedBooking)
                         .service(serviceProxy)
                         .priceApplied(breakdown.getUnitPrice()) // Snapshot đơn giá chuẩn
@@ -208,7 +207,8 @@ public class BookingServiceImpl implements BookingService {
                 bookingServicesToSave.add(bs);
             }
         }
-        List<com.example.house_moving_service.modules.booking.entity.BookingService> savedServices = bookingServiceRepository.saveAll(bookingServicesToSave);
+        List<com.example.house_moving_service.modules.booking.entity.BookingService> savedServices = bookingServiceRepository
+                .saveAll(bookingServicesToSave);
 
         // 8. Lưu bảng 5: booking_vouchers (Nếu có áp dụng voucher thành công)
         List<BookingVoucher> savedVouchers = new ArrayList<>();
@@ -239,7 +239,8 @@ public class BookingServiceImpl implements BookingService {
                 .build();
 
         BookingStatusHistory savedHistory = bookingStatusHistoryRepository.save(history);
-        List<BookingStatusHistory> savedHistories = savedHistory != null ? List.of(savedHistory) : Collections.emptyList();
+        List<BookingStatusHistory> savedHistories = savedHistory != null ? List.of(savedHistory)
+                : Collections.emptyList();
 
         log.info("Successfully created booking code: {} across all 6 tables", savedBooking.getBookingCode());
 
@@ -249,8 +250,7 @@ public class BookingServiceImpl implements BookingService {
                 savedItems,
                 savedServices,
                 savedVouchers,
-                savedHistories
-        );
+                savedHistories);
     }
 
     @Override
@@ -266,10 +266,12 @@ public class BookingServiceImpl implements BookingService {
             throw new AppException(ErrorCode.ERR_BOOKING_FORBIDDEN);
         }
 
-        // 2. Nạp dữ liệu các bảng con tường minh để tránh LazyInitializationException & MultipleBagFetchException
+        // 2. Nạp dữ liệu các bảng con tường minh để tránh LazyInitializationException &
+        // MultipleBagFetchException
         BookingRoute route = bookingRouteRepository.findByBookingId(id).orElse(null);
         List<BookingItem> items = bookingItemRepository.findAllByBookingId(id);
-        List<com.example.house_moving_service.modules.booking.entity.BookingService> services = bookingServiceRepository.findAllByBookingId(id);
+        List<com.example.house_moving_service.modules.booking.entity.BookingService> services = bookingServiceRepository
+                .findAllByBookingId(id);
         List<BookingVoucher> vouchers = bookingVoucherRepository.findAllByBookingId(id);
         List<BookingStatusHistory> histories = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(id);
 
@@ -279,14 +281,15 @@ public class BookingServiceImpl implements BookingService {
                 items,
                 services,
                 vouchers,
-                histories
-        );
+                histories);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<BookingSummaryResponse> getCustomerBookings(Long currentUserId, BookingStatus status, Pageable pageable) {
-        log.info("Fetching customer bookings for user: {}, status: {}, page: {}", currentUserId, status, pageable.getPageNumber());
+    public PageResponse<BookingSummaryResponse> getCustomerBookings(Long currentUserId, BookingStatus status,
+            Pageable pageable) {
+        log.info("Fetching customer bookings for user: {}, status: {}, page: {}", currentUserId, status,
+                pageable.getPageNumber());
 
         Page<Booking> bookingPage;
         if (status != null) {
@@ -364,7 +367,8 @@ public class BookingServiceImpl implements BookingService {
         // 6. Nạp đầy đủ các quan hệ để trả về BookingDetailResponse chuẩn
         BookingRoute route = bookingRouteRepository.findByBookingId(id).orElse(null);
         List<BookingItem> items = bookingItemRepository.findAllByBookingId(id);
-        List<com.example.house_moving_service.modules.booking.entity.BookingService> services = bookingServiceRepository.findAllByBookingId(id);
+        List<com.example.house_moving_service.modules.booking.entity.BookingService> services = bookingServiceRepository
+                .findAllByBookingId(id);
         List<BookingStatusHistory> histories = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(id);
 
         log.info("Successfully cancelled booking code: {}", updatedBooking.getBookingCode());
@@ -375,7 +379,6 @@ public class BookingServiceImpl implements BookingService {
                 items,
                 services,
                 bookingVouchers != null ? bookingVouchers : Collections.emptyList(),
-                histories
-        );
+                histories);
     }
 }

@@ -7,7 +7,6 @@ import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import com.example.house_moving_service.modules.pricing.service.PricingService;
 import com.example.house_moving_service.security.access.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,10 +29,7 @@ public class PricingController {
 
     @PostMapping("/estimate")
     @AuthenticatedUser
-    @Operation(
-            summary = "Tính bảng giá tham khảo dự kiến",
-            description = "Tiếp nhận lộ trình, đồ đạc, lịch hẹn và voucher của khách hàng đã đăng nhập để tính toán 5 cấu phần chi phí."
-    )
+    @Operation(summary = "Tính bảng giá tham khảo dự kiến", description = "Tiếp nhận lộ trình, đồ đạc, lịch hẹn và voucher của khách hàng đã đăng nhập để tính toán 5 cấu phần chi phí.")
     public ResponseEntity<ApiResponse<PricingCalculationResponse>> estimatePrice(
             @Valid @RequestBody PricingCalculationRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {

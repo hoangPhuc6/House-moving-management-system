@@ -2,6 +2,7 @@ package com.example.house_moving_service.common.exception;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -14,6 +15,12 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    // Tên unique index trong migration -> lỗi nghiệp vụ trả cho client (đổi tên index thì phải sửa ở đây)
+    private static final Map<String, ErrorCode> CONSTRAINT_ERROR_CODES = Map.of(
+            "uq_booking_surveys_staff_slot", ErrorCode.ERR_SURVEY_STAFF_CONFLICT,
+            "uq_booking_surveys_one_active_per_booking", ErrorCode.ERR_SURVEY_ACTIVE_EXISTS
+    );
 
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex, HttpServletRequest request) {
@@ -86,6 +93,23 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // Lớp chặn cuối khi 2 request chạy đua cùng vượt qua kiểm tra ở service: DB từ chối theo unique index,
+    // trả lỗi nghiệp vụ tương ứng thay vì 500. Vi phạm ràng buộc khác vẫn xử lý như lỗi hệ thống
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        String detail = ex.getMostSpecificCause().getMessage();
+        if (detail != null) {
+            for (Map.Entry<String, ErrorCode> entry : CONSTRAINT_ERROR_CODES.entrySet()) {
+                if (detail.contains(entry.getKey())) {
+                    ErrorCode errorCode = entry.getValue();
+                    ApiResponse<Void> body = ApiResponse.error(errorCode.getCode(), errorCode.formatMessage(), request.getRequestURI());
+                    return ResponseEntity.status(errorCode.getHttpStatus()).body(body);
+                }
+            }
+        }
+        return handleGeneralException(ex, request);
     }
 
     @ExceptionHandler(Exception.class)

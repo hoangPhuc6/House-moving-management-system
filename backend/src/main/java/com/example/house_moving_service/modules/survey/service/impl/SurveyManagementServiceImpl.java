@@ -6,7 +6,9 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingSnap
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.service.StaffLookupService;
+import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -31,6 +34,11 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
 
     private static final Set<BookingStatus> BOOKING_STATUSES_FOR_CREATE =
             EnumSet.of(BookingStatus.PENDING, BookingStatus.PENDING_SURVEY);
+    private static final Set<BookingStatus> CLOSED_BOOKING_STATUSES =
+            EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED);
+    // Chưa bắt đầu khảo sát: còn phân công / dời lịch / hủy được
+    private static final Set<SurveyStatus> EDITABLE_STATUSES = EnumSet.of(SurveyStatus.PENDING, SurveyStatus.CONFIRMED);
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final BookingSurveyRepository bookingSurveyRepository;
     private final BookingWorkflowService bookingWorkflowService;
@@ -70,6 +78,102 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
         log.info("Created survey id: {} for booking id: {} with status {} by user id: {}",
                 saved.getId(), booking.id(), saved.getStatus(), actorId);
         return surveyQueryService.getDetail(saved.getId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SurveyDetailResponse assign(Integer id, AssignSurveyStaffRequest request, Long actorId) {
+        BookingSurvey survey = loadForUpdate(id);
+        requireStatus(survey, EDITABLE_STATUSES);
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(survey.getBooking().getId());
+        requireBookingOpen(booking);
+
+        Long newStaffId = request.getStaffId();
+        Long oldStaffId = survey.getSurveyStaff() != null ? survey.getSurveyStaff().getId() : null;
+        if (newStaffId.equals(oldStaffId)) {
+            return surveyQueryService.getDetail(id);
+        }
+
+        // Chưa có ngày / khung giờ thì không có gì để so trùng lịch: chỉ kiểm tra người hợp lệ
+        boolean hasSchedule = survey.getSurveyDate() != null && survey.getTimeSlot() != null;
+        surveyScheduleValidator.validate(hasSchedule
+                ? new ScheduleCheck(survey.getSurveyDate(), survey.getTimeSlot().getId(), newStaffId, booking.desiredStartAt(), id)
+                : new ScheduleCheck(null, null, newStaffId, null, id));
+
+        survey.setSurveyStaff(staffLookupService.getReference(newStaffId));
+        survey.setStatus(resolveScheduledStatus(survey));
+        survey.appendNote("ASSIGN", actorId,
+                "Phân công: " + describeStaff(oldStaffId) + " → " + describeStaff(newStaffId), LocalDateTime.now(clock));
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        log.info("Assigned survey id: {} from staff {} to {} by user id: {}", id, oldStaffId, newStaffId, actorId);
+        return surveyQueryService.getDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SurveyDetailResponse reschedule(Integer id, RescheduleSurveyRequest request, Long actorId) {
+        BookingSurvey survey = loadForUpdate(id);
+        requireStatus(survey, EDITABLE_STATUSES);
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(survey.getBooking().getId());
+        requireBookingOpen(booking);
+
+        Long staffId = request.getStaffId() != null
+                ? request.getStaffId()
+                : (survey.getSurveyStaff() != null ? survey.getSurveyStaff().getId() : null);
+        // excludeSurveyId = id: dời sang khung giờ mà chính lịch này đang giữ không bị tính là trùng
+        SurveyTimeSlot slot = surveyScheduleValidator.validate(new ScheduleCheck(
+                request.getSurveyDate(), request.getTimeSlotId(), staffId, booking.desiredStartAt(), id));
+
+        String before = describeSchedule(survey);
+        survey.setSurveyDate(request.getSurveyDate());
+        survey.setTimeSlot(slot);
+        if (request.getStaffId() != null) {
+            survey.setSurveyStaff(staffLookupService.getReference(request.getStaffId()));
+        }
+        if (request.getSurveyMethod() != null) {
+            survey.setSurveyMethod(request.getSurveyMethod());
+        }
+        survey.setStatus(resolveScheduledStatus(survey));
+        survey.appendNote("RESCHEDULE", actorId,
+                before + " → " + describeSchedule(survey) + ". Lý do: " + request.getReason().trim(), LocalDateTime.now(clock));
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        log.info("Rescheduled survey id: {} to {} slot {} by user id: {}", id, request.getSurveyDate(), slot.getId(), actorId);
+        return surveyQueryService.getDetail(id);
+    }
+
+    // Lấy lịch và khóa dòng đến hết transaction: 2 người cùng sửa một lịch thì người sau chờ người trước xong
+    private BookingSurvey loadForUpdate(Integer id) {
+        return bookingSurveyRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_SURVEY_NOT_FOUND, id));
+    }
+
+    private void requireStatus(BookingSurvey survey, Set<SurveyStatus> allowed) {
+        if (!allowed.contains(survey.getStatus())) {
+            throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+    }
+
+    // Đơn đã hủy / đã hoàn tất thì không sửa lịch khảo sát của đơn đó nữa
+    private void requireBookingOpen(BookingSnapshot booking) {
+        if (CLOSED_BOOKING_STATUSES.contains(booking.status())) {
+            throw new AppException(ErrorCode.ERR_SURVEY_BOOKING_INVALID_STATUS);
+        }
+    }
+
+    // Mô tả lịch để ghi note, ví dụ "2026-11-03 08:00-10:00, user#5, ONSITE"
+    private String describeSchedule(BookingSurvey survey) {
+        String date = survey.getSurveyDate() != null ? survey.getSurveyDate().toString() : "(chưa có ngày)";
+        String slot = survey.getTimeSlot() != null
+                ? survey.getTimeSlot().getStartTime().format(TIME_FORMAT) + "-" + survey.getTimeSlot().getEndTime().format(TIME_FORMAT)
+                : "(chưa có khung giờ)";
+        Long staffId = survey.getSurveyStaff() != null ? survey.getSurveyStaff().getId() : null;
+        return date + " " + slot + ", " + describeStaff(staffId) + ", " + survey.getSurveyMethod();
+    }
+
+    private String describeStaff(Long staffId) {
+        return staffId != null ? "user#" + staffId : "(chưa có)";
     }
 
     // Đủ ngày + khung giờ + nhân viên mới là lịch đã chốt; dùng lại khi phân công / đổi lịch

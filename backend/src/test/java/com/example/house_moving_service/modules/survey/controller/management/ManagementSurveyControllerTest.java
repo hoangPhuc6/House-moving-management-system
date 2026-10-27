@@ -7,7 +7,9 @@ import com.example.house_moving_service.modules.identity.dto.response.StaffSumma
 import com.example.house_moving_service.modules.identity.entity.Role;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.enums.RoleCode;
+import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -41,6 +43,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -286,5 +289,81 @@ class ManagementSurveyControllerTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(SURVEYS_URL + "/movers/8/availability").with(user("mover@test.vn").roles("MOVER")))
                 .andExpect(status().isForbidden());
+    }
+
+    // ---------- Phân công / dời lịch ----------
+
+    @Test
+    @DisplayName("PATCH assign - DISPATCHER → 200, id người thao tác lấy từ token")
+    void testAssign_Dispatcher() throws Exception {
+        when(surveyManagementService.assign(eq(40), any(AssignSurveyStaffRequest.class), eq(3L)))
+                .thenReturn(SurveyDetailResponse.builder().id(40).status(SurveyStatus.CONFIRMED).build());
+
+        mockMvc.perform(patch(SURVEYS_URL + "/40/assign")
+                        .with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"staffId\":8}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Phân công nhân viên khảo sát thành công"))
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+    }
+
+    @Test
+    @DisplayName("PATCH assign - thiếu staffId → 400; MOVER → 403")
+    void testAssign_ValidationAndForbidden() throws Exception {
+        mockMvc.perform(patch(SURVEYS_URL + "/40/assign")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.staffId").exists());
+        mockMvc.perform(patch(SURVEYS_URL + "/40/assign")
+                        .with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"staffId\":8}"))
+                .andExpect(status().isForbidden());
+        verify(surveyManagementService, never()).assign(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("PATCH reschedule - ADMIN → 200")
+    void testReschedule_Admin() throws Exception {
+        when(surveyManagementService.reschedule(eq(40), any(RescheduleSurveyRequest.class), eq(1L)))
+                .thenReturn(SurveyDetailResponse.builder().id(40).status(SurveyStatus.CONFIRMED).build());
+
+        mockMvc.perform(patch(SURVEYS_URL + "/40/reschedule")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"surveyDate\":\"2026-11-05\",\"timeSlotId\":3,\"reason\":\"Khách bận\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đổi lịch khảo sát thành công"));
+    }
+
+    @Test
+    @DisplayName("PATCH reschedule - thiếu lý do / ngày / khung giờ → 400, báo đúng field")
+    void testReschedule_MissingFields() throws Exception {
+        mockMvc.perform(patch(SURVEYS_URL + "/40/reschedule")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.reason").exists())
+                .andExpect(jsonPath("$.errors.surveyDate").exists())
+                .andExpect(jsonPath("$.errors.timeSlotId").exists());
+        verify(surveyManagementService, never()).reschedule(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("PATCH reschedule - lịch đã bắt đầu → 400 ERR_SURVEY_INVALID_STATUS")
+    void testReschedule_InvalidStatus() throws Exception {
+        when(surveyManagementService.reschedule(eq(40), any(RescheduleSurveyRequest.class), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS));
+
+        mockMvc.perform(patch(SURVEYS_URL + "/40/reschedule")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"surveyDate\":\"2026-11-05\",\"timeSlotId\":3,\"reason\":\"Khách bận\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_STATUS.getCode()));
     }
 }

@@ -3,7 +3,9 @@ package com.example.house_moving_service.modules.survey.controller.management;
 import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.modules.identity.dto.response.StaffSummary;
+import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -26,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -61,6 +64,36 @@ public class ManagementSurveyController {
         SurveyDetailResponse response = surveyManagementService.create(request, userDetails.getId());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo lịch khảo sát thành công", response));
+    }
+
+    @PatchMapping("/surveys/{id}/assign")
+    @Operation(
+            summary = "Phân công / đổi nhân viên khảo sát",
+            description = "Lịch phải ở PENDING / CONFIRMED. Ngày và khung giờ giữ nguyên; lịch đã có ngày + khung giờ thì "
+                    + "kiểm tra người mới không trùng lịch. Lịch có đủ ngày, khung giờ, nhân viên sẽ thành CONFIRMED."
+    )
+    public ResponseEntity<ApiResponse<SurveyDetailResponse>> assignStaff(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody AssignSurveyStaffRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        log.info("Management request to assign staff {} to survey id: {} by user id: {}", request.getStaffId(), id, userDetails.getId());
+        SurveyDetailResponse response = surveyManagementService.assign(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Phân công nhân viên khảo sát thành công", response));
+    }
+
+    @PatchMapping("/surveys/{id}/reschedule")
+    @Operation(
+            summary = "Dời lịch hẹn khảo sát (trước khi khảo sát)",
+            description = "Dùng khi khách xin đổi ngày / giờ. Lịch phải ở PENDING / CONFIRMED; đã bắt đầu khảo sát thì không dời được. "
+                    + "staffId / surveyMethod để trống thì giữ như cũ. Bắt buộc có lý do, được ghi vào ghi chú kèm lịch cũ → lịch mới."
+    )
+    public ResponseEntity<ApiResponse<SurveyDetailResponse>> rescheduleSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody RescheduleSurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        log.info("Management request to reschedule survey id: {} by user id: {}", id, userDetails.getId());
+        SurveyDetailResponse response = surveyManagementService.reschedule(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đổi lịch khảo sát thành công", response));
     }
 
     @GetMapping("/surveys/movers")

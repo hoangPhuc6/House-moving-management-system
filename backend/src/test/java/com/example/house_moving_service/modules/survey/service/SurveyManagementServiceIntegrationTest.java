@@ -6,7 +6,9 @@ import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.repository.BookingRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
+import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
 import com.example.house_moving_service.modules.survey.enums.SurveyMethod;
@@ -113,5 +115,51 @@ class SurveyManagementServiceIntegrationTest {
         assertThatThrownBy(() -> surveyManagementService.create(second, actorId))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_SURVEY_ACTIVE_EXISTS);
+    }
+
+    // ---------- 4.6.4: phân công / đổi lịch ----------
+
+    @Test
+    @DisplayName("Dời lịch của chính nó sang cùng khung giờ (chỉ đổi phương thức) → không bị báo trùng với chính nó")
+    void testReschedule_SameSlotItself_NoConflict() {
+        SurveyDetailResponse created = surveyManagementService.create(request(booking1), actorId);
+
+        SurveyDetailResponse moved = surveyManagementService.reschedule(created.getId(), RescheduleSurveyRequest.builder()
+                .surveyDate(DAY).timeSlotId(slot.getId()).surveyMethod(SurveyMethod.ONLINE)
+                .reason("Khách muốn gọi video").build(), actorId);
+
+        assertThat(moved.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+        assertThat(moved.getSurveyMethod()).isEqualTo(SurveyMethod.ONLINE);
+        assertThat(moved.getNote()).contains("[RESCHEDULE]").contains("Lý do: Khách muốn gọi video");
+    }
+
+    @Test
+    @DisplayName("Dời lịch sang khung giờ MOVER đã có lịch khác → ERR_SURVEY_STAFF_CONFLICT, lịch giữ nguyên")
+    void testReschedule_IntoOccupiedSlot_Conflict() {
+        surveyManagementService.create(request(booking1), actorId);
+        CreateSurveyRequest other = request(booking2);
+        other.setSurveyDate(DAY.plusDays(1));
+        SurveyDetailResponse second = surveyManagementService.create(other, actorId);
+
+        assertThatThrownBy(() -> surveyManagementService.reschedule(second.getId(), RescheduleSurveyRequest.builder()
+                .surveyDate(DAY).timeSlotId(slot.getId()).reason("Khách đổi ngày").build(), actorId))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_SURVEY_STAFF_CONFLICT);
+    }
+
+    @Test
+    @DisplayName("Lịch PENDING chưa có người, phân công MOVER → CONFIRMED, chi tiết có nhân viên")
+    void testAssign_PendingToConfirmed() {
+        CreateSurveyRequest noStaff = request(booking1);
+        noStaff.setStaffId(null);
+        SurveyDetailResponse created = surveyManagementService.create(noStaff, actorId);
+        assertThat(created.getStatus()).isEqualTo(SurveyStatus.PENDING);
+
+        SurveyDetailResponse assigned = surveyManagementService.assign(created.getId(),
+                AssignSurveyStaffRequest.builder().staffId(moverId).build(), actorId);
+
+        assertThat(assigned.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+        assertThat(assigned.getStaff().getUserId()).isEqualTo(moverId);
+        assertThat(assigned.getNote()).contains("[ASSIGN][user#" + actorId + "] Phân công: (chưa có) → user#" + moverId);
     }
 }

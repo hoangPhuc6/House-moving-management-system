@@ -5,6 +5,7 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingItem
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.entity.Booking;
+import com.example.house_moving_service.modules.booking.entity.BookingItem;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 
 import java.util.List;
@@ -22,8 +23,11 @@ public interface BookingWorkflowService {
 
     BookingSnapshot getSnapshot(Integer bookingId);
 
-    // Đồ đạc khách đã khai báo khi đặt đơn. 
+    // Đồ đạc khách đã khai báo khi đặt đơn.
     List<BookingItemSnapshot> getItems(Integer bookingId);
+
+    // Reference (proxy) tới một món đồ để gắn quan hệ JPA (ví dụ quotation_items.booking_item_id).
+    BookingItem getItemReference(Integer bookingItemId);
 
     // Lộ trình kèm điều kiện ra vào đã tách từ chuỗi (pickupAccess / dropoffAccess). 
     BookingRouteResponse getRoute(Integer bookingId);

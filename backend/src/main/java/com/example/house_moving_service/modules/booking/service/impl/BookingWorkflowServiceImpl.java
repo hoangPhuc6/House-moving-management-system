@@ -7,6 +7,7 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingItem
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.entity.Booking;
+import com.example.house_moving_service.modules.booking.entity.BookingItem;
 import com.example.house_moving_service.modules.booking.entity.BookingRoute;
 import com.example.house_moving_service.modules.booking.entity.BookingStatusHistory;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
@@ -87,6 +88,11 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                         .note(item.getNote())
                         .build())
                 .toList();
+    }
+
+    @Override
+    public BookingItem getItemReference(Integer bookingItemId) {
+        return bookingItemRepository.getReferenceById(bookingItemId);
     }
 
     @Override

@@ -24,6 +24,10 @@ public enum ErrorCode {
     ERR_BOOKING_INVALID_STATUS(4002, HttpStatus.BAD_REQUEST, "Trạng thái đơn hàng hiện tại không cho phép thực hiện thao tác này"),
     ERR_VOUCHER_LIMIT_REACHED(4003, HttpStatus.BAD_REQUEST, "Voucher đã đạt giới hạn sử dụng tối đa"),
     ERR_BOOKING_FORBIDDEN(4004, HttpStatus.FORBIDDEN, "Bạn không có quyền truy cập hoặc thao tác trên đơn hàng này"),
+    ERR_QUOTATION_NOT_FOUND(6001, HttpStatus.NOT_FOUND, "Không tìm thấy báo giá với ID: %s"),
+    ERR_QUOTATION_NOT_EDITABLE(6002, HttpStatus.BAD_REQUEST, "Báo giá không còn ở trạng thái nháp, không thể chỉnh sửa"),
+    ERR_QUOTATION_ITEM_NOT_FOUND(6003, HttpStatus.NOT_FOUND, "Không tìm thấy dòng báo giá với ID: %s"),
+    ERR_QUOTATION_ALREADY_ACCEPTED(6004, HttpStatus.CONFLICT, "Đơn hàng đã có báo giá được chấp nhận, không thể khảo sát lại"),
     ERR_INTERNAL_SERVER(9999, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống ngoài dự tính");
 
     private final int code;

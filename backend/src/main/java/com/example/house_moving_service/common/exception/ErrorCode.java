@@ -41,6 +41,7 @@ public enum ErrorCode {
     ERR_FILE_TOO_LARGE(5015, HttpStatus.CONTENT_TOO_LARGE, "Tệp vượt quá dung lượng cho phép"),
     ERR_FILE_STORAGE(5016, HttpStatus.BAD_GATEWAY, "Không thể lưu trữ tệp, vui lòng thử lại"),
     ERR_SURVEY_ATTACHMENT_LIMIT(5017, HttpStatus.BAD_REQUEST, "Mỗi lịch khảo sát chỉ được tối đa %s tệp đính kèm"),
+    ERR_SURVEY_STAFF_BUSY(5018, HttpStatus.CONFLICT, "Nhân viên đã có lịch làm việc khác trong khung giờ này"),
     ERR_SURVEY_TIME_SLOT_IN_USE(5019, HttpStatus.CONFLICT, "Khung giờ đang được dùng cho lịch khảo sát sắp tới, không thể đổi giờ"),
     ERR_QUOTATION_NOT_FOUND(6001, HttpStatus.NOT_FOUND, "Không tìm thấy báo giá với ID: %s"),
     ERR_QUOTATION_NOT_EDITABLE(6002, HttpStatus.BAD_REQUEST, "Báo giá không còn ở trạng thái nháp, không thể chỉnh sửa"),

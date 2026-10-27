@@ -8,7 +8,9 @@ import com.example.house_moving_service.modules.identity.entity.Role;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
+import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
@@ -363,6 +365,57 @@ class ManagementSurveyControllerTest {
                         .with(user(principal(1L, RoleCode.ADMIN)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"surveyDate\":\"2026-11-05\",\"timeSlotId\":3,\"reason\":\"Khách bận\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_STATUS.getCode()));
+    }
+
+    // ---------- Hủy / thất bại ----------
+
+    @Test
+    @DisplayName("PATCH cancel - DISPATCHER → 200; thiếu lý do → 400; MOVER → 403")
+    void testCancel() throws Exception {
+        when(surveyManagementService.cancel(eq(40), any(CancelSurveyRequest.class), eq(3L)))
+                .thenReturn(SurveyDetailResponse.builder().id(40).status(SurveyStatus.CANCELLED).build());
+
+        mockMvc.perform(patch(SURVEYS_URL + "/40/cancel")
+                        .with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Xếp nhầm\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Hủy lịch khảo sát thành công"))
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+        mockMvc.perform(patch(SURVEYS_URL + "/40/cancel")
+                        .with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.reason").exists());
+        mockMvc.perform(patch(SURVEYS_URL + "/40/cancel")
+                        .with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Xếp nhầm\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH fail - ADMIN → 200; lịch PENDING → 400 ERR_SURVEY_INVALID_STATUS")
+    void testFail() throws Exception {
+        when(surveyManagementService.fail(eq(40), any(FailSurveyRequest.class), eq(1L)))
+                .thenReturn(SurveyDetailResponse.builder().id(40).status(SurveyStatus.RESURVEY_REQUIRED).build());
+        when(surveyManagementService.fail(eq(41), any(FailSurveyRequest.class), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS));
+
+        mockMvc.perform(patch(SURVEYS_URL + "/40/fail")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Khách vắng nhà\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã ghi nhận khảo sát thất bại"))
+                .andExpect(jsonPath("$.data.status").value("RESURVEY_REQUIRED"));
+        mockMvc.perform(patch(SURVEYS_URL + "/41/fail")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Khách vắng nhà\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_STATUS.getCode()));
     }

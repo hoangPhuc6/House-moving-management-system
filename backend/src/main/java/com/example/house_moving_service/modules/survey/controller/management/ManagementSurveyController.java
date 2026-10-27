@@ -4,7 +4,9 @@ import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.common.dto.PageResponse;
 import com.example.house_moving_service.modules.identity.dto.response.StaffSummary;
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
+import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
@@ -94,6 +96,37 @@ public class ManagementSurveyController {
         log.info("Management request to reschedule survey id: {} by user id: {}", id, userDetails.getId());
         SurveyDetailResponse response = surveyManagementService.reschedule(id, request, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đổi lịch khảo sát thành công", response));
+    }
+
+    @PatchMapping("/surveys/{id}/cancel")
+    @Operation(
+            summary = "Hủy lịch khảo sát chưa diễn ra",
+            description = "Lịch phải ở PENDING / CONFIRMED (lịch không cần nữa). Đã tới nơi / đang khảo sát mà không làm được "
+                    + "thì dùng API báo thất bại. Không đổi trạng thái đơn hàng; tạo lịch mới sau nếu cần."
+    )
+    public ResponseEntity<ApiResponse<SurveyDetailResponse>> cancelSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody CancelSurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        log.info("Management request to cancel survey id: {} by user id: {}", id, userDetails.getId());
+        SurveyDetailResponse response = surveyManagementService.cancel(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Hủy lịch khảo sát thành công", response));
+    }
+
+    @PatchMapping("/surveys/{id}/fail")
+    @Operation(
+            summary = "Báo khảo sát thất bại",
+            description = "Đã tới nơi / đang khảo sát nhưng không làm được (khách vắng, không vào được nhà...). Lịch phải ở "
+                    + "CONFIRMED / IN_PROGRESS → RESURVEY_REQUIRED; bản nháp báo giá hết hiệu lực; đơn đang SURVEYING về "
+                    + "PENDING_SURVEY để tạo lịch khảo sát mới."
+    )
+    public ResponseEntity<ApiResponse<SurveyDetailResponse>> failSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody FailSurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        log.info("Management request to mark survey id: {} as failed by user id: {}", id, userDetails.getId());
+        SurveyDetailResponse response = surveyManagementService.fail(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận khảo sát thất bại", response));
     }
 
     @GetMapping("/surveys/movers")

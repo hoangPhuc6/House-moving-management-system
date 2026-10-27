@@ -6,8 +6,11 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingSnap
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.service.StaffLookupService;
+import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
+import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
@@ -38,6 +41,8 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
             EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED);
     // Chưa bắt đầu khảo sát: còn phân công / dời lịch / hủy được
     private static final Set<SurveyStatus> EDITABLE_STATUSES = EnumSet.of(SurveyStatus.PENDING, SurveyStatus.CONFIRMED);
+    // Đã tới nơi (chưa kịp bấm bắt đầu) hoặc đang khảo sát: báo thất bại được
+    private static final Set<SurveyStatus> FAILABLE_STATUSES = EnumSet.of(SurveyStatus.CONFIRMED, SurveyStatus.IN_PROGRESS);
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final BookingSurveyRepository bookingSurveyRepository;
@@ -45,6 +50,7 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
     private final StaffLookupService staffLookupService;
     private final SurveyScheduleValidator surveyScheduleValidator;
     private final SurveyQueryService surveyQueryService;
+    private final QuotationDraftService quotationDraftService;
     private final Clock clock;
 
     @Override
@@ -140,6 +146,46 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
         bookingSurveyRepository.saveAndFlush(survey);
 
         log.info("Rescheduled survey id: {} to {} slot {} by user id: {}", id, request.getSurveyDate(), slot.getId(), actorId);
+        return surveyQueryService.getDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SurveyDetailResponse cancel(Integer id, CancelSurveyRequest request, Long actorId) {
+        BookingSurvey survey = loadForUpdate(id);
+        requireStatus(survey, EDITABLE_STATUSES);
+
+        survey.setStatus(SurveyStatus.CANCELLED);
+        survey.appendNote("CANCEL", actorId, request.getReason(), LocalDateTime.now(clock));
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        log.info("Cancelled survey id: {} by user id: {}", id, actorId);
+        return surveyQueryService.getDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SurveyDetailResponse fail(Integer id, FailSurveyRequest request, Long actorId) {
+        BookingSurvey survey = loadForUpdate(id);
+        requireStatus(survey, FAILABLE_STATUSES);
+        Integer bookingId = survey.getBooking().getId();
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(bookingId);
+        requireBookingOpen(booking);
+
+        String reason = request.getReason().trim();
+        survey.setStatus(SurveyStatus.RESURVEY_REQUIRED);
+        survey.appendNote("FAIL", actorId, reason, LocalDateTime.now(clock));
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        // Đồ đạc ghi dở không dùng để báo giá được; lần khảo sát sau mở bản nháp mới
+        quotationDraftService.expireDraft(bookingId, "Khảo sát thất bại: " + reason);
+        // Lịch CONFIRMED (chưa bắt đầu) thì booking chưa sang SURVEYING, không cần đổi
+        if (booking.status() == BookingStatus.SURVEYING) {
+            bookingWorkflowService.changeStatus(bookingId, EnumSet.of(BookingStatus.SURVEYING), BookingStatus.PENDING_SURVEY,
+                    actorId, "Khảo sát thất bại: " + reason);
+        }
+
+        log.info("Survey id: {} failed, booking id: {} back to PENDING_SURVEY by user id: {}", id, bookingId, actorId);
         return surveyQueryService.getDetail(id);
     }
 

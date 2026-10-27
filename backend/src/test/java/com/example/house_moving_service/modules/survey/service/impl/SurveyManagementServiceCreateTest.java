@@ -8,6 +8,7 @@ import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.entity.Staff;
 import com.example.house_moving_service.modules.identity.service.StaffLookupService;
+import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -67,13 +68,15 @@ class SurveyManagementServiceCreateTest {
     private SurveyScheduleValidator surveyScheduleValidator;
     @Mock
     private SurveyQueryService surveyQueryService;
+    @Mock
+    private QuotationDraftService quotationDraftService;
 
     private SurveyManagementServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new SurveyManagementServiceImpl(bookingSurveyRepository, bookingWorkflowService, staffLookupService,
-                surveyScheduleValidator, surveyQueryService, CLOCK);
+                surveyScheduleValidator, surveyQueryService, quotationDraftService, CLOCK);
     }
 
     private void givenBooking(BookingStatus status) {

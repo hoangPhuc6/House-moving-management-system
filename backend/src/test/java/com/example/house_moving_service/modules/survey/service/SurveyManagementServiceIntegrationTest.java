@@ -2,12 +2,19 @@ package com.example.house_moving_service.modules.survey.service;
 
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.request.CancelBookingRequest;
 import com.example.house_moving_service.modules.booking.entity.Booking;
+import com.example.house_moving_service.modules.booking.entity.BookingStatusHistory;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.repository.BookingRepository;
+import com.example.house_moving_service.modules.booking.repository.BookingStatusHistoryRepository;
+import com.example.house_moving_service.modules.booking.service.BookingManagementService;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
+import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
+import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
@@ -47,6 +54,10 @@ class SurveyManagementServiceIntegrationTest {
     private BookingRepository bookingRepository;
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    private BookingManagementService bookingManagementService;
+    @Autowired
+    private BookingStatusHistoryRepository bookingStatusHistoryRepository;
 
     private Booking booking1;
     private Booking booking2;
@@ -161,5 +172,62 @@ class SurveyManagementServiceIntegrationTest {
         assertThat(assigned.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
         assertThat(assigned.getStaff().getUserId()).isEqualTo(moverId);
         assertThat(assigned.getNote()).contains("[ASSIGN][user#" + actorId + "] Phân công: (chưa có) → user#" + moverId);
+    }
+
+    // ---------- 4.6.5: hủy / thất bại / hủy theo đơn ----------
+
+    @Test
+    @DisplayName("Hủy đơn qua API booking → listener hủy lịch khảo sát (kể cả đang IN_PROGRESS) trong cùng transaction")
+    void testBookingCancelled_SurveyCancelledByListener() {
+        SurveyDetailResponse created = surveyManagementService.create(request(booking1), actorId);
+        BookingSurvey survey = bookingSurveyRepository.findById(created.getId()).orElseThrow();
+        survey.setStatus(SurveyStatus.IN_PROGRESS);
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        bookingManagementService.cancelBookingByManagement(booking1.getId(),
+                CancelBookingRequest.builder().reason("Khách đổi ý").build(), actorId);
+        bookingSurveyRepository.flush();
+
+        BookingSurvey after = bookingSurveyRepository.findById(created.getId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(SurveyStatus.CANCELLED);
+        assertThat(after.getNote()).contains("[CANCEL][user#" + actorId + "] Đơn hàng bị hủy: Khách đổi ý (đang khảo sát dở)");
+    }
+
+    @Test
+    @DisplayName("Thất bại khi booking SURVEYING → survey RESURVEY_REQUIRED, booking PENDING_SURVEY có lịch sử; tạo được lịch mới")
+    void testFail_BookingBackToPendingSurvey_ThenCreateAgain() {
+        SurveyDetailResponse created = surveyManagementService.create(request(booking1), actorId);
+        BookingSurvey survey = bookingSurveyRepository.findById(created.getId()).orElseThrow();
+        survey.setStatus(SurveyStatus.IN_PROGRESS);
+        bookingSurveyRepository.saveAndFlush(survey);
+        booking1.setStatus(BookingStatus.SURVEYING);
+        bookingRepository.saveAndFlush(booking1);
+        int historyBefore = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(booking1.getId()).size();
+
+        SurveyDetailResponse failed = surveyManagementService.fail(created.getId(),
+                FailSurveyRequest.builder().reason("Khách vắng nhà").build(), actorId);
+
+        assertThat(failed.getStatus()).isEqualTo(SurveyStatus.RESURVEY_REQUIRED);
+        assertThat(bookingRepository.findById(booking1.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING_SURVEY);
+        List<BookingStatusHistory> history = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(booking1.getId());
+        assertThat(history).hasSize(historyBefore + 1);
+        assertThat(history.get(history.size() - 1).getNewStatus()).isEqualTo(BookingStatus.PENDING_SURVEY);
+
+        // Lịch thất bại không còn "đang hoạt động" nên tạo lịch mới cho cùng đơn được
+        CreateSurveyRequest again = request(booking1);
+        again.setSurveyDate(DAY.plusDays(1));
+        SurveyDetailResponse next = surveyManagementService.create(again, actorId);
+        assertThat(next.getPreviousSurveys()).extracting(s -> s.getId()).containsExactly(created.getId());
+    }
+
+    @Test
+    @DisplayName("Hủy lịch CONFIRMED → CANCELLED, khung giờ của MOVER được giải phóng cho đơn khác")
+    void testCancel_FreesStaffSlot() {
+        SurveyDetailResponse created = surveyManagementService.create(request(booking1), actorId);
+
+        surveyManagementService.cancel(created.getId(), CancelSurveyRequest.builder().reason("Xếp nhầm").build(), actorId);
+
+        SurveyDetailResponse other = surveyManagementService.create(request(booking2), actorId);
+        assertThat(other.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
     }
 }

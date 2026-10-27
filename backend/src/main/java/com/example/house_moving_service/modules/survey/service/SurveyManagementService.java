@@ -1,7 +1,9 @@
 package com.example.house_moving_service.modules.survey.service;
 
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
+import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 
@@ -28,4 +30,17 @@ public interface SurveyManagementService {
      * Đã bắt đầu khảo sát thì không dời được; khảo sát xong muốn làm lại thì dùng khảo sát lại.
      */
     SurveyDetailResponse reschedule(Integer id, RescheduleSurveyRequest request, Long actorId);
+
+    /**
+     * Hủy lịch chưa diễn ra (PENDING / CONFIRMED) → CANCELLED. Không đổi trạng thái booking, không đụng báo giá;
+     * dispatcher tạo lịch mới sau nếu cần.
+     */
+    SurveyDetailResponse cancel(Integer id, CancelSurveyRequest request, Long actorId);
+
+    /**
+     * Đã tới / đang khảo sát nhưng không làm được (CONFIRMED / IN_PROGRESS) → RESURVEY_REQUIRED.
+     * Bản nháp báo giá → EXPIRED; booking SURVEYING → PENDING_SURVEY. Không kiểm tra ai được gọi:
+     * luồng MOVER (task 4.7) tự kiểm tra quyền sở hữu trước khi gọi.
+     */
+    SurveyDetailResponse fail(Integer id, FailSurveyRequest request, Long actorId);
 }

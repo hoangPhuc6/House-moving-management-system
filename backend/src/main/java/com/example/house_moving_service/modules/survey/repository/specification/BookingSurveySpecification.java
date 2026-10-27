@@ -20,9 +20,10 @@ public final class BookingSurveySpecification {
     public static Specification<BookingSurvey> filterSurveys(SurveyFilterRequest filter) {
         return (root, query, cb) -> {
             Join<BookingSurvey, Booking> booking;
-            // Fetch khi không phải count query để tránh N+1 khi map danh sách (booking, khung giờ, nhân viên)
+            // Fetch khi không phải count query để tránh N+1 khi map danh sách (booking + tuyến đường, khung giờ, nhân viên)
             if (query != null && Long.class != query.getResultType() && long.class != query.getResultType()) {
                 Fetch<BookingSurvey, Booking> fetchedBooking = root.fetch("booking", JoinType.INNER);
+                fetchedBooking.fetch("route", JoinType.LEFT);
                 booking = (Join<BookingSurvey, Booking>) fetchedBooking;
                 root.fetch("timeSlot", JoinType.LEFT);
                 root.fetch("surveyStaff", JoinType.LEFT);

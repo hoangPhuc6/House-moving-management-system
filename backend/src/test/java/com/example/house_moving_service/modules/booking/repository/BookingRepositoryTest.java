@@ -141,7 +141,7 @@ class BookingRepositoryTest {
                 .customer(customer1)
                 .totalAmount(new BigDecimal("1500000.00"))
                 .discountAmount(new BigDecimal("50000.00"))
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .contactName("Anh Hùng")
                 .contactPhone("0901234567")
                 .note("Dọn nhà vào buổi sáng")
@@ -195,7 +195,7 @@ class BookingRepositoryTest {
         // 6. Lưu BookingStatusHistory
         BookingStatusHistory history = bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
                 .booking(booking)
-                .newStatus(BookingStatus.PENDING_SURVEY)
+                .newStatus(BookingStatus.PENDING)
                 .changedBy(customer1.getUser())
                 .note("Khách hàng tạo đơn mới")
                 .build());
@@ -216,7 +216,7 @@ class BookingRepositoryTest {
                 .bookingCode("BKG-PAGE-001")
                 .customer(customer1)
                 .totalAmount(new BigDecimal("1000000.00"))
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .build());
 
         bookingRepository.save(Booking.builder()
@@ -231,7 +231,7 @@ class BookingRepositoryTest {
                 .bookingCode("BKG-PAGE-003")
                 .customer(customer2)
                 .totalAmount(new BigDecimal("500000.00"))
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .build());
 
         // Phân trang đơn của customer 1: page 0, size 10
@@ -257,7 +257,7 @@ class BookingRepositoryTest {
                 .bookingCode("BKG-IDOR-001")
                 .customer(customer1)
                 .totalAmount(new BigDecimal("1000000.00"))
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .build());
 
         // Đúng chủ sở hữu (customer 1) -> tìm thấy
@@ -322,7 +322,7 @@ class BookingRepositoryTest {
                 .bookingCode("BKG-STATUS-001")
                 .customer(customer1)
                 .totalAmount(new BigDecimal("1000000.00"))
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .build());
 
         bookingRepository.save(Booking.builder()
@@ -333,7 +333,7 @@ class BookingRepositoryTest {
                 .build());
 
         Page<Booking> pendingPage = bookingRepository.findAllByCustomerIdAndStatus(
-                customer1.getId(), BookingStatus.PENDING_SURVEY, PageRequest.of(0, 10));
+                customer1.getId(), BookingStatus.PENDING, PageRequest.of(0, 10));
 
         assertThat(pendingPage.getTotalElements()).isEqualTo(1);
         assertThat(pendingPage.getContent().get(0).getBookingCode()).isEqualTo("BKG-STATUS-001");

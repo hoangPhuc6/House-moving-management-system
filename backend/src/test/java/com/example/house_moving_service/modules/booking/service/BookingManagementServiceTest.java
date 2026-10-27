@@ -95,7 +95,7 @@ class BookingManagementServiceTest {
                 .id(100)
                 .bookingCode("BKG20261019001")
                 .customer(customer)
-                .status(BookingStatus.PENDING_SURVEY)
+                .status(BookingStatus.PENDING)
                 .totalAmount(BigDecimal.valueOf(1500000))
                 .discountAmount(BigDecimal.valueOf(50000))
                 .build();
@@ -110,7 +110,7 @@ class BookingManagementServiceTest {
         BookingItem item = BookingItem.builder().id(1).booking(booking).itemName("Sofa").build();
         com.example.house_moving_service.modules.booking.entity.BookingService service = com.example.house_moving_service.modules.booking.entity.BookingService.builder().id(1).booking(booking).build();
         BookingVoucher voucher = BookingVoucher.builder().id(1).booking(booking).build();
-        BookingStatusHistory history = BookingStatusHistory.builder().id(1).booking(booking).newStatus(BookingStatus.PENDING_SURVEY).build();
+        BookingStatusHistory history = BookingStatusHistory.builder().id(1).booking(booking).newStatus(BookingStatus.PENDING).build();
 
         BookingDetailResponse expectedDetail = BookingDetailResponse.builder()
                 .id(100)

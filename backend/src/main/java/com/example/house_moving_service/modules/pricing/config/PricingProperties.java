@@ -27,5 +27,10 @@ public class PricingProperties {
      * Hệ số uốn lượn đường bộ khi tính dự phòng Haversine. Mặc định là 1.3.
      */
     private double haversineWindingFactor = 1.3;
+
+    /**
+     * Số ngày báo giá chính thức còn hiệu lực kể từ lúc lập. Mặc định là 7 ngày.
+     */
+    private int quoteValidDays = 7;
 }
 

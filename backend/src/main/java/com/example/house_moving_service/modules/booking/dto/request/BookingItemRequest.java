@@ -20,6 +20,12 @@ import java.math.BigDecimal;
 @Builder
 public class BookingItemRequest {
 
+    /**
+     * ID đồ đạc đã có trong đơn (chỉ dùng khi lập báo giá): có ID = cập nhật món đó,
+     * không có ID = thêm món mới. Bỏ qua khi khách tạo đơn.
+     */
+    private Integer id;
+
     @NotBlank(message = "Tên đồ đạc không được để trống")
     @Size(max = 255, message = "Tên đồ đạc không được vượt quá 255 ký tự")
     private String itemName;

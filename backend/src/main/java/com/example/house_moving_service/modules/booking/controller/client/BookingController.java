@@ -55,7 +55,7 @@ public class BookingController {
         }
 
         @GetMapping
-        @Operation(summary = "Xem danh sách lịch sử đơn hàng của khách hàng hiện tại", description = "Hỗ trợ phân trang và lọc theo trạng thái đơn hàng (PENDING_SURVEY, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED).")
+        @Operation(summary = "Xem danh sách lịch sử đơn hàng của khách hàng hiện tại", description = "Hỗ trợ phân trang và lọc theo trạng thái đơn hàng (PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED).")
         public ResponseEntity<ApiResponse<PageResponse<BookingSummaryResponse>>> getCustomerBookings(
                         @Parameter(description = "Lọc theo trạng thái đơn hàng (tùy chọn)") @RequestParam(required = false) BookingStatus status,
                         @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
@@ -78,7 +78,7 @@ public class BookingController {
         }
 
         @PatchMapping("/{id}/cancel")
-        @Operation(summary = "Khách hàng chủ động hủy đơn hàng", description = "Chỉ cho phép hủy đơn khi trạng thái hiện tại là PENDING_SURVEY. Bắt buộc cung cấp lý do hủy để ghi nhận vào lịch sử chuyển đổi trạng thái.")
+        @Operation(summary = "Khách hàng chủ động hủy đơn hàng", description = "Chỉ cho phép hủy đơn khi trạng thái hiện tại là PENDING. Bắt buộc cung cấp lý do hủy để ghi nhận vào lịch sử chuyển đổi trạng thái.")
         public ResponseEntity<ApiResponse<BookingDetailResponse>> cancelBooking(
                         @Parameter(description = "Mã định danh ID của đơn hàng cần hủy", required = true) @PathVariable Integer id,
                         @Valid @RequestBody CancelBookingRequest request,

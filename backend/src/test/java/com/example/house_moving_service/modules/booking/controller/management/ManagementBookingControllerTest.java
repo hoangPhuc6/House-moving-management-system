@@ -107,7 +107,7 @@ class ManagementBookingControllerTest {
     @DisplayName("GET /api/v1/management/bookings - Admin truy cập thành công -> Trả về 200 OK")
     void searchBookings_AdminRole_Returns200() throws Exception {
         CustomUserDetails admin = createMockUserDetails(1L, "admin@example.com", RoleCode.ADMIN);
-        BookingSummaryResponse summary = createMockSummary(1, "BKG2610190001", BookingStatus.PENDING_SURVEY);
+        BookingSummaryResponse summary = createMockSummary(1, "BKG2610190001", BookingStatus.PENDING);
         PageResponse<BookingSummaryResponse> pageResponse = PageResponse.<BookingSummaryResponse>builder()
                 .pageNo(1)
                 .pageSize(10)
@@ -206,7 +206,7 @@ class ManagementBookingControllerTest {
     @DisplayName("GET /api/v1/management/bookings/{id} - Admin xem chi tiết đơn bất kỳ -> Trả về 200 OK")
     void getBookingDetail_AdminCanViewAnyBooking_Returns200() throws Exception {
         CustomUserDetails admin = createMockUserDetails(1L, "admin@example.com", RoleCode.ADMIN);
-        BookingDetailResponse detail = createMockDetail(100, "BKG100", BookingStatus.PENDING_SURVEY);
+        BookingDetailResponse detail = createMockDetail(100, "BKG100", BookingStatus.PENDING);
 
         when(bookingManagementService.getBookingDetailByManagement(100)).thenReturn(detail);
 
@@ -222,7 +222,7 @@ class ManagementBookingControllerTest {
     @DisplayName("GET /api/v1/management/bookings/{id} - Dispatcher xem chi tiết đơn -> Trả về 200 OK")
     void getBookingDetail_DispatcherCanViewAnyBooking_Returns200() throws Exception {
         CustomUserDetails dispatcher = createMockUserDetails(2L, "dispatcher@example.com", RoleCode.DISPATCHER);
-        BookingDetailResponse detail = createMockDetail(100, "BKG100", BookingStatus.PENDING_SURVEY);
+        BookingDetailResponse detail = createMockDetail(100, "BKG100", BookingStatus.PENDING);
 
         when(bookingManagementService.getBookingDetailByManagement(100)).thenReturn(detail);
 

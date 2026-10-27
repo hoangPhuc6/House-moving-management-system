@@ -167,7 +167,7 @@ Code mới **không được** thêm vào danh sách này.
 ## 6. Database và migration
 
 - Schema do **Flyway** quản lý (`src/main/resources/db/migration`). Hibernate chạy với `ddl-auto: validate`, nên entity lệch với schema thì **app không khởi động**.
-- Migration hiện có: `V1` … `V9`. **Migration tiếp theo là `V10__<mô_tả>.sql`.**
+- Migration hiện có: `V1` … `V12`. **Migration tiếp theo là `V13__<mô_tả>.sql`.**
 - **Không sửa migration đã chạy**, vì Flyway sẽ báo lỗi checksum trên mọi máy đã chạy migration đó. Muốn thay đổi thì tạo migration mới.
 - Nhiều nhánh cùng tạo migration thì thống nhất số version trước khi merge để tránh trùng.
 

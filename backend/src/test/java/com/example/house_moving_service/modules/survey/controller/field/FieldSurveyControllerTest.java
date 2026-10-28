@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -107,5 +108,30 @@ class FieldSurveyControllerTest {
         mockMvc.perform(get(URL + "/41").with(user(principal(8L, RoleCode.MOVER))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_FORBIDDEN.getCode()));
+    }
+
+    @Test
+    @DisplayName("PATCH start - MOVER → 200; DISPATCHER → 403")
+    void testStart() throws Exception {
+        when(fieldSurveyService.start(40, 8L))
+                .thenReturn(FieldSurveyResponse.builder().id(40).status(SurveyStatus.IN_PROGRESS).build());
+
+        mockMvc.perform(patch(URL + "/40/start").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã bắt đầu khảo sát"))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"));
+        mockMvc.perform(patch(URL + "/40/start").with(user(principal(3L, RoleCode.DISPATCHER))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH start - quá sớm → 400 ERR_SURVEY_INVALID_DATE")
+    void testStart_TooEarly() throws Exception {
+        when(fieldSurveyService.start(any(), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_SURVEY_INVALID_DATE, "quá sớm so với giờ hẹn"));
+
+        mockMvc.perform(patch(URL + "/40/start").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_DATE.getCode()));
     }
 }

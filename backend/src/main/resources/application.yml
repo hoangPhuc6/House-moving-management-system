@@ -39,6 +39,8 @@ app:
     min-lead-hours: 2
     base-transport-included-km: 10.0
     haversine-winding-factor: 1.3
+  survey:
+    early-start-minutes: 60
   map:
     enabled: true
     provider: GOONG

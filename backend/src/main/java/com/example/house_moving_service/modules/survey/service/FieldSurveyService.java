@@ -20,4 +20,10 @@ public interface FieldSurveyService {
     List<SurveySummaryResponse> getMySurveys(Long userId, LocalDate from, LocalDate to, SurveyStatus status);
 
     FieldSurveyResponse getMySurvey(Integer id, Long userId);
+
+    /**
+     * Bắt đầu khảo sát lịch CONFIRMED của mình, trong ngày khảo sát và không sớm hơn app.survey.early-start-minutes
+     * trước giờ hẹn. Lịch → IN_PROGRESS + actualStartAt; booking → SURVEYING; mở bản nháp báo giá.
+     */
+    FieldSurveyResponse start(Integer id, Long userId);
 }

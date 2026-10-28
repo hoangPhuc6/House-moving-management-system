@@ -16,6 +16,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -60,5 +61,18 @@ public class FieldSurveyController {
             @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(ApiResponse.ok(fieldSurveyService.getMySurvey(id, userDetails.getId())));
+    }
+
+    @PatchMapping("/{id}/start")
+    @Operation(
+            summary = "Bắt đầu khảo sát",
+            description = "Lịch phải CONFIRMED và của mình; chỉ trong ngày khảo sát, sớm nhất 60 phút (cấu hình) trước giờ hẹn, "
+                    + "bắt đầu muộn không bị chặn. Ghi thời gian bắt đầu thực tế, đơn chuyển SURVEYING và mở bản nháp đồ đạc "
+                    + "từ những gì khách đã khai."
+    )
+    public ResponseEntity<ApiResponse<FieldSurveyResponse>> startSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success("Đã bắt đầu khảo sát", fieldSurveyService.start(id, userDetails.getId())));
     }
 }

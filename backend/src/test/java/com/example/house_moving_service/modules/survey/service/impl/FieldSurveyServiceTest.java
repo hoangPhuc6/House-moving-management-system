@@ -6,12 +6,16 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingItem
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.entity.Booking;
+import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.entity.Staff;
+import com.example.house_moving_service.modules.quotation.dto.request.DraftItemSeed;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
 import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
+import com.example.house_moving_service.modules.survey.config.SurveyProperties;
+import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.enums.SurveyMethod;
@@ -25,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -36,6 +41,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -61,11 +68,13 @@ class FieldSurveyServiceTest {
     private QuotationDraftService quotationDraftService;
 
     private FieldSurveyServiceImpl service;
+    private SurveyProperties surveyProperties;
 
     @BeforeEach
     void setUp() {
+        surveyProperties = new SurveyProperties();
         service = new FieldSurveyServiceImpl(bookingSurveyRepository, bookingWorkflowService, quotationDraftService,
-                new SurveyMapper(), CLOCK);
+                new SurveyMapper(), surveyProperties, CLOCK);
     }
 
     private static BookingSurvey survey(SurveyStatus status, Long staffId) {
@@ -197,5 +206,143 @@ class FieldSurveyServiceTest {
         when(bookingSurveyRepository.findById(99)).thenReturn(Optional.empty());
 
         assertError(() -> service.getMySurvey(99, MOVER_ID), ErrorCode.ERR_SURVEY_NOT_FOUND);
+    }
+
+    // ---------- start (bây giờ = 2026-11-02 09:00, cho phép sớm 60 phút) ----------
+
+    private BookingSurvey givenConfirmedSurveyAt(LocalDate date, String slotStart, Long staffId) {
+        BookingSurvey s = survey(SurveyStatus.CONFIRMED, staffId);
+        s.setSurveyDate(date);
+        s.setTimeSlot(SurveyTimeSlot.builder().id(1)
+                .startTime(LocalTime.parse(slotStart)).endTime(LocalTime.parse(slotStart).plusHours(2)).build());
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        return s;
+    }
+
+    private void givenBookingStatus(BookingStatus status) {
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID))
+                .thenReturn(BookingSnapshot.builder().id(BOOKING_ID).bookingCode("BK-0007").status(status).build());
+    }
+
+    // Phần dựng response sau khi bắt đầu: tuyến đường, đồ khách khai, bản nháp vừa mở
+    private void givenResponseData(BookingSurvey s) {
+        when(bookingWorkflowService.getRoute(BOOKING_ID)).thenReturn(BookingRouteResponse.builder().build());
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of(
+                BookingItemSnapshot.builder().id(11).itemName("Tủ lạnh").quantity(1)
+                        .estimatedVolumeM3(new BigDecimal("1.20")).isFragile(true).packingRequired(false)
+                        .disassemblyRequired(false).note("Hàng Samsung").build()));
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.of(QuotationDraftDto.builder().id(30).build()));
+        when(quotationDraftService.listItems(30)).thenReturn(List.of(QuotationItemDto.builder().id(1).itemName("Tủ lạnh").build()));
+    }
+
+    @Test
+    @DisplayName("start: đúng người, đúng ngày → IN_PROGRESS + actualStartAt; booking → SURVEYING; mở bản nháp với seed từ đồ khách khai")
+    void testStart_Success() {
+        BookingSurvey s = givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(s);
+
+        FieldSurveyResponse result = service.start(SURVEY_ID, MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+        assertThat(s.getActualStartAt()).isEqualTo(TODAY.atTime(9, 0));
+        verify(bookingSurveyRepository).saveAndFlush(s);
+        verify(bookingWorkflowService).changeStatus(BOOKING_ID, EnumSet.of(BookingStatus.PENDING, BookingStatus.PENDING_SURVEY),
+                BookingStatus.SURVEYING, MOVER_ID, "Bắt đầu khảo sát (lịch #40)");
+        verify(quotationDraftService).openDraftForSurvey(BOOKING_ID, SURVEY_ID, MOVER_ID, List.of(new DraftItemSeed(
+                11, "Tủ lạnh", 1, new BigDecimal("1.20"), true, false, false, "Hàng Samsung")));
+        assertThat(result.getDraftItems()).extracting(QuotationItemDto::itemName).containsExactly("Tủ lạnh");
+    }
+
+    @Test
+    @DisplayName("start: sớm đúng 60 phút (khung 10:00) → được; sớm 61 phút (khung 10:01) → ERR_SURVEY_INVALID_DATE")
+    void testStart_EarlyLimit() {
+        BookingSurvey ok = givenConfirmedSurveyAt(TODAY, "10:00", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(ok);
+        service.start(SURVEY_ID, MOVER_ID);
+        assertThat(ok.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+
+        givenConfirmedSurveyAt(TODAY, "10:01", MOVER_ID);
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+    }
+
+    @Test
+    @DisplayName("start: cấu hình 0 phút → khung 09:30 lúc 09:00 bị coi là quá sớm")
+    void testStart_ConfigZeroMinutes() {
+        surveyProperties.setEarlyStartMinutes(0);
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+    }
+
+    @Test
+    @DisplayName("start: bắt đầu muộn 2 tiếng (khung 07:00) → vẫn được")
+    void testStart_LateAllowed() {
+        BookingSurvey s = givenConfirmedSurveyAt(TODAY, "07:00", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(s);
+
+        service.start(SURVEY_ID, MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+    }
+
+    @Test
+    @DisplayName("start: khác ngày khảo sát (hôm qua / ngày mai) → ERR_SURVEY_INVALID_DATE, không đổi gì")
+    void testStart_WrongDay() {
+        for (LocalDate day : List.of(TODAY.minusDays(1), TODAY.plusDays(1))) {
+            BookingSurvey s = givenConfirmedSurveyAt(day, "08:00", MOVER_ID);
+            givenBookingStatus(BookingStatus.PENDING_SURVEY);
+
+            assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+            assertThat(s.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+        }
+        verify(quotationDraftService, never()).openDraftForSurvey(any(), any(), any(), anyList());
+    }
+
+    @Test
+    @DisplayName("start: lịch của MOVER khác → ERR_SURVEY_FORBIDDEN")
+    void testStart_NotOwner() {
+        givenConfirmedSurveyAt(TODAY, "09:30", OTHER_MOVER_ID);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+        verifyNoInteractions(bookingWorkflowService, quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("start: lịch PENDING / IN_PROGRESS / COMPLETED → ERR_SURVEY_INVALID_STATUS")
+    void testStart_InvalidStatus() {
+        for (SurveyStatus status : new SurveyStatus[]{SurveyStatus.PENDING, SurveyStatus.IN_PROGRESS, SurveyStatus.COMPLETED}) {
+            BookingSurvey s = givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+            s.setStatus(status);
+
+            assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        verifyNoInteractions(bookingWorkflowService, quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("start: đơn đã hủy → ERR_SURVEY_BOOKING_INVALID_STATUS")
+    void testStart_BookingCancelled() {
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.CANCELLED);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_BOOKING_INVALID_STATUS);
+    }
+
+    @Test
+    @DisplayName("start: mở bản nháp lỗi (vd. đã có báo giá được chấp nhận) → lỗi lan ra để transaction hoàn tác")
+    void testStart_OpenDraftFails() {
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of());
+        doThrow(new AppException(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED))
+                .when(quotationDraftService).openDraftForSurvey(any(), any(), any(), anyList());
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED);
+        verify(bookingWorkflowService, never()).getRoute(any());
     }
 }

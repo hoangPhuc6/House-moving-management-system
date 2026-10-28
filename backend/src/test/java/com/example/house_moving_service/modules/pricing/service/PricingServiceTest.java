@@ -2,6 +2,9 @@ package com.example.house_moving_service.modules.pricing.service;
 
 import com.example.house_moving_service.modules.pricing.config.MapApiProperties;
 import com.example.house_moving_service.modules.pricing.config.PricingProperties;
+import com.example.house_moving_service.modules.pricing.dto.PricingInput;
+import com.example.house_moving_service.modules.pricing.dto.PricingInput.AccessInfo;
+import com.example.house_moving_service.modules.pricing.dto.PricingInput.ServiceLine;
 import com.example.house_moving_service.modules.pricing.dto.request.LocationDto;
 import com.example.house_moving_service.modules.pricing.dto.request.PricingCalculationRequest;
 import com.example.house_moving_service.modules.pricing.dto.request.RouteDto;
@@ -15,6 +18,7 @@ import com.example.house_moving_service.modules.voucher.enums.DiscountType;
 import com.example.house_moving_service.common.enums.PropertyType;
 import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
+import com.example.house_moving_service.modules.catalog.enums.SystemServiceCode;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
@@ -42,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -597,6 +602,73 @@ class PricingServiceTest {
                 assertThat(result.getCalculatedDistanceKm())
                         .as("Lần thứ %d: calculatedDistanceKm phải giống lần đầu", i + 1)
                         .isEqualByComparingTo(first.getCalculatedDistanceKm());
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("calculate(PricingInput) — báo giá chính thức cho Quotation")
+    class OfficialQuoteTests {
+
+        // Cùng dữ liệu createValidRequest(): 15 km, điểm lấy tầng trệt có thang máy, điểm giao tầng 2 không thang máy, đi bộ 20 m
+        private PricingInput sameAsValidRequest() {
+            return new PricingInput(new BigDecimal("15.00"),
+                    new AccessInfo(0, true, 0),
+                    new AccessInfo(2, false, 20),
+                    List.of(new ServiceLine(1, 1), new ServiceLine(2, 2), new ServiceLine(3, 1),
+                            new ServiceLine(4, 10), new ServiceLine(5, 2)),
+                    null);
+        }
+
+        @BeforeEach
+        void stubServices() {
+            lenient().when(serviceRepository.findAllByIdIn(anyCollection()))
+                    .thenReturn(List.of(truckService, laborService, technicalService, materialService, terrainService));
+            Service extraKm = Service.builder().id(30).serviceType(truckService.getServiceType()).name("Phụ phí vượt km (mỗi km)")
+                    .basePrice(new BigDecimal("15000.00")).status(ServiceStatus.ACTIVE).code(SystemServiceCode.SURCHARGE_EXTRA_KM).build();
+            Service stairs = Service.builder().id(31).serviceType(terrainService.getServiceType()).name("Phụ phí khuân vác thang bộ (mỗi lầu)")
+                    .basePrice(new BigDecimal("50000.00")).status(ServiceStatus.ACTIVE).code(SystemServiceCode.SURCHARGE_STAIRS).build();
+            lenient().when(serviceRepository.findByCode(SystemServiceCode.SURCHARGE_EXTRA_KM)).thenReturn(Optional.of(extraKm));
+            lenient().when(serviceRepository.findByCode(SystemServiceCode.SURCHARGE_STAIRS)).thenReturn(Optional.of(stairs));
+        }
+
+        @Test
+        @DisplayName("Không kiểm tra lịch (đơn có lịch đã qua vẫn tính), isEstimated = false, disclaimer báo giá chính thức")
+        void calculate_noScheduleCheck_notEstimated() {
+            PricingCalculationResponse response = pricingService.calculate(sameAsValidRequest());
+
+            assertThat(response.getIsEstimated()).isFalse();
+            assertThat(response.getDisclaimer()).contains("chính thức");
+            assertThat(response.getCalculatedDistanceKm()).isEqualByComparingTo("15.00");
+        }
+
+        @Test
+        @DisplayName("Cùng dữ liệu, calculatePrice và calculate cho cùng tổng tiền và cùng các dòng")
+        void calculate_sameTotalsAsEstimate() {
+            PricingCalculationResponse estimate = pricingService.calculatePrice(createValidRequest());
+            PricingCalculationResponse official = pricingService.calculate(sameAsValidRequest());
+
+            // 1.600.000 + vượt 5 km × 15.000 + thang bộ điểm giao 1 tầng × 50.000
+            assertThat(official.getFinancialSummary().getSubtotal()).isEqualByComparingTo("1725000.00");
+            assertThat(official.getFinancialSummary().getSubtotal())
+                    .isEqualByComparingTo(estimate.getFinancialSummary().getSubtotal());
+            assertThat(official.getFinancialSummary().getFinalTotal())
+                    .isEqualByComparingTo(estimate.getFinancialSummary().getFinalTotal());
+            assertThat(official.getCategoryFees()).usingRecursiveComparison().isEqualTo(estimate.getCategoryFees());
+            assertThat(official.getBreakdownItems()).usingRecursiveComparison().isEqualTo(estimate.getBreakdownItems());
+            assertThat(estimate.getIsEstimated()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Khoảng cách null hoặc âm → ERR_PRICE_INVALID_INPUT")
+        void calculate_invalidDistance() {
+            PricingInput valid = sameAsValidRequest();
+            for (BigDecimal distance : new BigDecimal[]{null, new BigDecimal("-1")}) {
+                PricingInput input = new PricingInput(distance, valid.pickup(), valid.dropoff(), valid.services(), null);
+                assertThatThrownBy(() -> pricingService.calculate(input))
+                        .isInstanceOf(AppException.class)
+                        .extracting(ex -> ((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.ERR_PRICE_INVALID_INPUT);
             }
         }
     }

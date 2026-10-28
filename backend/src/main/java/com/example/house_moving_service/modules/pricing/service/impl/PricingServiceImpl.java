@@ -30,6 +30,8 @@ public class PricingServiceImpl implements PricingService {
     private final RouteDistanceHelper routeDistanceHelper;
     private final PricingEngine pricingEngine;
 
+    private static final String OFFICIAL_DISCLAIMER = "Báo giá chính thức dựa trên kết quả khảo sát thực tế.";
+
     @Override
     public PricingCalculationResponse calculatePrice(PricingCalculationRequest request) {
         return calculatePrice(request, null);
@@ -49,6 +51,20 @@ public class PricingServiceImpl implements PricingService {
 
         // 3. Tính giá bằng lõi PricingEngine
         return pricingEngine.calculate(toPricingInput(request, distanceKm));
+    }
+
+    @Override
+    public PricingCalculationResponse calculate(PricingInput input) {
+        if (input == null || input.distanceKm() == null || input.distanceKm().signum() < 0) {
+            throw new AppException(ErrorCode.ERR_PRICE_INVALID_INPUT, "Khoảng cách di chuyển không hợp lệ");
+        }
+        log.info("Starting official pricing calculation with {} items",
+                input.services() != null ? input.services().size() : 0);
+
+        PricingCalculationResponse response = pricingEngine.calculate(input);
+        response.setIsEstimated(false);
+        response.setDisclaimer(OFFICIAL_DISCLAIMER);
+        return response;
     }
 
     private PricingInput toPricingInput(PricingCalculationRequest request, BigDecimal distanceKm) {

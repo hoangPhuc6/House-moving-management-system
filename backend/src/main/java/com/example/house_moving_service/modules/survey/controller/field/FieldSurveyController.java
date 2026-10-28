@@ -2,6 +2,7 @@ package com.example.house_moving_service.modules.survey.controller.field;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
@@ -82,6 +83,20 @@ public class FieldSurveyController {
             @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(ApiResponse.success("Đã bắt đầu khảo sát", fieldSurveyService.start(id, userDetails.getId())));
+    }
+
+    @PutMapping("/{id}/route-access")
+    @Operation(
+            summary = "Cập nhật điều kiện ra vào (tầng, thang máy, cự ly hẻm)",
+            description = "Lịch phải đang khảo sát (IN_PROGRESS). Ghi đè giá trị khách khai ở cả điểm lấy và điểm giao hàng; "
+                    + "giá trị cũ → mới được ghi vào ghi chú của lịch. Không có gì thay đổi thì không ghi gì."
+    )
+    public ResponseEntity<ApiResponse<FieldSurveyResponse>> updateRouteAccess(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody RouteAccessRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        FieldSurveyResponse response = fieldSurveyService.updateRouteAccess(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật điều kiện ra vào", response));
     }
 
     @PostMapping("/{id}/items")

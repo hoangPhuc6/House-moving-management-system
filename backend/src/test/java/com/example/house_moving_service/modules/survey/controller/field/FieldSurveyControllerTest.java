@@ -194,4 +194,37 @@ class FieldSurveyControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(ITEM_BODY))
                 .andExpect(status().isForbidden());
     }
+
+    // ---------- Điều kiện ra vào ----------
+
+    private static final String ROUTE_BODY = "{\"pickup\":{\"floorNumber\":5,\"hasElevator\":false,\"walkingDistanceMeters\":50},"
+            + "\"dropoff\":{\"floorNumber\":1,\"hasElevator\":false,\"walkingDistanceMeters\":0}}";
+
+    @Test
+    @DisplayName("PUT route-access - MOVER → 200; DISPATCHER → 403")
+    void testUpdateRouteAccess() throws Exception {
+        when(fieldSurveyService.updateRouteAccess(eq(40), any(), eq(8L)))
+                .thenReturn(FieldSurveyResponse.builder().id(40).status(SurveyStatus.IN_PROGRESS).build());
+
+        mockMvc.perform(put(URL + "/40/route-access").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content(ROUTE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã cập nhật điều kiện ra vào"));
+        mockMvc.perform(put(URL + "/40/route-access").with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON).content(ROUTE_BODY))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PUT route-access - tầng âm / thiếu điểm giao / cự ly vượt 5000 → 400, không gọi service")
+    void testUpdateRouteAccess_Validation() throws Exception {
+        mockMvc.perform(put(URL + "/40/route-access").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pickup\":{\"floorNumber\":-1,\"hasElevator\":false,\"walkingDistanceMeters\":6000}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors['pickup.floorNumber']").exists())
+                .andExpect(jsonPath("$.errors['pickup.walkingDistanceMeters']").exists())
+                .andExpect(jsonPath("$.errors.dropoff").exists());
+        verify(fieldSurveyService, never()).updateRouteAccess(any(), any(), any());
+    }
 }

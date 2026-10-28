@@ -1,6 +1,7 @@
 package com.example.house_moving_service.modules.survey.service;
 
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
@@ -35,4 +36,10 @@ public interface FieldSurveyService {
     QuotationItemDto updateItem(Integer id, Integer itemId, SurveyItemRequest request, Long userId);
 
     void deleteItem(Integer id, Integer itemId, Long userId);
+
+    /**
+     * Ghi tầng / thang máy / cự ly hẻm thực tế ở hai đầu (lịch phải IN_PROGRESS). Giá trị trong booking_routes bị ghi đè
+     * nên giá trị cũ → mới được nối vào note của lịch (tag ROUTE_UPDATE). Không có gì thay đổi thì không ghi gì.
+     */
+    FieldSurveyResponse updateRouteAccess(Integer id, RouteAccessRequest request, Long userId);
 }

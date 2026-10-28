@@ -11,6 +11,10 @@ import com.example.house_moving_service.modules.quotation.service.QuotationDraft
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
 import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
+import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
+import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
@@ -136,5 +140,24 @@ class FieldSurveyServiceIntegrationTest {
         fieldSurveyService.deleteItem(survey.getId(), added.id(), moverId);
         assertThat(fieldSurveyService.getMySurvey(survey.getId(), moverId).getDraftItems()).hasSize(declaredBefore.size());
         assertThat(bookingWorkflowService.getItems(booking.getId())).isEqualTo(declaredBefore);
+    }
+
+    @Test
+    @DisplayName("Cập nhật điều kiện ra vào → booking_routes lưu chuỗi mới, getRoute parse lại đúng; note của lịch có ROUTE_UPDATE")
+    void testUpdateRouteAccess_PersistedAndParsedBack() {
+        fieldSurveyService.start(survey.getId(), moverId);
+
+        FieldSurveyResponse result = fieldSurveyService.updateRouteAccess(survey.getId(), RouteAccessRequest.builder()
+                .pickup(LocationAccessRequest.builder().floorNumber(7).hasElevator(true).walkingDistanceMeters(35)
+                        .extraNote("Cổng sau").build())
+                .dropoff(LocationAccessRequest.builder().floorNumber(2).hasElevator(false).walkingDistanceMeters(0).build())
+                .build(), moverId);
+
+        BookingRouteResponse route = bookingWorkflowService.getRoute(booking.getId());
+        assertThat(route.getPickupAccess()).isEqualTo(new RouteAccessInfo(7, true, 35, "Cổng sau"));
+        assertThat(route.getDropoffAccess()).isEqualTo(new RouteAccessInfo(2, false, 0, null));
+        assertThat(result.getRoute().getPickupAccess()).isEqualTo(route.getPickupAccess());
+        assertThat(result.getNote()).contains("[ROUTE_UPDATE][user#" + moverId + "]")
+                .contains("→ Tầng 7, có thang máy, hẻm 35m (Cổng sau)");
     }
 }

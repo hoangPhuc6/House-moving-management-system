@@ -2,7 +2,9 @@ package com.example.house_moving_service.modules.survey.service.impl;
 
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
 import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
+import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
@@ -12,6 +14,8 @@ import com.example.house_moving_service.modules.quotation.dto.response.Quotation
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
 import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyProperties;
+import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
@@ -126,6 +130,58 @@ public class FieldSurveyServiceImpl implements FieldSurveyService {
     public void deleteItem(Integer id, Integer itemId, Long userId) {
         Integer draftId = editableDraftId(id, userId);
         quotationDraftService.deleteItem(draftId, itemId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FieldSurveyResponse updateRouteAccess(Integer id, RouteAccessRequest request, Long userId) {
+        BookingSurvey survey = loadOwnedForUpdate(id, userId);
+        if (survey.getStatus() != SurveyStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        Integer bookingId = survey.getBooking().getId();
+        BookingRouteResponse route = bookingWorkflowService.getRoute(bookingId);
+
+        RouteAccessInfo oldPickup = route.getPickupAccess();
+        RouteAccessInfo oldDropoff = route.getDropoffAccess();
+        RouteAccessInfo newPickup = toAccessInfo(request.getPickup());
+        RouteAccessInfo newDropoff = toAccessInfo(request.getDropoff());
+        boolean pickupChanged = !newPickup.equals(oldPickup);
+        boolean dropoffChanged = !newDropoff.equals(oldDropoff);
+
+        if (pickupChanged || dropoffChanged) {
+            // null = giữ nguyên đầu đó
+            bookingWorkflowService.updateRouteAccess(bookingId,
+                    pickupChanged ? newPickup : null, dropoffChanged ? newDropoff : null);
+            survey.appendNote("ROUTE_UPDATE", userId,
+                    "Lấy hàng: " + describeChange(pickupChanged, oldPickup, newPickup)
+                            + "; Giao hàng: " + describeChange(dropoffChanged, oldDropoff, newDropoff),
+                    LocalDateTime.now(clock));
+            bookingSurveyRepository.saveAndFlush(survey);
+            log.info("Mover id: {} updated route access of booking id: {} (survey id: {})", userId, bookingId, id);
+        }
+        return toFieldResponse(survey, bookingWorkflowService.getSnapshot(bookingId));
+    }
+
+    private static RouteAccessInfo toAccessInfo(LocationAccessRequest access) {
+        String extraNote = access.getExtraNote() != null && !access.getExtraNote().isBlank()
+                ? access.getExtraNote().trim()
+                : null;
+        return new RouteAccessInfo(access.getFloorNumber(), access.getHasElevator(), access.getWalkingDistanceMeters(), extraNote);
+    }
+
+    private static String describeChange(boolean changed, RouteAccessInfo oldValue, RouteAccessInfo newValue) {
+        return changed ? describeAccess(oldValue) + " → " + describeAccess(newValue) : "(không đổi)";
+    }
+
+    // Ghi đủ cả extraNote: ghi chú cũ khách gõ tự do (không đúng định dạng) nằm hết trong extraNote và sẽ bị ghi đè
+    private static String describeAccess(RouteAccessInfo access) {
+        if (access == null || RouteAccessInfo.EMPTY.equals(access)) {
+            return "(chưa có)";
+        }
+        String text = "Tầng " + access.floorNumber() + ", " + (access.hasElevator() ? "có" : "không") + " thang máy, hẻm "
+                + access.walkingDistanceMeters() + "m";
+        return access.extraNote() != null ? text + " (" + access.extraNote() + ")" : text;
     }
 
     /**

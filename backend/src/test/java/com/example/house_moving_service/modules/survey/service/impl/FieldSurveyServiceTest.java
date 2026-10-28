@@ -2,6 +2,7 @@ package com.example.house_moving_service.modules.survey.service.impl;
 
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
 import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
@@ -17,6 +18,8 @@ import com.example.house_moving_service.modules.quotation.service.QuotationDraft
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
 import com.example.house_moving_service.modules.survey.config.SurveyProperties;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
+import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
@@ -45,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -431,5 +435,96 @@ class FieldSurveyServiceTest {
                 .thenThrow(new AppException(ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND, 999));
 
         assertError(() -> service.updateItem(SURVEY_ID, 999, sofa(), MOVER_ID), ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND);
+    }
+
+    // ---------- updateRouteAccess (bây giờ = 2026-11-02 09:00) ----------
+
+    private static final RouteAccessInfo OLD_PICKUP = new RouteAccessInfo(3, true, 20, null);
+    private static final RouteAccessInfo OLD_DROPOFF = new RouteAccessInfo(1, false, 0, null);
+
+    private static LocationAccessRequest access(int floor, boolean elevator, int walking, String extra) {
+        return LocationAccessRequest.builder().floorNumber(floor).hasElevator(elevator)
+                .walkingDistanceMeters(walking).extraNote(extra).build();
+    }
+
+    private static RouteAccessRequest routeRequest(LocationAccessRequest pickup, LocationAccessRequest dropoff) {
+        return RouteAccessRequest.builder().pickup(pickup).dropoff(dropoff).build();
+    }
+
+    // Lịch IN_PROGRESS của mình + tuyến đường hiện tại; phần dựng response sau khi cập nhật để mock trả rỗng
+    private BookingSurvey givenRouteEditing(RouteAccessInfo pickup, RouteAccessInfo dropoff) {
+        BookingSurvey s = survey(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        when(bookingWorkflowService.getRoute(BOOKING_ID))
+                .thenReturn(BookingRouteResponse.builder().pickupAccess(pickup).dropoffAccess(dropoff).build());
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(BookingSnapshot.builder().id(BOOKING_ID).build());
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of());
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.empty());
+        return s;
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: đổi cả hai đầu → ghi xuống booking; note ghi cũ → mới; extraNote được trim")
+    void testUpdateRouteAccess_BothChanged() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(5, false, 50, "  Hẻm xe máy  "), access(2, true, 10, " ")), MOVER_ID);
+
+        verify(bookingWorkflowService).updateRouteAccess(BOOKING_ID,
+                new RouteAccessInfo(5, false, 50, "Hẻm xe máy"), new RouteAccessInfo(2, true, 10, null));
+        assertThat(s.getNote()).isEqualTo("[2026-11-02 09:00][ROUTE_UPDATE][user#8] "
+                + "Lấy hàng: Tầng 3, có thang máy, hẻm 20m → Tầng 5, không thang máy, hẻm 50m (Hẻm xe máy); "
+                + "Giao hàng: Tầng 1, không thang máy, hẻm 0m → Tầng 2, có thang máy, hẻm 10m");
+        verify(bookingSurveyRepository).saveAndFlush(s);
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: chỉ đổi điểm lấy → điểm giao truyền null (giữ nguyên), note ghi '(không đổi)'")
+    void testUpdateRouteAccess_OnlyPickupChanged() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(4, true, 20, null), access(1, false, 0, null)), MOVER_ID);
+
+        verify(bookingWorkflowService).updateRouteAccess(eq(BOOKING_ID), eq(new RouteAccessInfo(4, true, 20, null)), isNull());
+        assertThat(s.getNote()).endsWith("; Giao hàng: (không đổi)");
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: giống hệt giá trị cũ → không ghi booking, không ghi note, không lưu")
+    void testUpdateRouteAccess_NoChange() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(3, true, 20, null), access(1, false, 0, null)), MOVER_ID);
+
+        verify(bookingWorkflowService, never()).updateRouteAccess(any(), any(), any());
+        verify(bookingSurveyRepository, never()).saveAndFlush(any());
+        assertThat(s.getNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: ghi chú cũ khách gõ tự do / chưa có → note giữ lại nguyên văn chữ cũ / ghi '(chưa có)'")
+    void testUpdateRouteAccess_OldFreeTextAndEmpty() {
+        RouteAccessInfo freeText = new RouteAccessInfo(0, false, 0, "Nhà trong hẻm sâu, gọi trước");
+        BookingSurvey s = givenRouteEditing(freeText, RouteAccessInfo.EMPTY);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(2, false, 80, null), access(1, false, 0, null)), MOVER_ID);
+
+        assertThat(s.getNote())
+                .contains("Lấy hàng: Tầng 0, không thang máy, hẻm 0m (Nhà trong hẻm sâu, gọi trước) → Tầng 2, không thang máy, hẻm 80m")
+                .contains("Giao hàng: (chưa có) → Tầng 1, không thang máy, hẻm 0m");
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: lịch không IN_PROGRESS → ERR_SURVEY_INVALID_STATUS; lịch người khác → ERR_SURVEY_FORBIDDEN")
+    void testUpdateRouteAccess_InvalidStatusAndNotOwner() {
+        RouteAccessRequest request = routeRequest(access(2, false, 0, null), access(1, false, 0, null));
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.CONFIRMED, MOVER_ID)));
+        assertError(() -> service.updateRouteAccess(SURVEY_ID, request, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID)));
+        assertError(() -> service.updateRouteAccess(SURVEY_ID, request, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+
+        verifyNoInteractions(bookingWorkflowService);
     }
 }

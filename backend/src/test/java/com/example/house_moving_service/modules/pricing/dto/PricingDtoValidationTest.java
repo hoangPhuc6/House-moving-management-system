@@ -80,12 +80,12 @@ class PricingDtoValidationTest {
 
         ServiceItemDto item1 = ServiceItemDto.builder()
                 .serviceId(1)
-                .quantity(new BigDecimal("1.0"))
+                .quantity(1)
                 .build();
 
         ServiceItemDto item2 = ServiceItemDto.builder()
                 .serviceId(3)
-                .quantity(new BigDecimal("2.0"))
+                .quantity(2)
                 .build();
 
         return PricingCalculationRequest.builder()
@@ -108,7 +108,7 @@ class PricingDtoValidationTest {
     @DisplayName("PricingCalculationRequest: Vi phạm khi thiếu schedule hoặc route")
     void testMissingScheduleAndRoute() {
         PricingCalculationRequest request = PricingCalculationRequest.builder()
-                .serviceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(BigDecimal.ONE).build()))
+                .serviceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(1).build()))
                 .build();
 
         Set<ConstraintViolation<PricingCalculationRequest>> violations = validator.validate(request);
@@ -177,13 +177,22 @@ class PricingDtoValidationTest {
     void testInvalidServiceItem() {
         ServiceItemDto item = ServiceItemDto.builder()
                 .serviceId(null)
-                .quantity(new BigDecimal("0.0"))
+                .quantity(0)
                 .build();
 
         Set<ConstraintViolation<ServiceItemDto>> violations = validator.validate(item);
         assertFalse(violations.isEmpty());
         assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("serviceId")));
         assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("quantity")));
+    }
+
+    @Test
+    @DisplayName("ServiceItemDto: quantity null → vi phạm; quantity = 1 → hợp lệ")
+    void testServiceItemQuantityNullAndOne() {
+        Set<ConstraintViolation<ServiceItemDto>> nullQty = validator.validate(ServiceItemDto.builder().serviceId(1).build());
+        assertTrue(nullQty.stream().anyMatch(v -> v.getPropertyPath().toString().equals("quantity")));
+
+        assertTrue(validator.validate(ServiceItemDto.builder().serviceId(1).quantity(1).build()).isEmpty());
     }
 
     @Test
@@ -222,7 +231,7 @@ class PricingDtoValidationTest {
                                 .serviceTypeId(1)
                                 .serviceTypeName("Cước xe")
                                 .serviceName("Xe 1.5 tấn")
-                                .quantity(new BigDecimal("1.0"))
+                                .quantity(1)
                                 .unitPrice(new BigDecimal("500000.00"))
                                 .totalPrice(new BigDecimal("500000.00"))
                                 .note("Chặng cơ bản")

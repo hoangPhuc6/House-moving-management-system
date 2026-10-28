@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -84,6 +85,16 @@ public class GlobalExceptionHandler {
                 msg,
                 request.getRequestURI()
         );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // Body không phải JSON hợp lệ hoặc sai kiểu dữ liệu (vd. quantity: 1.5, "abc" cho trường số)
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        ApiResponse<Void> body = ApiResponse.error(
+                ErrorCode.ERR_INVALID_INPUT.getCode(),
+                ErrorCode.ERR_INVALID_INPUT.formatMessage("body không đúng định dạng JSON hoặc sai kiểu dữ liệu"),
+                request.getRequestURI());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 

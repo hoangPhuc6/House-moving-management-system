@@ -20,7 +20,7 @@ public class BreakdownItemDto {
     private Integer serviceTypeId;
     private String serviceTypeName;
     private String serviceName;
-    private BigDecimal quantity;
+    private Integer quantity;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private BigDecimal unitPrice;

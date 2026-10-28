@@ -13,6 +13,7 @@ import com.example.house_moving_service.modules.catalog.entity.ServiceType;
 import com.example.house_moving_service.modules.voucher.entity.Voucher;
 import com.example.house_moving_service.modules.voucher.enums.DiscountType;
 import com.example.house_moving_service.common.enums.PropertyType;
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
@@ -20,6 +21,7 @@ import com.example.house_moving_service.modules.catalog.repository.ServiceReposi
 import com.example.house_moving_service.modules.catalog.service.impl.ServiceLookupServiceImpl;
 import com.example.house_moving_service.modules.voucher.repository.VoucherRepository;
 import com.example.house_moving_service.modules.voucher.service.impl.VoucherServiceImpl;
+import com.example.house_moving_service.modules.pricing.engine.PricingEngine;
 import com.example.house_moving_service.modules.pricing.helper.RouteDistanceHelper;
 import com.example.house_moving_service.modules.pricing.service.impl.PricingServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,14 +76,13 @@ class PricingServiceTest {
 
         routeDistanceHelper = new RouteDistanceHelper(pricingProperties, mapApiProperties);
         pricingService = new PricingServiceImpl(pricingProperties, routeDistanceHelper,
-                new ServiceLookupServiceImpl(serviceRepository),
-                new VoucherServiceImpl(voucherRepository));
+                new PricingEngine(new ServiceLookupServiceImpl(serviceRepository), new VoucherServiceImpl(voucherRepository)));
 
-        ServiceType typeTransport = ServiceType.builder().id(1).name("Xe tải vận chuyển").isActive(true).build();
-        ServiceType typeLabor = ServiceType.builder().id(2).name("Bốc xếp & Khuân vác").isActive(true).build();
-        ServiceType typeTechnical = ServiceType.builder().id(3).name("Dịch vụ kỹ thuật").isActive(true).build();
-        ServiceType typeMaterial = ServiceType.builder().id(4).name("Vật tư đóng gói").isActive(true).build();
-        ServiceType typeTerrain = ServiceType.builder().id(5).name("Phụ phí địa hình").isActive(true).build();
+        ServiceType typeTransport = ServiceType.builder().id(1).name("Xe tải vận chuyển").isActive(true).feeCategory(FeeCategory.TRANSPORT).build();
+        ServiceType typeLabor = ServiceType.builder().id(2).name("Bốc xếp & Khuân vác").isActive(true).feeCategory(FeeCategory.LABOR).build();
+        ServiceType typeTechnical = ServiceType.builder().id(3).name("Dịch vụ kỹ thuật").isActive(true).feeCategory(FeeCategory.TECHNICAL).build();
+        ServiceType typeMaterial = ServiceType.builder().id(4).name("Vật tư đóng gói").isActive(true).feeCategory(FeeCategory.MATERIAL).build();
+        ServiceType typeTerrain = ServiceType.builder().id(5).name("Phụ phí địa hình").isActive(true).feeCategory(FeeCategory.TERRAIN).build();
 
         truckService = Service.builder()
                 .id(1).serviceType(typeTransport).name("Xe tải 1.5 Tấn (Nội thành)")
@@ -133,11 +134,11 @@ class PricingServiceTest {
                         .manualDistanceKm(new BigDecimal("15.00"))
                         .build())
                 .serviceItems(List.of(
-                        ServiceItemDto.builder().serviceId(1).quantity(new BigDecimal("1")).build(),
-                        ServiceItemDto.builder().serviceId(2).quantity(new BigDecimal("2")).build(),
-                        ServiceItemDto.builder().serviceId(3).quantity(new BigDecimal("1")).build(),
-                        ServiceItemDto.builder().serviceId(4).quantity(new BigDecimal("10")).build(),
-                        ServiceItemDto.builder().serviceId(5).quantity(new BigDecimal("2")).build()
+                        ServiceItemDto.builder().serviceId(1).quantity(1).build(),
+                        ServiceItemDto.builder().serviceId(2).quantity(2).build(),
+                        ServiceItemDto.builder().serviceId(3).quantity(1).build(),
+                        ServiceItemDto.builder().serviceId(4).quantity(10).build(),
+                        ServiceItemDto.builder().serviceId(5).quantity(2).build()
                 ))
                 .build();
     }
@@ -273,7 +274,7 @@ class PricingServiceTest {
         void calculatePrice_voucherExceedsSubtotal_floorZero() {
             PricingCalculationRequest request = createValidRequest();
             // Chỉ chọn 1 dịch vụ 450,000
-            request.setServiceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(new BigDecimal("1")).build()));
+            request.setServiceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(1).build()));
             request.setVoucherCode("SUPERVOUCHER");
 
             // Voucher giảm 500,000 cho đơn 450,000

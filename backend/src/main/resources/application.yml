@@ -29,6 +29,9 @@ spring:
   jackson:
     time-zone: Asia/Ho_Chi_Minh
     date-format: yyyy-MM-dd HH:mm:ss
+    deserialization:
+      # Số lẻ (1.5) gửi vào trường số nguyên bị từ chối thay vì âm thầm cắt thành 1
+      accept-float-as-int: false
 
   flyway:
     enabled: true

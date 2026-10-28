@@ -157,7 +157,7 @@ class BookingServiceTest {
                 .note("Don nha can than")
                 .schedule(schedule)
                 .route(route)
-                .serviceItems(List.of(ServiceItemDto.builder().serviceId(101).quantity(BigDecimal.ONE).build()))
+                .serviceItems(List.of(ServiceItemDto.builder().serviceId(101).quantity(1).build()))
                 .items(List.of(BookingItemRequest.builder().itemName("Tu lanh").quantity(1).build()))
                 .build();
     }
@@ -188,7 +188,7 @@ class BookingServiceTest {
                 .breakdownItems(List.of(BreakdownItemDto.builder()
                         .serviceId(101)
                         .serviceName("Xe tai 1.5 tan")
-                        .quantity(BigDecimal.ONE)
+                        .quantity(1)
                         .unitPrice(BigDecimal.valueOf(1000000))
                         .totalPrice(BigDecimal.valueOf(1000000))
                         .note("Xe van chuyen")

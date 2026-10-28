@@ -190,7 +190,7 @@ public class BookingServiceImpl implements BookingService {
         if (pricingResponse.getBreakdownItems() != null) {
             for (BreakdownItemDto breakdown : pricingResponse.getBreakdownItems()) {
                 Service serviceProxy = serviceLookupService.getReference(breakdown.getServiceId());
-                int quantity = breakdown.getQuantity() != null ? breakdown.getQuantity().intValue() : 1;
+                int quantity = breakdown.getQuantity() != null ? breakdown.getQuantity() : 1;
 
                 com.example.house_moving_service.modules.booking.entity.BookingService bs = com.example.house_moving_service.modules.booking.entity.BookingService.builder()
                         .booking(savedBooking)

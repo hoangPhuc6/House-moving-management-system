@@ -1,6 +1,8 @@
 package com.example.house_moving_service.modules.survey.controller.field;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
@@ -11,13 +13,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -74,5 +82,37 @@ public class FieldSurveyController {
             @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(ApiResponse.success("Đã bắt đầu khảo sát", fieldSurveyService.start(id, userDetails.getId())));
+    }
+
+    @PostMapping("/{id}/items")
+    @Operation(summary = "Thêm đồ đạc", description = "Lịch phải đang khảo sát (IN_PROGRESS). Không có giá. Dòng thêm mới là đồ phát sinh tại nhà, "
+            + "không gắn với đồ khách khai (bookingItemId = null).")
+    public ResponseEntity<ApiResponse<QuotationItemDto>> addItem(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody SurveyItemRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        QuotationItemDto item = fieldSurveyService.addItem(id, request, userDetails.getId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Đã thêm đồ đạc", item));
+    }
+
+    @PutMapping("/{id}/items/{itemId}")
+    @Operation(summary = "Sửa đồ đạc", description = "Sửa một dòng trên bản nháp; không làm thay đổi đồ khách đã khai.")
+    public ResponseEntity<ApiResponse<QuotationItemDto>> updateItem(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Parameter(description = "ID dòng đồ đạc", required = true) @PathVariable Integer itemId,
+            @Valid @RequestBody SurveyItemRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        QuotationItemDto item = fieldSurveyService.updateItem(id, itemId, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật đồ đạc", item));
+    }
+
+    @DeleteMapping("/{id}/items/{itemId}")
+    @Operation(summary = "Xóa đồ đạc", description = "Xóa một dòng trên bản nháp; không làm thay đổi đồ khách đã khai.")
+    public ResponseEntity<ApiResponse<Void>> deleteItem(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Parameter(description = "ID dòng đồ đạc", required = true) @PathVariable Integer itemId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        fieldSurveyService.deleteItem(id, itemId, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa đồ đạc"));
     }
 }

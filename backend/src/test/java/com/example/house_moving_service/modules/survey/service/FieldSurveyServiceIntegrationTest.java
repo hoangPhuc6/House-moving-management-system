@@ -9,6 +9,9 @@ import com.example.house_moving_service.modules.identity.repository.StaffReposit
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
 import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
+import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
@@ -31,6 +34,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -109,5 +113,28 @@ class FieldSurveyServiceIntegrationTest {
         assertThat(bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(booking.getId()))
                 .hasSize(historyBefore + 1);
         assertThat(bookingWorkflowService.getItems(booking.getId())).hasSize(declaredCount);
+    }
+
+    @Test
+    @DisplayName("Sửa / thêm / xóa đồ trên bản nháp → bản nháp đổi, booking_items (đồ khách khai) giữ nguyên")
+    void testItems_DoNotChangeDeclaredItems() {
+        List<BookingItemSnapshot> declaredBefore = bookingWorkflowService.getItems(booking.getId());
+        FieldSurveyResponse started = fieldSurveyService.start(survey.getId(), moverId);
+        QuotationItemDto copied = started.getDraftItems().get(0);
+
+        fieldSurveyService.updateItem(survey.getId(), copied.id(), SurveyItemRequest.builder()
+                .itemName(copied.itemName()).quantity(copied.quantity() + 5).build(), moverId);
+        QuotationItemDto added = fieldSurveyService.addItem(survey.getId(),
+                SurveyItemRequest.builder().itemName("Sofa").quantity(1).build(), moverId);
+
+        List<QuotationItemDto> draft = fieldSurveyService.getMySurvey(survey.getId(), moverId).getDraftItems();
+        assertThat(draft).hasSize(declaredBefore.size() + 1);
+        assertThat(draft).filteredOn(i -> i.id().equals(copied.id()))
+                .singleElement().extracting(QuotationItemDto::quantity).isEqualTo(copied.quantity() + 5);
+        assertThat(added.bookingItemId()).isNull();
+
+        fieldSurveyService.deleteItem(survey.getId(), added.id(), moverId);
+        assertThat(fieldSurveyService.getMySurvey(survey.getId(), moverId).getDraftItems()).hasSize(declaredBefore.size());
+        assertThat(bookingWorkflowService.getItems(booking.getId())).isEqualTo(declaredBefore);
     }
 }

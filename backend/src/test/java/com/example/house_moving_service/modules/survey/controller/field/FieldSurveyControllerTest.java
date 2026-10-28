@@ -3,6 +3,8 @@ package com.example.house_moving_service.modules.survey.controller.field;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.modules.identity.entity.Role;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,12 +26,17 @@ import java.util.List;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -133,5 +141,57 @@ class FieldSurveyControllerTest {
         mockMvc.perform(patch(URL + "/40/start").with(user(principal(8L, RoleCode.MOVER))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_DATE.getCode()));
+    }
+
+    // ---------- Đồ đạc ----------
+
+    private static final String ITEM_BODY = "{\"itemName\":\"Sofa\",\"quantity\":1,\"unitPrice\":5000000}";
+
+    @Test
+    @DisplayName("POST items - MOVER → 201 trả dòng mới; field giá gửi kèm bị bỏ qua")
+    void testAddItem() throws Exception {
+        when(fieldSurveyService.addItem(eq(40), any(SurveyItemRequest.class), eq(8L)))
+                .thenReturn(QuotationItemDto.builder().id(5).itemName("Sofa").quantity(1).build());
+
+        mockMvc.perform(post(URL + "/40/items").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content(ITEM_BODY))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("Đã thêm đồ đạc"))
+                .andExpect(jsonPath("$.data.id").value(5));
+    }
+
+    @Test
+    @DisplayName("POST items - thiếu tên / số lượng 0 → 400, báo đúng field")
+    void testAddItem_Validation() throws Exception {
+        mockMvc.perform(post(URL + "/40/items").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itemName\":\" \",\"quantity\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.itemName").exists())
+                .andExpect(jsonPath("$.errors.quantity").exists());
+        verify(fieldSurveyService, never()).addItem(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("PUT items/{itemId} → 200; DELETE items/{itemId} → 200 kèm thông báo")
+    void testUpdateAndDeleteItem() throws Exception {
+        when(fieldSurveyService.updateItem(eq(40), eq(5), any(SurveyItemRequest.class), eq(8L)))
+                .thenReturn(QuotationItemDto.builder().id(5).quantity(2).build());
+
+        mockMvc.perform(put(URL + "/40/items/5").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itemName\":\"Sofa\",\"quantity\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.quantity").value(2));
+        mockMvc.perform(delete(URL + "/40/items/5").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã xóa đồ đạc"));
+        verify(fieldSurveyService).deleteItem(40, 5, 8L);
+    }
+
+    @Test
+    @DisplayName("Đồ đạc - DISPATCHER gọi vùng FIELD → 403")
+    void testItems_DispatcherForbidden() throws Exception {
+        mockMvc.perform(post(URL + "/40/items").with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON).content(ITEM_BODY))
+                .andExpect(status().isForbidden());
     }
 }

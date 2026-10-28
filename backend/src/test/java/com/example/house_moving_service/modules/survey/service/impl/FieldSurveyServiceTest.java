@@ -9,6 +9,7 @@ import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.entity.Staff;
+import com.example.house_moving_service.modules.quotation.dto.request.DraftItemCommand;
 import com.example.house_moving_service.modules.quotation.dto.request.DraftItemSeed;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
@@ -16,6 +17,7 @@ import com.example.house_moving_service.modules.quotation.service.QuotationDraft
 import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
 import com.example.house_moving_service.modules.survey.config.SurveyProperties;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.enums.SurveyMethod;
@@ -42,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -344,5 +347,89 @@ class FieldSurveyServiceTest {
 
         assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED);
         verify(bookingWorkflowService, never()).getRoute(any());
+    }
+
+    // ---------- addItem / updateItem / deleteItem ----------
+
+    private void givenSurveyForEditing(SurveyStatus status, Long staffId) {
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(status, staffId)));
+    }
+
+    private void givenCurrentDraft(Integer draftId) {
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(draftId != null
+                ? Optional.of(QuotationDraftDto.builder().id(draftId).build())
+                : Optional.empty());
+    }
+
+    private static SurveyItemRequest sofa() {
+        return SurveyItemRequest.builder().itemName("  Sofa góc  ").quantity(1).unit("bộ")
+                .estimatedVolumeM3(new BigDecimal("2.50")).isFragile(null).packingRequired(true).note("Da thật").build();
+    }
+
+    @Test
+    @DisplayName("addItem: IN_PROGRESS → thêm vào bản nháp hiện tại; tên được trim, boolean null → false, không có giá")
+    void testAddItem_Success() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+        QuotationItemDto created = QuotationItemDto.builder().id(5).itemName("Sofa góc").build();
+        when(quotationDraftService.addItem(eq(30), any(DraftItemCommand.class))).thenReturn(created);
+
+        assertThat(service.addItem(SURVEY_ID, sofa(), MOVER_ID)).isSameAs(created);
+        verify(quotationDraftService).addItem(30, new DraftItemCommand(
+                "Sofa góc", 1, "bộ", new BigDecimal("2.50"), false, true, false, "Da thật"));
+    }
+
+    @Test
+    @DisplayName("updateItem / deleteItem: gọi quotation với đúng bản nháp và id dòng")
+    void testUpdateAndDeleteItem() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+
+        service.updateItem(SURVEY_ID, 5, sofa(), MOVER_ID);
+        service.deleteItem(SURVEY_ID, 6, MOVER_ID);
+
+        verify(quotationDraftService).updateItem(eq(30), eq(5), any(DraftItemCommand.class));
+        verify(quotationDraftService).deleteItem(30, 6);
+    }
+
+    @Test
+    @DisplayName("Sửa đồ khi lịch CONFIRMED / COMPLETED / RESURVEY_REQUIRED → ERR_SURVEY_INVALID_STATUS, không đụng bản nháp")
+    void testItems_InvalidStatus() {
+        for (SurveyStatus status : new SurveyStatus[]{SurveyStatus.CONFIRMED, SurveyStatus.COMPLETED, SurveyStatus.RESURVEY_REQUIRED}) {
+            givenSurveyForEditing(status, MOVER_ID);
+
+            assertError(() -> service.addItem(SURVEY_ID, sofa(), MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("Sửa đồ khi không còn bản nháp (vd. đơn vừa bị hủy) → ERR_SURVEY_INVALID_STATUS")
+    void testItems_NoDraft() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(null);
+
+        assertError(() -> service.deleteItem(SURVEY_ID, 6, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        verify(quotationDraftService, never()).deleteItem(any(), any());
+    }
+
+    @Test
+    @DisplayName("Sửa đồ trên lịch của MOVER khác → ERR_SURVEY_FORBIDDEN")
+    void testItems_NotOwner() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID);
+
+        assertError(() -> service.updateItem(SURVEY_ID, 5, sofa(), MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("Dòng không thuộc bản nháp → lỗi ERR_QUOTATION_ITEM_NOT_FOUND từ quotation lan ra")
+    void testItems_ItemNotInDraft() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+        when(quotationDraftService.updateItem(eq(30), eq(999), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND, 999));
+
+        assertError(() -> service.updateItem(SURVEY_ID, 999, sofa(), MOVER_ID), ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND);
     }
 }

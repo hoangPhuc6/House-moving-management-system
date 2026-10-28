@@ -6,10 +6,13 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingItem
 import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
+import com.example.house_moving_service.modules.quotation.dto.request.DraftItemCommand;
 import com.example.house_moving_service.modules.quotation.dto.request.DraftItemSeed;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
 import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyProperties;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
@@ -102,6 +105,54 @@ public class FieldSurveyServiceImpl implements FieldSurveyService {
 
         log.info("Survey id: {} started by mover id: {} at {}", id, userId, now);
         return toFieldResponse(survey, bookingWorkflowService.getSnapshot(bookingId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public QuotationItemDto addItem(Integer id, SurveyItemRequest request, Long userId) {
+        Integer draftId = editableDraftId(id, userId);
+        return quotationDraftService.addItem(draftId, toCommand(request));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public QuotationItemDto updateItem(Integer id, Integer itemId, SurveyItemRequest request, Long userId) {
+        Integer draftId = editableDraftId(id, userId);
+        return quotationDraftService.updateItem(draftId, itemId, toCommand(request));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteItem(Integer id, Integer itemId, Long userId) {
+        Integer draftId = editableDraftId(id, userId);
+        quotationDraftService.deleteItem(draftId, itemId);
+    }
+
+    /**
+     * Bản nháp MOVER được sửa: lịch của mình, đang IN_PROGRESS (khóa lịch để không sửa đúng lúc lịch bị hoàn tất / hủy).
+     * Không còn bản nháp (vd. đơn vừa bị hủy) → ERR_SURVEY_INVALID_STATUS. itemId không thuộc bản nháp thì
+     * QuotationDraftService báo ERR_QUOTATION_ITEM_NOT_FOUND.
+     */
+    private Integer editableDraftId(Integer id, Long userId) {
+        BookingSurvey survey = loadOwnedForUpdate(id, userId);
+        if (survey.getStatus() != SurveyStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        return quotationDraftService.findCurrentDraft(survey.getBooking().getId())
+                .map(QuotationDraftDto::id)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS));
+    }
+
+    private static DraftItemCommand toCommand(SurveyItemRequest request) {
+        return new DraftItemCommand(
+                request.getItemName().trim(),
+                request.getQuantity(),
+                request.getUnit(),
+                request.getEstimatedVolumeM3(),
+                Boolean.TRUE.equals(request.getIsFragile()),
+                Boolean.TRUE.equals(request.getPackingRequired()),
+                Boolean.TRUE.equals(request.getDisassemblyRequired()),
+                request.getNote());
     }
 
     // Chỉ trong ngày khảo sát, sớm nhất earlyStartMinutes phút trước giờ bắt đầu khung; bắt đầu muộn thì không chặn

@@ -1,5 +1,7 @@
 package com.example.house_moving_service.modules.survey.service;
 
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
@@ -26,4 +28,11 @@ public interface FieldSurveyService {
      * trước giờ hẹn. Lịch → IN_PROGRESS + actualStartAt; booking → SURVEYING; mở bản nháp báo giá.
      */
     FieldSurveyResponse start(Integer id, Long userId);
+
+    // Thêm / sửa / xóa đồ đạc trên bản nháp báo giá hiện tại; lịch phải IN_PROGRESS. Không đụng booking_items
+    QuotationItemDto addItem(Integer id, SurveyItemRequest request, Long userId);
+
+    QuotationItemDto updateItem(Integer id, Integer itemId, SurveyItemRequest request, Long userId);
+
+    void deleteItem(Integer id, Integer itemId, Long userId);
 }

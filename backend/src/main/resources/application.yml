@@ -46,6 +46,8 @@ app:
   pricing:
     min-lead-hours: 2
     base-transport-included-km: 10.0
+    # Cự ly đi bộ (m) từ chỗ đậu xe vượt mốc này thì tính phụ phí hẻm sâu
+    deep-alley-meters: 50
     haversine-winding-factor: 1.3
   survey:
     early-start-minutes: 60

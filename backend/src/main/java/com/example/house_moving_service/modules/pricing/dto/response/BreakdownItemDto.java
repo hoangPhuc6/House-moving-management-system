@@ -29,5 +29,8 @@ public class BreakdownItemDto {
     private BigDecimal totalPrice;
 
     private String note;
+
+    // true: phụ phí hệ thống tự cộng (vượt km, thang bộ, hẻm sâu); false: dịch vụ khách chọn
+    private boolean autoApplied;
 }
 

@@ -76,7 +76,8 @@ class PricingServiceTest {
 
         routeDistanceHelper = new RouteDistanceHelper(pricingProperties, mapApiProperties);
         pricingService = new PricingServiceImpl(pricingProperties, routeDistanceHelper,
-                new PricingEngine(new ServiceLookupServiceImpl(serviceRepository), new VoucherServiceImpl(voucherRepository)));
+                new PricingEngine(new ServiceLookupServiceImpl(serviceRepository), new VoucherServiceImpl(voucherRepository),
+                        pricingProperties));
 
         ServiceType typeTransport = ServiceType.builder().id(1).name("Xe tải vận chuyển").isActive(true).feeCategory(FeeCategory.TRANSPORT).build();
         ServiceType typeLabor = ServiceType.builder().id(2).name("Bốc xếp & Khuân vác").isActive(true).feeCategory(FeeCategory.LABOR).build();

@@ -7,6 +7,7 @@ import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.identity.entity.Staff;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.response.CustomerSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.FieldBookingInfo;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -64,6 +65,22 @@ public class SurveyMapper {
                 .timeSlot(toTimeSlotResponse(survey.getTimeSlot()))
                 .staff(toStaffResponse(survey.getSurveyStaff()))
                 .status(survey.getStatus())
+                .createdAt(survey.getCreatedAt())
+                .build();
+    }
+
+    // Chỉ thông tin khách cần biết: không note nội bộ, không tệp đính kèm, không liên hệ riêng của nhân viên
+    public CustomerSurveyResponse toCustomerResponse(BookingSurvey survey) {
+        SurveyTimeSlotResponse slot = toTimeSlotResponse(survey.getTimeSlot());
+        return CustomerSurveyResponse.builder()
+                .id(survey.getId())
+                .surveyMethod(survey.getSurveyMethod())
+                .status(survey.getStatus())
+                .surveyDate(survey.getSurveyDate())
+                .timeSlotLabel(slot != null ? slot.getLabel() : null)
+                .staffName(survey.getSurveyStaff() != null ? survey.getSurveyStaff().getFullName() : null)
+                .actualStartAt(survey.getActualStartAt())
+                .actualEndAt(survey.getActualEndAt())
                 .createdAt(survey.getCreatedAt())
                 .build();
     }

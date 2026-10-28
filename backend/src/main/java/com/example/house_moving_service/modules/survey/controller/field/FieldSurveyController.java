@@ -2,6 +2,8 @@ package com.example.house_moving_service.modules.survey.controller.field;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.CompleteSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
@@ -83,6 +85,34 @@ public class FieldSurveyController {
             @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(ApiResponse.success("Đã bắt đầu khảo sát", fieldSurveyService.start(id, userDetails.getId())));
+    }
+
+    @PatchMapping("/{id}/complete")
+    @Operation(
+            summary = "Hoàn tất khảo sát",
+            description = "Lịch phải đang khảo sát (IN_PROGRESS) và bản nháp có ít nhất 1 món đồ. Ghi thời gian kết thúc thực tế; "
+                    + "body không bắt buộc, resultNote là nhận xét chung được ghi vào ghi chú của lịch. Đơn giữ SURVEYING chờ báo giá."
+    )
+    public ResponseEntity<ApiResponse<FieldSurveyResponse>> completeSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody(required = false) CompleteSurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        FieldSurveyResponse response = fieldSurveyService.complete(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã hoàn tất khảo sát", response));
+    }
+
+    @PatchMapping("/{id}/fail")
+    @Operation(
+            summary = "Báo không khảo sát được",
+            description = "Đã tới nơi / đang khảo sát nhưng không làm được (khách vắng, không vào được nhà...). Lịch phải "
+                    + "CONFIRMED / IN_PROGRESS → cần khảo sát lại; bản nháp hết hiệu lực; đơn về chờ khảo sát để xếp lịch mới."
+    )
+    public ResponseEntity<ApiResponse<FieldSurveyResponse>> failSurvey(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Valid @RequestBody FailSurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        FieldSurveyResponse response = fieldSurveyService.fail(id, request, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận không khảo sát được", response));
     }
 
     @PutMapping("/{id}/route-access")

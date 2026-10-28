@@ -1,6 +1,8 @@
 package com.example.house_moving_service.modules.survey.service;
 
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.request.CompleteSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
@@ -42,4 +44,13 @@ public interface FieldSurveyService {
      * nên giá trị cũ → mới được nối vào note của lịch (tag ROUTE_UPDATE). Không có gì thay đổi thì không ghi gì.
      */
     FieldSurveyResponse updateRouteAccess(Integer id, RouteAccessRequest request, Long userId);
+
+    /**
+     * Hoàn tất lịch IN_PROGRESS của mình: bản nháp phải có ít nhất 1 món đồ. Lịch → COMPLETED + actualEndAt;
+     * resultNote (nếu có) nối vào note tag RESULT. Booking giữ SURVEYING. request null = không có nhận xét.
+     */
+    FieldSurveyResponse complete(Integer id, CompleteSurveyRequest request, Long userId);
+
+    // Báo thất bại lịch của mình: kiểm tra sở hữu rồi dùng lại SurveyManagementService#fail
+    FieldSurveyResponse fail(Integer id, FailSurveyRequest request, Long userId);
 }

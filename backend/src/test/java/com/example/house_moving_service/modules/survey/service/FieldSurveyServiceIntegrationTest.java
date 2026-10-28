@@ -13,6 +13,9 @@ import com.example.house_moving_service.modules.booking.dto.response.BookingItem
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
 import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
+import com.example.house_moving_service.modules.quotation.service.SurveyCompletionChecker;
+import com.example.house_moving_service.modules.survey.dto.request.CompleteSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
@@ -74,6 +77,8 @@ class FieldSurveyServiceIntegrationTest {
     private BookingWorkflowService bookingWorkflowService;
     @Autowired
     private QuotationDraftService quotationDraftService;
+    @Autowired
+    private SurveyCompletionChecker surveyCompletionChecker;
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -159,5 +164,41 @@ class FieldSurveyServiceIntegrationTest {
         assertThat(result.getRoute().getPickupAccess()).isEqualTo(route.getPickupAccess());
         assertThat(result.getNote()).contains("[ROUTE_UPDATE][user#" + moverId + "]")
                 .contains("→ Tầng 7, có thang máy, hẻm 35m (Cổng sau)");
+    }
+
+    @Test
+    @DisplayName("Luồng MOVER đầy đủ: bắt đầu → thêm đồ → điều kiện ra vào → hoàn tất; checker của quotation trả true")
+    void testFullMoverFlow_CompletionCheckerTrue() {
+        fieldSurveyService.start(survey.getId(), moverId);
+        assertThat(surveyCompletionChecker.isLatestSurveyCompleted(booking.getId())).isFalse();
+
+        fieldSurveyService.addItem(survey.getId(), SurveyItemRequest.builder().itemName("Sofa").quantity(1).build(), moverId);
+        fieldSurveyService.updateRouteAccess(survey.getId(), RouteAccessRequest.builder()
+                .pickup(LocationAccessRequest.builder().floorNumber(3).hasElevator(true).walkingDistanceMeters(20).build())
+                .dropoff(LocationAccessRequest.builder().floorNumber(1).hasElevator(false).walkingDistanceMeters(0).build())
+                .build(), moverId);
+        FieldSurveyResponse done = fieldSurveyService.complete(survey.getId(),
+                CompleteSurveyRequest.builder().resultNote("Cầu thang hẹp").build(), moverId);
+
+        assertThat(done.getStatus()).isEqualTo(SurveyStatus.COMPLETED);
+        assertThat(done.getActualEndAt()).isAfterOrEqualTo(done.getActualStartAt());
+        assertThat(done.getNote()).contains("[RESULT][user#" + moverId + "] Cầu thang hẹp");
+        assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.SURVEYING);
+        assertThat(surveyCompletionChecker.isLatestSurveyCompleted(booking.getId())).isTrue();
+    }
+
+    @Test
+    @DisplayName("MOVER báo thất bại → RESURVEY_REQUIRED, booking về PENDING_SURVEY, bản nháp hết hiệu lực, checker false")
+    void testMoverFail() {
+        fieldSurveyService.start(survey.getId(), moverId);
+
+        FieldSurveyResponse failed = fieldSurveyService.fail(survey.getId(),
+                FailSurveyRequest.builder().reason("Khách vắng nhà").build(), moverId);
+
+        assertThat(failed.getStatus()).isEqualTo(SurveyStatus.RESURVEY_REQUIRED);
+        assertThat(failed.getDraftItems()).isNull();
+        assertThat(quotationDraftService.findCurrentDraft(booking.getId())).isEmpty();
+        assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING_SURVEY);
+        assertThat(surveyCompletionChecker.isLatestSurveyCompleted(booking.getId())).isFalse();
     }
 }

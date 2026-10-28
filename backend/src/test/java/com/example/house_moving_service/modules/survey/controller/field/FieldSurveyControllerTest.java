@@ -227,4 +227,56 @@ class FieldSurveyControllerTest {
                 .andExpect(jsonPath("$.errors.dropoff").exists());
         verify(fieldSurveyService, never()).updateRouteAccess(any(), any(), any());
     }
+
+    // ---------- Hoàn tất / thất bại ----------
+
+    @Test
+    @DisplayName("PATCH complete - có body → 200; không gửi body → 200 (service nhận null)")
+    void testComplete() throws Exception {
+        when(fieldSurveyService.complete(eq(40), any(), eq(8L)))
+                .thenReturn(FieldSurveyResponse.builder().id(40).status(SurveyStatus.COMPLETED).build());
+
+        mockMvc.perform(patch(URL + "/40/complete").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"resultNote\":\"Cầu thang hẹp\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã hoàn tất khảo sát"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+        mockMvc.perform(patch(URL + "/40/complete").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isOk());
+        verify(fieldSurveyService).complete(40, null, 8L);
+    }
+
+    @Test
+    @DisplayName("PATCH complete - nhận xét > 2000 ký tự → 400; chưa có đồ → 400 ERR_SURVEY_RESULT_INCOMPLETE")
+    void testComplete_Errors() throws Exception {
+        mockMvc.perform(patch(URL + "/40/complete").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"resultNote\":\"" + "a".repeat(2001) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.resultNote").exists());
+
+        when(fieldSurveyService.complete(eq(41), any(), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_SURVEY_RESULT_INCOMPLETE, "chưa có đồ đạc"));
+        mockMvc.perform(patch(URL + "/41/complete").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_RESULT_INCOMPLETE.getCode()));
+    }
+
+    @Test
+    @DisplayName("PATCH fail - MOVER → 200; thiếu lý do → 400; DISPATCHER → 403")
+    void testFail() throws Exception {
+        when(fieldSurveyService.fail(eq(40), any(), eq(8L)))
+                .thenReturn(FieldSurveyResponse.builder().id(40).status(SurveyStatus.RESURVEY_REQUIRED).build());
+
+        mockMvc.perform(patch(URL + "/40/fail").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Khách vắng nhà\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RESURVEY_REQUIRED"));
+        mockMvc.perform(patch(URL + "/40/fail").with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.reason").exists());
+        mockMvc.perform(patch(URL + "/40/fail").with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
 }

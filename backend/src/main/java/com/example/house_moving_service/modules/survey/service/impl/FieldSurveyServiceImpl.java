@@ -14,6 +14,8 @@ import com.example.house_moving_service.modules.quotation.dto.response.Quotation
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
 import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.config.SurveyProperties;
+import com.example.house_moving_service.modules.survey.dto.request.CompleteSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
@@ -24,6 +26,7 @@ import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
 import com.example.house_moving_service.modules.survey.mapper.SurveyMapper;
 import com.example.house_moving_service.modules.survey.repository.BookingSurveyRepository;
 import com.example.house_moving_service.modules.survey.service.FieldSurveyService;
+import com.example.house_moving_service.modules.survey.service.SurveyManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,6 +53,7 @@ public class FieldSurveyServiceImpl implements FieldSurveyService {
     private final BookingSurveyRepository bookingSurveyRepository;
     private final BookingWorkflowService bookingWorkflowService;
     private final QuotationDraftService quotationDraftService;
+    private final SurveyManagementService surveyManagementService;
     private final SurveyMapper surveyMapper;
     private final SurveyProperties surveyProperties;
     private final Clock clock;
@@ -135,10 +139,7 @@ public class FieldSurveyServiceImpl implements FieldSurveyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FieldSurveyResponse updateRouteAccess(Integer id, RouteAccessRequest request, Long userId) {
-        BookingSurvey survey = loadOwnedForUpdate(id, userId);
-        if (survey.getStatus() != SurveyStatus.IN_PROGRESS) {
-            throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
-        }
+        BookingSurvey survey = loadInProgress(id, userId);
         Integer bookingId = survey.getBooking().getId();
         BookingRouteResponse route = bookingWorkflowService.getRoute(bookingId);
 
@@ -184,16 +185,55 @@ public class FieldSurveyServiceImpl implements FieldSurveyService {
         return access.extraNote() != null ? text + " (" + access.extraNote() + ")" : text;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FieldSurveyResponse complete(Integer id, CompleteSurveyRequest request, Long userId) {
+        BookingSurvey survey = loadInProgress(id, userId);
+        if (quotationDraftService.countItems(currentDraftId(survey)) == 0) {
+            throw new AppException(ErrorCode.ERR_SURVEY_RESULT_INCOMPLETE, "chưa có đồ đạc");
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        survey.setStatus(SurveyStatus.COMPLETED);
+        survey.setActualEndAt(now);
+        String resultNote = request != null ? request.getResultNote() : null;
+        if (resultNote != null && !resultNote.isBlank()) {
+            survey.appendNote("RESULT", userId, resultNote, now);
+        }
+        bookingSurveyRepository.saveAndFlush(survey);
+
+        // Booking giữ SURVEYING; module quotation chuyển QUOTED khi gửi báo giá cho khách
+        log.info("Survey id: {} completed by mover id: {} at {}", id, userId, now);
+        return toFieldResponse(survey, bookingWorkflowService.getSnapshot(survey.getBooking().getId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FieldSurveyResponse fail(Integer id, FailSurveyRequest request, Long userId) {
+        BookingSurvey survey = loadOwnedForUpdate(id, userId);
+        surveyManagementService.fail(id, request, userId);
+        return toFieldResponse(survey, bookingWorkflowService.getSnapshot(survey.getBooking().getId()));
+    }
+
     /**
      * Bản nháp MOVER được sửa: lịch của mình, đang IN_PROGRESS (khóa lịch để không sửa đúng lúc lịch bị hoàn tất / hủy).
-     * Không còn bản nháp (vd. đơn vừa bị hủy) → ERR_SURVEY_INVALID_STATUS. itemId không thuộc bản nháp thì
-     * QuotationDraftService báo ERR_QUOTATION_ITEM_NOT_FOUND.
+     * itemId không thuộc bản nháp thì QuotationDraftService báo ERR_QUOTATION_ITEM_NOT_FOUND.
      */
     private Integer editableDraftId(Integer id, Long userId) {
+        return currentDraftId(loadInProgress(id, userId));
+    }
+
+    // Lịch của mình, đã khóa, đang IN_PROGRESS: điều kiện chung của mọi thao tác ghi kết quả khảo sát
+    private BookingSurvey loadInProgress(Integer id, Long userId) {
         BookingSurvey survey = loadOwnedForUpdate(id, userId);
         if (survey.getStatus() != SurveyStatus.IN_PROGRESS) {
             throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
         }
+        return survey;
+    }
+
+    // Không còn bản nháp (vd. đơn vừa bị hủy) → ERR_SURVEY_INVALID_STATUS
+    private Integer currentDraftId(BookingSurvey survey) {
         return quotationDraftService.findCurrentDraft(survey.getBooking().getId())
                 .map(QuotationDraftDto::id)
                 .orElseThrow(() -> new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS));

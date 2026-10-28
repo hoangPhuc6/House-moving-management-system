@@ -1,5 +1,6 @@
 package com.example.house_moving_service.modules.catalog.dto.request;
 
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -23,5 +24,8 @@ public class CreateServiceTypeRequest {
 
     @Builder.Default
     private Boolean isActive = true;
+
+    // Không bắt buộc: để trống thì dùng TRANSPORT
+    private FeeCategory feeCategory;
 }
 

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 // Bean riêng, tách khỏi ServiceCatalogServiceImpl. Không gắn @Transactional để tham gia transaction của module gọi
 @org.springframework.stereotype.Service
@@ -23,5 +24,10 @@ public class ServiceLookupServiceImpl implements ServiceLookupService {
     @Override
     public Service getReference(Integer id) {
         return serviceRepository.getReferenceById(id);
+    }
+
+    @Override
+    public Optional<Service> findByCode(String code) {
+        return serviceRepository.findByCode(code);
     }
 }

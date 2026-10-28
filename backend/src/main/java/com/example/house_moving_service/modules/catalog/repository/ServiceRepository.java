@@ -42,4 +42,11 @@ public interface ServiceRepository extends JpaRepository<Service, Integer> {
     boolean existsByNameAndServiceTypeId(String name, Integer serviceTypeId);
 
     boolean existsByNameAndServiceTypeIdAndIdNot(String name, Integer serviceTypeId, Integer id);
+
+    // Dịch vụ hệ thống tự cộng theo mã cố định (cột code)
+    @EntityGraph(attributePaths = {"serviceType"})
+    Optional<Service> findByCode(String code);
+
+    // Loại dịch vụ có chứa dịch vụ hệ thống không (chặn tắt / đổi nhóm phí loại đó)
+    boolean existsByServiceTypeIdAndCodeIsNotNull(Integer serviceTypeId);
 }

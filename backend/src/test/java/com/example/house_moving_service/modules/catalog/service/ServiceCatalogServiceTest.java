@@ -6,7 +6,10 @@ import com.example.house_moving_service.modules.catalog.dto.request.UpdateServic
 import com.example.house_moving_service.modules.catalog.dto.response.ServiceResponse;
 import com.example.house_moving_service.modules.catalog.entity.Service;
 import com.example.house_moving_service.modules.catalog.entity.ServiceType;
+import com.example.house_moving_service.modules.catalog.dto.request.UpdateServiceRequest;
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import com.example.house_moving_service.modules.catalog.enums.ServiceStatus;
+import com.example.house_moving_service.modules.catalog.enums.SystemServiceCode;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
 import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
@@ -169,5 +172,103 @@ class ServiceCatalogServiceTest {
         assertEquals(ErrorCode.ERR_SERVICE_NOT_FOUND, ex.getErrorCode());
         assertEquals("Không tìm thấy dịch vụ với ID: 999", ex.getMessage());
     }
-}
 
+    private Service systemService(ServiceType type) {
+        return Service.builder()
+                .id(20)
+                .serviceType(type)
+                .name("Phụ phí khuân vác thang bộ (mỗi lầu)")
+                .basePrice(new BigDecimal("50000.00"))
+                .status(ServiceStatus.ACTIVE)
+                .code(SystemServiceCode.SURCHARGE_STAIRS)
+                .build();
+    }
+
+    private ServiceType terrainType() {
+        return ServiceType.builder().id(5).name("Địa hình").isActive(true).feeCategory(FeeCategory.TERRAIN).build();
+    }
+
+    @Test
+    @DisplayName("updateStatus: Ngừng kích hoạt dịch vụ hệ thống thì ném ERR_SERVICE_SYSTEM_PROTECTED")
+    void testUpdateStatus_systemServiceProtected() {
+        Service service = systemService(terrainType());
+        when(serviceRepository.findById(20)).thenReturn(Optional.of(service));
+
+        UpdateServiceStatusRequest req = UpdateServiceStatusRequest.builder().status("INACTIVE").build();
+
+        AppException ex = assertThrows(AppException.class, () -> serviceCatalogService.updateStatus(20, req));
+        assertEquals(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, ex.getErrorCode());
+        assertEquals(ServiceStatus.ACTIVE, service.getStatus());
+        verify(serviceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("softDelete: Xóa dịch vụ hệ thống thì ném ERR_SERVICE_SYSTEM_PROTECTED")
+    void testSoftDelete_systemServiceProtected() {
+        Service service = systemService(terrainType());
+        when(serviceRepository.findById(20)).thenReturn(Optional.of(service));
+
+        AppException ex = assertThrows(AppException.class, () -> serviceCatalogService.softDelete(20));
+        assertEquals(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, ex.getErrorCode());
+        assertEquals(ServiceStatus.ACTIVE, service.getStatus());
+        verify(serviceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("update: Sửa giá dịch vụ hệ thống thì cho phép, mã vẫn giữ nguyên")
+    void testUpdate_systemServicePriceChange_allowed() {
+        Service service = systemService(terrainType());
+        when(serviceRepository.findById(20)).thenReturn(Optional.of(service));
+        when(serviceRepository.existsByNameAndServiceTypeIdAndIdNot(service.getName(), 5, 20)).thenReturn(false);
+        when(serviceRepository.save(any(Service.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateServiceRequest req = UpdateServiceRequest.builder()
+                .serviceTypeId(5)
+                .name(service.getName())
+                .basePrice(new BigDecimal("60000.00"))
+                .build();
+
+        ServiceResponse res = serviceCatalogService.update(20, req);
+        assertEquals(new BigDecimal("60000.00"), res.getBasePrice());
+        assertEquals(SystemServiceCode.SURCHARGE_STAIRS, res.getCode());
+    }
+
+    @Test
+    @DisplayName("update: Chuyển dịch vụ hệ thống sang loại khác nhóm phí thì ném ERR_SERVICE_SYSTEM_PROTECTED")
+    void testUpdate_systemServiceChangeTypeOtherCategory_throws() {
+        Service service = systemService(terrainType());
+        ServiceType laborType = ServiceType.builder().id(2).name("Nhân công").isActive(true).feeCategory(FeeCategory.LABOR).build();
+        when(serviceRepository.findById(20)).thenReturn(Optional.of(service));
+        when(serviceTypeRepository.findById(2)).thenReturn(Optional.of(laborType));
+
+        UpdateServiceRequest req = UpdateServiceRequest.builder()
+                .serviceTypeId(2)
+                .name(service.getName())
+                .basePrice(new BigDecimal("50000.00"))
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> serviceCatalogService.update(20, req));
+        assertEquals(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, ex.getErrorCode());
+        assertEquals(5, service.getServiceType().getId());
+    }
+
+    @Test
+    @DisplayName("update: Chuyển dịch vụ hệ thống sang loại cùng nhóm phí thì cho phép")
+    void testUpdate_systemServiceChangeTypeSameCategory_allowed() {
+        Service service = systemService(terrainType());
+        ServiceType otherTerrain = ServiceType.builder().id(9).name("Địa hình 2").isActive(true).feeCategory(FeeCategory.TERRAIN).build();
+        when(serviceRepository.findById(20)).thenReturn(Optional.of(service));
+        when(serviceTypeRepository.findById(9)).thenReturn(Optional.of(otherTerrain));
+        when(serviceRepository.existsByNameAndServiceTypeIdAndIdNot(service.getName(), 9, 20)).thenReturn(false);
+        when(serviceRepository.save(any(Service.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateServiceRequest req = UpdateServiceRequest.builder()
+                .serviceTypeId(9)
+                .name(service.getName())
+                .basePrice(new BigDecimal("50000.00"))
+                .build();
+
+        ServiceResponse res = serviceCatalogService.update(20, req);
+        assertEquals(9, res.getServiceTypeId());
+    }
+}

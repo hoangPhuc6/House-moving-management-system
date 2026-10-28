@@ -15,6 +15,7 @@ public enum ErrorCode {
     ERR_SERVICE_TYPE_INACTIVE(2003, HttpStatus.BAD_REQUEST, "Không thể tạo hoặc kích hoạt dịch vụ thuộc nhóm loại dịch vụ đang bị vô hiệu hóa"),
     ERR_SERVICE_INACTIVE(2004, HttpStatus.BAD_REQUEST, "Dịch vụ đã ngừng hoạt động: %s"),
     ERR_DUPLICATE_NAME(2005, HttpStatus.CONFLICT, "Tên đã tồn tại trên hệ thống: %s"),
+    ERR_SERVICE_SYSTEM_PROTECTED(2006, HttpStatus.CONFLICT, "Dịch vụ hệ thống dùng để tự tính phụ phí, không thể %s"),
     ERR_PRICE_INVALID_INPUT(3001, HttpStatus.BAD_REQUEST, "Dữ liệu tính giá không hợp lệ: %s"),
     ERR_INVALID_SCHEDULE(3002, HttpStatus.BAD_REQUEST, "Thời gian bắt đầu vận chuyển phải cách hiện tại tối thiểu %d giờ"),
     ERR_VOUCHER_NOT_FOUND(3003, HttpStatus.NOT_FOUND, "Mã voucher '%s' không tồn tại trên hệ thống"),

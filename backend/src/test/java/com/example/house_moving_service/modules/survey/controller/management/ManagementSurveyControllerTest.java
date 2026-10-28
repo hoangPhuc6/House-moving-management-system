@@ -15,9 +15,11 @@ import com.example.house_moving_service.modules.survey.dto.request.RescheduleSur
 import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
+import com.example.house_moving_service.modules.survey.dto.response.SurveyAttachmentResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
+import com.example.house_moving_service.modules.survey.service.SurveyAttachmentService;
 import com.example.house_moving_service.modules.survey.service.SurveyManagementService;
 import com.example.house_moving_service.modules.survey.service.SurveyQueryService;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;
@@ -29,6 +31,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,13 +42,16 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -64,6 +70,8 @@ class ManagementSurveyControllerTest {
     private SurveyQueryService surveyQueryService;
     @MockitoBean
     private SurveyManagementService surveyManagementService;
+    @MockitoBean
+    private SurveyAttachmentService surveyAttachmentService;
 
     // @AuthenticationPrincipal cần đúng kiểu CustomUserDetails (giống ManagementBookingControllerTest)
     private static CustomUserDetails principal(long id, RoleCode roleCode) {
@@ -461,5 +469,37 @@ class ManagementSurveyControllerTest {
                         .content("{\"reason\":\"x\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED.getCode()));
+    }
+
+    // ---------- Tệp đính kèm ----------
+
+    @Test
+    @DisplayName("POST attachments - DISPATCHER → 201, gọi service với isManagement = true; MOVER gọi vùng MANAGEMENT → 403")
+    void testUploadAttachment() throws Exception {
+        MockMultipartFile pdf = new MockMultipartFile("file", "ban_ve.pdf", "application/pdf", "%PDF-1.7".getBytes());
+        when(surveyAttachmentService.upload(eq(40), any(), eq(3L), eq(true)))
+                .thenReturn(SurveyAttachmentResponse.builder().id(101).build());
+
+        mockMvc.perform(multipart(SURVEYS_URL + "/40/attachments").file(pdf).with(user(principal(3L, RoleCode.DISPATCHER))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value(101));
+        mockMvc.perform(multipart(SURVEYS_URL + "/40/attachments").file(pdf).with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET / DELETE attachments - ADMIN → 200; lịch đã hoàn tất → 400 ERR_SURVEY_INVALID_STATUS")
+    void testListAndDeleteAttachment() throws Exception {
+        when(surveyAttachmentService.list(40, 1L, true)).thenReturn(List.of());
+        doThrow(new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS))
+                .when(surveyAttachmentService).delete(41, 100, 1L, true);
+
+        mockMvc.perform(get(SURVEYS_URL + "/40/attachments").with(user(principal(1L, RoleCode.ADMIN))))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete(SURVEYS_URL + "/40/attachments/100").with(user(principal(1L, RoleCode.ADMIN))))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete(SURVEYS_URL + "/41/attachments/100").with(user(principal(1L, RoleCode.ADMIN))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_STATUS.getCode()));
     }
 }

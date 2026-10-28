@@ -8,9 +8,12 @@ import com.example.house_moving_service.modules.survey.dto.request.SurveyItemReq
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.enums.RoleCode;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
+import com.example.house_moving_service.modules.survey.dto.response.SurveyAttachmentResponse;
+import com.example.house_moving_service.modules.survey.enums.AttachmentType;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
 import com.example.house_moving_service.modules.survey.service.FieldSurveyService;
+import com.example.house_moving_service.modules.survey.service.SurveyAttachmentService;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +21,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -26,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -34,6 +40,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -51,6 +58,8 @@ class FieldSurveyControllerTest {
 
     @MockitoBean
     private FieldSurveyService fieldSurveyService;
+    @MockitoBean
+    private SurveyAttachmentService surveyAttachmentService;
 
     // @AuthenticationPrincipal cần đúng kiểu CustomUserDetails (giống ManagementBookingControllerTest)
     private static CustomUserDetails principal(long id, RoleCode roleCode) {
@@ -277,6 +286,61 @@ class FieldSurveyControllerTest {
                 .andExpect(jsonPath("$.errors.reason").exists());
         mockMvc.perform(patch(URL + "/40/fail").with(user(principal(3L, RoleCode.DISPATCHER)))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ---------- Tệp đính kèm ----------
+
+    private static final MockMultipartFile PHOTO =
+            new MockMultipartFile("file", "phong_khach.jpg", "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0});
+
+    @Test
+    @DisplayName("POST attachments - MOVER → 201; gọi service với isManagement = false")
+    void testUploadAttachment() throws Exception {
+        when(surveyAttachmentService.upload(eq(40), any(), eq(8L), eq(false)))
+                .thenReturn(SurveyAttachmentResponse.builder().id(100).fileType(AttachmentType.IMAGE).accessUrl("http://minio/x").build());
+
+        mockMvc.perform(multipart(URL + "/40/attachments").file(PHOTO).with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("Đã tải lên tệp đính kèm"))
+                .andExpect(jsonPath("$.data.fileType").value("IMAGE"));
+    }
+
+    @Test
+    @DisplayName("POST attachments - thiếu part 'file' → 400 ERR_INVALID_INPUT")
+    void testUploadAttachment_MissingFile() throws Exception {
+        mockMvc.perform(multipart(URL + "/40/attachments").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_INVALID_INPUT.getCode()));
+        verify(surveyAttachmentService, never()).upload(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("POST attachments - vượt giới hạn upload của Spring → 413 ERR_FILE_TOO_LARGE")
+    void testUploadAttachment_TooLarge() throws Exception {
+        when(surveyAttachmentService.upload(any(), any(), any(), anyBoolean()))
+                .thenThrow(new MaxUploadSizeExceededException(50L * 1024 * 1024));
+
+        mockMvc.perform(multipart(URL + "/40/attachments").file(PHOTO).with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FILE_TOO_LARGE.getCode()));
+    }
+
+    @Test
+    @DisplayName("GET / DELETE attachments - MOVER → 200; DISPATCHER gọi vùng FIELD → 403")
+    void testListAndDeleteAttachment() throws Exception {
+        when(surveyAttachmentService.list(40, 8L, false))
+                .thenReturn(List.of(SurveyAttachmentResponse.builder().id(100).build()));
+
+        mockMvc.perform(get(URL + "/40/attachments").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(100));
+        mockMvc.perform(delete(URL + "/40/attachments/100").with(user(principal(8L, RoleCode.MOVER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã xóa tệp đính kèm"));
+        verify(surveyAttachmentService).delete(40, 100, 8L, false);
+
+        mockMvc.perform(get(URL + "/40/attachments").with(user(principal(3L, RoleCode.DISPATCHER))))
                 .andExpect(status().isForbidden());
     }
 }

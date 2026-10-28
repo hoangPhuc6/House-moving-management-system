@@ -16,4 +16,13 @@ public class SurveyProperties {
      * 0 = chỉ được bắt đầu từ đúng giờ. Không giới hạn bắt đầu muộn (chỉ cần đúng ngày khảo sát).
      */
     private int earlyStartMinutes = 60;
+
+    /**
+     * Số tệp đính kèm tối đa của một lần khảo sát (MOVER và quản lý dùng chung hạn mức). Nhà phố nhiều tầng cần khoảng
+     * 30–50 ảnh; giới hạn chỉ để chặn dùng sai (bấm nhầm chọn cả thư viện ảnh).
+     */
+    private int maxAttachments = 50;
+
+    /** Trong số đó, tối đa bao nhiêu video (mỗi video tới 50 MB, gấp nhiều lần ảnh). Ảnh và PDF không giới hạn riêng. */
+    private int maxVideoAttachments = 5;
 }

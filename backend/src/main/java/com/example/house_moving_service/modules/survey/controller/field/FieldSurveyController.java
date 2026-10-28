@@ -7,9 +7,11 @@ import com.example.house_moving_service.modules.survey.dto.request.FailSurveyReq
 import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
 import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
+import com.example.house_moving_service.modules.survey.dto.response.SurveyAttachmentResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
 import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
 import com.example.house_moving_service.modules.survey.service.FieldSurveyService;
+import com.example.house_moving_service.modules.survey.service.SurveyAttachmentService;
 import com.example.house_moving_service.security.access.MoverOnly;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +22,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -45,6 +49,7 @@ import java.util.List;
 public class FieldSurveyController {
 
     private final FieldSurveyService fieldSurveyService;
+    private final SurveyAttachmentService surveyAttachmentService;
 
     @GetMapping
     @Operation(
@@ -113,6 +118,38 @@ public class FieldSurveyController {
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         FieldSurveyResponse response = fieldSurveyService.fail(id, request, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận không khảo sát được", response));
+    }
+
+    @PostMapping(value = "/{id}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Tải lên tệp đính kèm",
+            description = "Lịch phải đang khảo sát (IN_PROGRESS). Ảnh jpg/png/webp/heic ≤ 10MB, video mp4/mov ≤ 50MB, PDF ≤ 10MB; "
+                    + "tối đa 50 tệp mỗi lịch, trong đó tối đa 5 video. Field multipart: file."
+    )
+    public ResponseEntity<ApiResponse<SurveyAttachmentResponse>> uploadAttachment(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        SurveyAttachmentResponse response = surveyAttachmentService.upload(id, file, userDetails.getId(), false);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Đã tải lên tệp đính kèm", response));
+    }
+
+    @GetMapping("/{id}/attachments")
+    @Operation(summary = "Danh sách tệp đính kèm", description = "accessUrl có hạn 15 phút, gọi lại để lấy URL mới.")
+    public ResponseEntity<ApiResponse<List<SurveyAttachmentResponse>>> listAttachments(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(surveyAttachmentService.list(id, userDetails.getId(), false)));
+    }
+
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    @Operation(summary = "Xóa tệp đính kèm", description = "Chỉ tệp do mình tải lên, khi lịch chưa hoàn tất.")
+    public ResponseEntity<ApiResponse<Void>> deleteAttachment(
+            @Parameter(description = "ID lịch khảo sát", required = true) @PathVariable Integer id,
+            @Parameter(description = "ID tệp đính kèm", required = true) @PathVariable Integer attachmentId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        surveyAttachmentService.delete(id, attachmentId, userDetails.getId(), false);
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa tệp đính kèm"));
     }
 
     @PutMapping("/{id}/route-access")

@@ -9,6 +9,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -110,6 +112,24 @@ public class GlobalExceptionHandler {
             }
         }
         return handleGeneralException(ex, request);
+    }
+
+    // File vượt spring.servlet.multipart.max-file-size: bị chặn trước khi vào controller
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        ErrorCode errorCode = ErrorCode.ERR_FILE_TOO_LARGE;
+        ApiResponse<Void> body = ApiResponse.error(errorCode.getCode(), errorCode.formatMessage(), request.getRequestURI());
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(body);
+    }
+
+    // Request multipart thiếu part bắt buộc (vd. không có field "file")
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException ex, HttpServletRequest request) {
+        ApiResponse<Void> body = ApiResponse.error(
+                ErrorCode.ERR_INVALID_INPUT.getCode(),
+                ErrorCode.ERR_INVALID_INPUT.formatMessage("thiếu phần '" + ex.getRequestPartName() + "' trong request"),
+                request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(Exception.class)

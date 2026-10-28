@@ -21,6 +21,11 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    multipart:
+      # Giới hạn chung theo file lớn nhất (video 50MB); giới hạn riêng từng loại do SurveyAttachmentPolicy kiểm tra
+      max-file-size: 50MB
+      max-request-size: 55MB
   jackson:
     time-zone: Asia/Ho_Chi_Minh
     date-format: yyyy-MM-dd HH:mm:ss
@@ -41,6 +46,17 @@ app:
     haversine-winding-factor: 1.3
   survey:
     early-start-minutes: 60
+    max-attachments: 50
+    max-video-attachments: 5
+  storage:
+    # Để trống = chưa cấu hình lưu trữ: app vẫn chạy, API upload báo ERR_FILE_STORAGE. Dùng MinIO: STORAGE_PROVIDER=MINIO
+    provider: ${STORAGE_PROVIDER:}
+    url-ttl-minutes: 15
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+      bucket: ${MINIO_BUCKET:house-moving}
   map:
     enabled: true
     provider: GOONG

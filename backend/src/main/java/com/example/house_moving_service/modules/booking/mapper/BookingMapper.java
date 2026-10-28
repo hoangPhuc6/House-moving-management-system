@@ -174,6 +174,7 @@ public class BookingMapper {
                 .quantity(quantity)
                 .totalPrice(totalPrice)
                 .note(bs.getNote())
+                .autoApplied(bs.getService() != null && bs.getService().getCode() != null)
                 .build();
     }
 

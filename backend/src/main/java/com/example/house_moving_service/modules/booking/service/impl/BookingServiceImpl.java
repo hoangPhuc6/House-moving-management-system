@@ -109,7 +109,7 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        // 3. Gọi PricingService để tính giá chính thức
+        // 3. Gọi PricingService để tính giá tham khảo (báo giá chính thức lập sau khảo sát, ở module Quotation)
         PricingCalculationRequest pricingRequest = PricingCalculationRequest.builder()
                 .schedule(request.getSchedule())
                 .route(request.getRoute())
@@ -185,7 +185,9 @@ public class BookingServiceImpl implements BookingService {
             savedItems = bookingItemRepository.saveAll(itemsToSave);
         }
 
-        // 7. Lưu bảng 4: booking_services (SNAPSHOT giá tại thời điểm chốt đơn)
+        // 7. Lưu bảng 4: booking_services (SNAPSHOT giá tại thời điểm chốt đơn).
+        // Lưu mọi dòng breakdown, kể cả phụ phí tự động (vượt km, thang bộ, hẻm sâu) kèm note giải thích,
+        // để tổng các dòng khớp total_amount trước giảm giá
         List<com.example.house_moving_service.modules.booking.entity.BookingService> bookingServicesToSave = new ArrayList<>();
         if (pricingResponse.getBreakdownItems() != null) {
             for (BreakdownItemDto breakdown : pricingResponse.getBreakdownItems()) {

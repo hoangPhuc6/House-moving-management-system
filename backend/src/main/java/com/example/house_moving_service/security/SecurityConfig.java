@@ -63,6 +63,7 @@ public class SecurityConfig {
                         .requestMatchers(AccessZones.DOCS).permitAll()
                         .requestMatchers(AccessZones.ADMIN).hasRole(RoleCode.ADMIN.name())
                         .requestMatchers(AccessZones.MANAGEMENT).hasAnyRole(RoleCode.ADMIN.name(), RoleCode.DISPATCHER.name())
+                        .requestMatchers(AccessZones.FIELD).hasRole(RoleCode.MOVER.name())
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,10 +1,14 @@
 package com.example.house_moving_service.modules.survey.mapper;
 
+import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
 import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
+import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.identity.entity.Staff;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
 import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.survey.dto.response.FieldBookingInfo;
+import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyStaffResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveySummaryResponse;
@@ -61,6 +65,34 @@ public class SurveyMapper {
                 .staff(toStaffResponse(survey.getSurveyStaff()))
                 .status(survey.getStatus())
                 .createdAt(survey.getCreatedAt())
+                .build();
+    }
+
+    public FieldSurveyResponse toFieldResponse(BookingSurvey survey,
+                                               BookingSnapshot booking,
+                                               BookingRouteResponse route,
+                                               List<BookingItemSnapshot> declaredItems,
+                                               List<QuotationItemDto> draftItems) {
+        return FieldSurveyResponse.builder()
+                .id(survey.getId())
+                .status(survey.getStatus())
+                .surveyMethod(survey.getSurveyMethod())
+                .surveyDate(survey.getSurveyDate())
+                .timeSlot(toTimeSlotResponse(survey.getTimeSlot()))
+                .actualStartAt(survey.getActualStartAt())
+                .actualEndAt(survey.getActualEndAt())
+                .note(survey.getNote())
+                .booking(FieldBookingInfo.builder()
+                        .bookingId(booking.id())
+                        .bookingCode(booking.bookingCode())
+                        .contactName(booking.contactName())
+                        .contactPhone(booking.contactPhone())
+                        .desiredStartAt(booking.desiredStartAt())
+                        .note(booking.note())
+                        .build())
+                .route(route)
+                .declaredItems(declaredItems)
+                .draftItems(draftItems)
                 .build();
     }
 

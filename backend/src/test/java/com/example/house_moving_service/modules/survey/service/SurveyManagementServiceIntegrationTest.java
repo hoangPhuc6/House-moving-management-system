@@ -10,12 +10,14 @@ import com.example.house_moving_service.modules.booking.repository.BookingReposi
 import com.example.house_moving_service.modules.booking.repository.BookingStatusHistoryRepository;
 import com.example.house_moving_service.modules.booking.service.BookingManagementService;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
+import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
 import com.example.house_moving_service.modules.survey.dto.request.AssignSurveyStaffRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
 import com.example.house_moving_service.modules.survey.enums.SurveyMethod;
@@ -58,6 +60,10 @@ class SurveyManagementServiceIntegrationTest {
     private BookingManagementService bookingManagementService;
     @Autowired
     private BookingStatusHistoryRepository bookingStatusHistoryRepository;
+    @Autowired
+    private QuotationDraftService quotationDraftService;
+    @Autowired
+    private SurveyQueryService surveyQueryService;
 
     private Booking booking1;
     private Booking booking2;
@@ -229,5 +235,50 @@ class SurveyManagementServiceIntegrationTest {
 
         SurveyDetailResponse other = surveyManagementService.create(request(booking2), actorId);
         assertThat(other.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+    }
+
+    // ---------- 4.6.6: khảo sát lại ----------
+
+    @Test
+    @DisplayName("Khảo sát lại: lịch cũ RESURVEY_REQUIRED, bản nháp EXPIRED, booking PENDING_SURVEY có lịch sử, lịch mới mới nhất trước")
+    void testResurvey_FullFlow() {
+        SurveyDetailResponse first = surveyManagementService.create(request(booking1), actorId);
+        // Giả lập MOVER đã khảo sát xong (task 4.7): mở bản nháp, lịch COMPLETED, booking SURVEYING
+        quotationDraftService.openDraftForSurvey(booking1.getId(), first.getId(), moverId, List.of());
+        BookingSurvey done = bookingSurveyRepository.findById(first.getId()).orElseThrow();
+        done.setStatus(SurveyStatus.COMPLETED);
+        bookingSurveyRepository.saveAndFlush(done);
+        booking1.setStatus(BookingStatus.SURVEYING);
+        bookingRepository.saveAndFlush(booking1);
+        int historyBefore = bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(booking1.getId()).size();
+
+        SurveyDetailResponse next = surveyManagementService.resurvey(first.getId(), ResurveyRequest.builder()
+                .reason("Khách mua thêm sofa").surveyDate(DAY.plusDays(1)).timeSlotId(slot.getId()).staffId(moverId)
+                .build(), actorId);
+
+        assertThat(next.getId()).isNotEqualTo(first.getId());
+        assertThat(next.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+        assertThat(next.getNote()).contains("[RESURVEY]").contains("Khảo sát lại từ lịch #" + first.getId());
+        assertThat(next.getCurrentDraft()).isNull();
+        assertThat(next.getPreviousSurveys()).extracting(s -> s.getId()).containsExactly(first.getId());
+
+        assertThat(bookingSurveyRepository.findById(first.getId()).orElseThrow().getStatus())
+                .isEqualTo(SurveyStatus.RESURVEY_REQUIRED);
+        assertThat(quotationDraftService.findCurrentDraft(booking1.getId())).isEmpty();
+        assertThat(bookingRepository.findById(booking1.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING_SURVEY);
+        assertThat(bookingStatusHistoryRepository.findAllByBookingIdOrderByChangedAtAsc(booking1.getId()))
+                .hasSize(historyBefore + 1);
+        assertThat(surveyQueryService.getByBooking(booking1.getId())).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("Khảo sát lại từ lịch chưa hoàn tất → ERR_SURVEY_INVALID_STATUS")
+    void testResurvey_NotCompleted() {
+        SurveyDetailResponse created = surveyManagementService.create(request(booking1), actorId);
+
+        assertThatThrownBy(() -> surveyManagementService.resurvey(created.getId(),
+                ResurveyRequest.builder().reason("x").build(), actorId))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_SURVEY_INVALID_STATUS);
     }
 }

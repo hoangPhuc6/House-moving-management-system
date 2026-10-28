@@ -12,6 +12,7 @@ import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyR
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -418,5 +419,47 @@ class ManagementSurveyControllerTest {
                         .content("{\"reason\":\"Khách vắng nhà\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_SURVEY_INVALID_STATUS.getCode()));
+    }
+
+    // ---------- Khảo sát lại ----------
+
+    @Test
+    @DisplayName("POST resurvey - DISPATCHER → 201 trả lịch mới; thiếu lý do → 400; MOVER → 403")
+    void testResurvey() throws Exception {
+        when(surveyManagementService.resurvey(eq(40), any(ResurveyRequest.class), eq(3L)))
+                .thenReturn(SurveyDetailResponse.builder().id(41).status(SurveyStatus.PENDING).build());
+
+        mockMvc.perform(post(SURVEYS_URL + "/40/resurvey")
+                        .with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Khách mua thêm sofa\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("Tạo lịch khảo sát lại thành công"))
+                .andExpect(jsonPath("$.data.id").value(41));
+        mockMvc.perform(post(SURVEYS_URL + "/40/resurvey")
+                        .with(user(principal(3L, RoleCode.DISPATCHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.reason").exists());
+        mockMvc.perform(post(SURVEYS_URL + "/40/resurvey")
+                        .with(user(principal(8L, RoleCode.MOVER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("POST resurvey - khách đã chấp nhận báo giá → 409 ERR_QUOTATION_ALREADY_ACCEPTED")
+    void testResurvey_AcceptedQuotation() throws Exception {
+        when(surveyManagementService.resurvey(eq(40), any(ResurveyRequest.class), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED));
+
+        mockMvc.perform(post(SURVEYS_URL + "/40/resurvey")
+                        .with(user(principal(1L, RoleCode.ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"x\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED.getCode()));
     }
 }

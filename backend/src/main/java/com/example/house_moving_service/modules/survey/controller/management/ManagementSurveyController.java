@@ -8,6 +8,7 @@ import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyR
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.SurveyFilterRequest;
 import com.example.house_moving_service.modules.survey.dto.response.StaffAvailabilityResponse;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
@@ -127,6 +128,23 @@ public class ManagementSurveyController {
         log.info("Management request to mark survey id: {} as failed by user id: {}", id, userDetails.getId());
         SurveyDetailResponse response = surveyManagementService.fail(id, request, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận khảo sát thất bại", response));
+    }
+
+    @PostMapping("/surveys/{id}/resurvey")
+    @Operation(
+            summary = "Khảo sát lại (sau khi đã khảo sát xong)",
+            description = "Lịch phải COMPLETED và là lần khảo sát mới nhất; đơn ở SURVEYING / QUOTED và khách chưa chấp nhận báo giá. "
+                    + "Lịch cũ → RESURVEY_REQUIRED, báo giá đang mở hết hiệu lực, đơn về PENDING_SURVEY, tạo lịch khảo sát mới "
+                    + "(có thể truyền luôn ngày / khung giờ / nhân viên). Trả về lịch MỚI."
+    )
+    public ResponseEntity<ApiResponse<SurveyDetailResponse>> resurvey(
+            @Parameter(description = "ID lịch khảo sát đã hoàn tất", required = true) @PathVariable Integer id,
+            @Valid @RequestBody ResurveyRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        log.info("Management request to resurvey from survey id: {} by user id: {}", id, userDetails.getId());
+        SurveyDetailResponse response = surveyManagementService.resurvey(id, request, userDetails.getId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Tạo lịch khảo sát lại thành công", response));
     }
 
     @GetMapping("/surveys/movers")

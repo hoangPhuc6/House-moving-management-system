@@ -5,6 +5,7 @@ import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyR
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 
 /**
@@ -43,4 +44,11 @@ public interface SurveyManagementService {
      * luồng MOVER (task 4.7) tự kiểm tra quyền sở hữu trước khi gọi.
      */
     SurveyDetailResponse fail(Integer id, FailSurveyRequest request, Long actorId);
+
+    /**
+     * Khảo sát lại từ lịch COMPLETED mới nhất của booking (booking SURVEYING / QUOTED, chưa có báo giá ACCEPTED).
+     * Lịch cũ → RESURVEY_REQUIRED, báo giá DRAFT / SENT → EXPIRED, booking → PENDING_SURVEY, tạo lịch mới
+     * (có thể kèm ngày / khung giờ / nhân viên). Trả về chi tiết lịch MỚI. Lỗi ở bất kỳ bước nào thì hoàn tác cả.
+     */
+    SurveyDetailResponse resurvey(Integer id, ResurveyRequest request, Long actorId);
 }

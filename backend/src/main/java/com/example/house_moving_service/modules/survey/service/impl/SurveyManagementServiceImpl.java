@@ -12,6 +12,7 @@ import com.example.house_moving_service.modules.survey.dto.request.CancelSurveyR
 import com.example.house_moving_service.modules.survey.dto.request.CreateSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.request.RescheduleSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.ResurveyRequest;
 import com.example.house_moving_service.modules.survey.dto.response.SurveyDetailResponse;
 import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
 import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
@@ -37,6 +38,9 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
 
     private static final Set<BookingStatus> BOOKING_STATUSES_FOR_CREATE =
             EnumSet.of(BookingStatus.PENDING, BookingStatus.PENDING_SURVEY);
+    // Đã khảo sát (chờ / đã gửi báo giá); khách chưa chấp nhận báo giá thì còn khảo sát lại được
+    private static final Set<BookingStatus> BOOKING_STATUSES_FOR_RESURVEY =
+            EnumSet.of(BookingStatus.SURVEYING, BookingStatus.QUOTED);
     private static final Set<BookingStatus> CLOSED_BOOKING_STATUSES =
             EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED);
     // Chưa bắt đầu khảo sát: còn phân công / dời lịch / hủy được
@@ -60,30 +64,55 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
         if (!BOOKING_STATUSES_FOR_CREATE.contains(booking.status())) {
             throw new AppException(ErrorCode.ERR_SURVEY_BOOKING_INVALID_STATUS);
         }
-        if (bookingSurveyRepository.findFirstByBookingIdAndStatusIn(booking.id(), SurveyStatus.ACTIVE).isPresent()) {
-            throw new AppException(ErrorCode.ERR_SURVEY_ACTIVE_EXISTS);
-        }
-
-        SurveyTimeSlot slot = surveyScheduleValidator.validate(new ScheduleCheck(
-                request.getSurveyDate(), request.getTimeSlotId(), request.getStaffId(), booking.desiredStartAt(), null));
-
-        BookingSurvey survey = BookingSurvey.builder()
-                .booking(bookingWorkflowService.getReference(booking.id()))
-                .surveyMethod(request.getSurveyMethod())
-                .surveyDate(request.getSurveyDate())
-                .timeSlot(slot)
-                .surveyStaff(request.getStaffId() != null ? staffLookupService.getReference(request.getStaffId()) : null)
-                .build();
-        survey.setStatus(resolveScheduledStatus(survey));
-        if (request.getNote() != null && !request.getNote().isBlank()) {
-            survey.appendNote("CREATE", actorId, request.getNote(), LocalDateTime.now(clock));
-        }
-
-        BookingSurvey saved = bookingSurveyRepository.saveAndFlush(survey);
-
-        log.info("Created survey id: {} for booking id: {} with status {} by user id: {}",
-                saved.getId(), booking.id(), saved.getStatus(), actorId);
+        BookingSurvey saved = createInternal(booking, request, "CREATE", actorId);
         return surveyQueryService.getDetail(saved.getId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SurveyDetailResponse resurvey(Integer id, ResurveyRequest request, Long actorId) {
+        BookingSurvey oldSurvey = loadForUpdate(id);
+        requireStatus(oldSurvey, EnumSet.of(SurveyStatus.COMPLETED));
+        Integer bookingId = oldSurvey.getBooking().getId();
+        // Chỉ khảo sát lại từ lần mới nhất: lần cũ hơn đã có lần sau thay thế
+        boolean isLatest = bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(bookingId)
+                .map(latest -> latest.getId().equals(id))
+                .orElse(false);
+        if (!isLatest) {
+            throw new AppException(ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(bookingId);
+        if (!BOOKING_STATUSES_FOR_RESURVEY.contains(booking.status())) {
+            throw new AppException(ErrorCode.ERR_SURVEY_BOOKING_INVALID_STATUS);
+        }
+        // Khách đã chốt báo giá thì kết quả khảo sát đã được dùng, không làm lại được
+        if (quotationDraftService.hasAcceptedQuotation(bookingId)) {
+            throw new AppException(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED);
+        }
+
+        String reason = request.getReason().trim();
+        oldSurvey.setStatus(SurveyStatus.RESURVEY_REQUIRED);
+        oldSurvey.appendNote("RESURVEY", actorId, reason, LocalDateTime.now(clock));
+        bookingSurveyRepository.saveAndFlush(oldSurvey);
+
+        // Báo giá nháp / đã gửi khách lập từ kết quả cũ hết hiệu lực; lần khảo sát mới sẽ mở version mới
+        quotationDraftService.expireOpenQuotations(bookingId, "Khảo sát lại: " + reason);
+        bookingWorkflowService.changeStatus(bookingId, BOOKING_STATUSES_FOR_RESURVEY, BookingStatus.PENDING_SURVEY,
+                actorId, "Khảo sát lại: " + reason);
+
+        CreateSurveyRequest next = CreateSurveyRequest.builder()
+                .bookingId(bookingId)
+                .surveyMethod(request.getSurveyMethod() != null ? request.getSurveyMethod() : oldSurvey.getSurveyMethod())
+                .surveyDate(request.getSurveyDate())
+                .timeSlotId(request.getTimeSlotId())
+                .staffId(request.getStaffId())
+                .note("Khảo sát lại từ lịch #" + id + ": " + reason)
+                .build();
+        BookingSurvey newSurvey = createInternal(booking, next, "RESURVEY", actorId);
+
+        log.info("Resurvey: survey id: {} -> new survey id: {} for booking id: {} by user id: {}",
+                id, newSurvey.getId(), bookingId, actorId);
+        return surveyQueryService.getDetail(newSurvey.getId());
     }
 
     @Override
@@ -187,6 +216,37 @@ public class SurveyManagementServiceImpl implements SurveyManagementService {
 
         log.info("Survey id: {} failed, booking id: {} back to PENDING_SURVEY by user id: {}", id, bookingId, actorId);
         return surveyQueryService.getDetail(id);
+    }
+
+    /**
+     * Phần lõi dùng chung cho create và resurvey: chưa có lịch active → validator → dựng entity → lưu.
+     * Không kiểm tra trạng thái booking: create kiểm tra trước khi gọi; resurvey vừa tự chuyển booking về PENDING_SURVEY
+     * (snapshot trong tay đã cũ nên không kiểm tra lại ở đây).
+     */
+    private BookingSurvey createInternal(BookingSnapshot booking, CreateSurveyRequest request, String noteTag, Long actorId) {
+        if (bookingSurveyRepository.findFirstByBookingIdAndStatusIn(booking.id(), SurveyStatus.ACTIVE).isPresent()) {
+            throw new AppException(ErrorCode.ERR_SURVEY_ACTIVE_EXISTS);
+        }
+
+        SurveyTimeSlot slot = surveyScheduleValidator.validate(new ScheduleCheck(
+                request.getSurveyDate(), request.getTimeSlotId(), request.getStaffId(), booking.desiredStartAt(), null));
+
+        BookingSurvey survey = BookingSurvey.builder()
+                .booking(bookingWorkflowService.getReference(booking.id()))
+                .surveyMethod(request.getSurveyMethod())
+                .surveyDate(request.getSurveyDate())
+                .timeSlot(slot)
+                .surveyStaff(request.getStaffId() != null ? staffLookupService.getReference(request.getStaffId()) : null)
+                .build();
+        survey.setStatus(resolveScheduledStatus(survey));
+        if (request.getNote() != null && !request.getNote().isBlank()) {
+            survey.appendNote(noteTag, actorId, request.getNote(), LocalDateTime.now(clock));
+        }
+
+        BookingSurvey saved = bookingSurveyRepository.saveAndFlush(survey);
+        log.info("Created survey id: {} for booking id: {} with status {} by user id: {}",
+                saved.getId(), booking.id(), saved.getStatus(), actorId);
+        return saved;
     }
 
     // Lấy lịch và khóa dòng đến hết transaction: 2 người cùng sửa một lịch thì người sau chờ người trước xong

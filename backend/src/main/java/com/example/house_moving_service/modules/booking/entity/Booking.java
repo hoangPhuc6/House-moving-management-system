@@ -26,7 +26,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -111,4 +110,3 @@ public class Booking {
         }
     }
 }
-

@@ -11,7 +11,6 @@ import com.example.house_moving_service.modules.booking.service.BookingManagemen
 import com.example.house_moving_service.security.access.StaffOnly;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,47 +37,37 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ManagementBookingController {
 
-    private final BookingManagementService bookingManagementService;
+        private final BookingManagementService bookingManagementService;
 
-    @GetMapping
-    @Operation(
-            summary = "Tìm kiếm và lọc danh sách đơn hàng toàn hệ thống",
-            description = "Hỗ trợ lọc đa tiêu chí bằng JPA Specification: theo trạng thái, mã đơn, số điện thoại, tên khách, khoảng thời gian tạo đơn kèm phân trang."
-    )
-    public ResponseEntity<ApiResponse<PageResponse<BookingSummaryResponse>>> searchBookings(
-            BookingManagementFilterRequest filter,
-            @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        log.info("Management search bookings request with pageable: {}", pageable);
-        PageResponse<BookingSummaryResponse> response = bookingManagementService.searchAllBookings(filter, pageable);
-        return ResponseEntity.ok(ApiResponse.ok(response));
-    }
+        @GetMapping
+        @Operation(summary = "Tìm kiếm và lọc danh sách đơn hàng toàn hệ thống", description = "Hỗ trợ lọc đa tiêu chí bằng JPA Specification: theo trạng thái, mã đơn, số điện thoại, tên khách, khoảng thời gian tạo đơn kèm phân trang.")
+        public ResponseEntity<ApiResponse<PageResponse<BookingSummaryResponse>>> searchBookings(
+                        BookingManagementFilterRequest filter,
+                        @PageableDefault(page = 0, size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+                log.info("Management search bookings request with pageable: {}", pageable);
+                PageResponse<BookingSummaryResponse> response = bookingManagementService.searchAllBookings(filter,
+                                pageable);
+                return ResponseEntity.ok(ApiResponse.ok(response));
+        }
 
-    @GetMapping("/{id}")
-    @Operation(
-            summary = "Xem thông tin chi tiết một đơn hàng bất kỳ",
-            description = "Tra cứu toàn diện thông tin đơn hàng mà không bị hạn chế bởi IDOR (Admin & Dispatcher có toàn quyền xem)."
-    )
-    public ResponseEntity<ApiResponse<BookingDetailResponse>> getBookingDetail(
-            @Parameter(description = "Mã định danh ID của đơn hàng", required = true)
-            @PathVariable Integer id) {
-        log.info("Management request to get booking detail for id: {}", id);
-        BookingDetailResponse response = bookingManagementService.getBookingDetailByManagement(id);
-        return ResponseEntity.ok(ApiResponse.ok(response));
-    }
+        @GetMapping("/{id}")
+        @Operation(summary = "Xem thông tin chi tiết một đơn hàng bất kỳ", description = "Tra cứu toàn diện thông tin đơn hàng mà không bị hạn chế bởi IDOR (Admin & Dispatcher có toàn quyền xem).")
+        public ResponseEntity<ApiResponse<BookingDetailResponse>> getBookingDetail(
+                        @Parameter(description = "Mã định danh ID của đơn hàng", required = true) @PathVariable Integer id) {
+                log.info("Management request to get booking detail for id: {}", id);
+                BookingDetailResponse response = bookingManagementService.getBookingDetailByManagement(id);
+                return ResponseEntity.ok(ApiResponse.ok(response));
+        }
 
-    @PatchMapping("/{id}/cancel")
-    @Operation(
-            summary = "Quản trị viên / Điều phối viên hủy đơn hàng",
-            description = "Cho phép can thiệp hủy đơn ở mọi giai đoạn (ngoại trừ đơn đã bị CANCELLED). Ghi nhận người thực hiện hủy là Admin/Dispatcher."
-    )
-    public ResponseEntity<ApiResponse<BookingDetailResponse>> cancelBooking(
-            @Parameter(description = "Mã định danh ID của đơn hàng cần hủy", required = true)
-            @PathVariable Integer id,
-            @Valid @RequestBody CancelBookingRequest request,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        log.info("Management request to cancel booking id: {} by staff user: {}", id, userDetails.getId());
-        BookingDetailResponse response = bookingManagementService.cancelBookingByManagement(id, request, userDetails.getId());
-        return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", response));
-    }
+        @PatchMapping("/{id}/cancel")
+        @Operation(summary = "Quản trị viên / Điều phối viên hủy đơn hàng", description = "Cho phép can thiệp hủy đơn ở mọi giai đoạn (ngoại trừ đơn đã bị CANCELLED). Ghi nhận người thực hiện hủy là Admin/Dispatcher.")
+        public ResponseEntity<ApiResponse<BookingDetailResponse>> cancelBooking(
+                        @Parameter(description = "Mã định danh ID của đơn hàng cần hủy", required = true) @PathVariable Integer id,
+                        @Valid @RequestBody CancelBookingRequest request,
+                        @AuthenticationPrincipal CustomUserDetails userDetails) {
+                log.info("Management request to cancel booking id: {} by staff user: {}", id, userDetails.getId());
+                BookingDetailResponse response = bookingManagementService.cancelBookingByManagement(id, request,
+                                userDetails.getId());
+                return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", response));
+        }
 }
-

@@ -62,14 +62,17 @@ public class RouteDistanceHelper {
         }
 
         // Tầng 2: External Map API (nếu được kích hoạt)
-        if (mapApiProperties.isEnabled() && mapApiProperties.getApiKey() != null && !mapApiProperties.getApiKey().isBlank()) {
+        if (mapApiProperties.isEnabled() && mapApiProperties.getApiKey() != null
+                && !mapApiProperties.getApiKey().isBlank()) {
             try {
                 BigDecimal apiDistance = callExternalMapApi(route.getPickup(), route.getDropoff());
                 if (apiDistance != null && apiDistance.compareTo(BigDecimal.ZERO) > 0) {
                     return apiDistance.setScale(2, RoundingMode.HALF_UP);
                 }
             } catch (Exception e) {
-                log.warn("External map API routing failed or timed out. Falling back to Haversine calculation. Error: {}", e.getMessage());
+                log.warn(
+                        "External map API routing failed or timed out. Falling back to Haversine calculation. Error: {}",
+                        e.getMessage());
             }
         }
 
@@ -96,7 +99,7 @@ public class RouteDistanceHelper {
 
         double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
                 + Math.cos(lat1) * Math.cos(lat2)
-                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                        * Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
@@ -115,7 +118,8 @@ public class RouteDistanceHelper {
             return null;
         }
 
-        if (pickup.getLat() == null || pickup.getLng() == null || dropoff.getLat() == null || dropoff.getLng() == null) {
+        if (pickup.getLat() == null || pickup.getLng() == null || dropoff.getLat() == null
+                || dropoff.getLng() == null) {
             return null;
         }
 
@@ -125,8 +129,7 @@ public class RouteDistanceHelper {
                 pickup.getLng().doubleValue(),
                 dropoff.getLat().doubleValue(),
                 dropoff.getLng().doubleValue(),
-                mapApiProperties.getApiKey().trim()
-        );
+                mapApiProperties.getApiKey().trim());
 
         try {
             int readTimeout = mapApiProperties.getReadTimeoutMs() > 0 ? mapApiProperties.getReadTimeoutMs() : 3000;
@@ -163,4 +166,3 @@ public class RouteDistanceHelper {
         return null;
     }
 }
-

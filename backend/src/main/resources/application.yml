@@ -40,6 +40,7 @@ app:
     base-transport-included-km: 10.0
     haversine-winding-factor: 1.3
     quote-valid-days: 7
+    quote-expiry-cron: "0 */10 * * * *"
   map:
     enabled: true
     provider: GOONG

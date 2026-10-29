@@ -235,6 +235,7 @@ public class QuoteServiceImpl implements QuoteService {
                 .status(QuotationStatus.SENT)
                 .note(trimToNull(request.getNote()))
                 .validUntil(LocalDateTime.now().plusDays(pricingProperties.getQuoteValidDays()))
+                .createdAt(LocalDateTime.now())
                 .createdBy(staffUser)
                 .build();
         for (BreakdownItemDto breakdown : pricingResponse.getBreakdownItems()) {

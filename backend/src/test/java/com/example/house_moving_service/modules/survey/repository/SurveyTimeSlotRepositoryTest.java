@@ -14,7 +14,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// Dựa trên 4 khung giờ seed V11: 08:00-10:00, 10:00-12:00, 13:30-15:30, 15:30-17:30
+// Dựa trên 4 khung giờ seed V12: 08:00-10:00, 10:00-12:00, 13:30-15:30, 15:30-17:30
 @SpringBootTest
 @Transactional
 class SurveyTimeSlotRepositoryTest {
@@ -29,7 +29,7 @@ class SurveyTimeSlotRepositoryTest {
     }
 
     @Test
-    @DisplayName("Seed V11: 4 khung giờ sắp theo giờ bắt đầu, đều đang dùng")
+    @DisplayName("Seed V12: 4 khung giờ sắp theo giờ bắt đầu, đều đang dùng")
     void testSeedSlots() {
         List<SurveyTimeSlot> active = surveyTimeSlotRepository.findAllByIsActiveTrueOrderByStartTimeAsc();
 

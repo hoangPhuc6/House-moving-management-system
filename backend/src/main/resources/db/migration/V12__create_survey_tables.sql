@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration V11: Create Survey tables (Module 4)
+-- Migration V12: Create Survey tables (Module 4)
 -- Tables: survey_time_slots, booking_surveys, survey_attachments
 -- So với schema leader: status dùng varchar + Java enum (thêm IN_PROGRESS, RESURVEY_REQUIRED),
 -- thêm actual_start_at / actual_end_at, survey_staff_id trỏ staff(user_id) như bookings.customer_id.

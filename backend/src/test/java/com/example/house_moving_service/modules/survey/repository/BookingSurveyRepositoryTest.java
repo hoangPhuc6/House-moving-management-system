@@ -67,7 +67,7 @@ class BookingSurveyRepositoryTest {
         mover1 = staffRepository.getReferenceById(userRepository.findByEmail("mover1@housemoving.vn").orElseThrow().getId());
         mover2 = staffRepository.getReferenceById(userRepository.findByEmail("mover2@housemoving.vn").orElseThrow().getId());
 
-        // Khung giờ seed V11
+        // Khung giờ seed V12
         List<SurveyTimeSlot> slots = surveyTimeSlotRepository.findAllByOrderByStartTimeAsc();
         slot0800 = slots.get(0);
         slot1000 = slots.get(1);

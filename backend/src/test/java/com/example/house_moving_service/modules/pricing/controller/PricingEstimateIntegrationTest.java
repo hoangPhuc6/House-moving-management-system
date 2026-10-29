@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Gọi API thật POST /api/v1/pricing/estimate: PricingService, PricingEngine và DB thật (seed + V12), không mock.
+ * Gọi API thật POST /api/v1/pricing/estimate: PricingService, PricingEngine và DB thật (seed + V13), không mock.
  * Đơn giá seed: xe 1.5 tấn 450.000đ, vượt km 15.000đ, thang bộ 50.000đ/lầu, hẻm sâu 100.000đ.
  */
 @SpringBootTest

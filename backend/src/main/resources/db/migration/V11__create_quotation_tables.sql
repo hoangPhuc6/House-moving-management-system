@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration V10: Create Quotation tables (khung tối thiểu cho Module 4 - Survey)
+-- Migration V11: Create Quotation tables (khung tối thiểu cho Module 4 - Survey)
 -- Tables: quotations, quotation_items
 -- So với schema leader: thêm 3 cột cờ đồ đạc ở quotation_items, DEFAULT 0 cho các cột tiền
 -- (bản nháp do khảo sát tạo chưa có giá), status dùng varchar + Java enum như V8.

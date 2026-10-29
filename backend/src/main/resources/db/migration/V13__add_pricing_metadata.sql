@@ -1,5 +1,5 @@
 -- =============================================================================
--- V12: Dữ liệu phục vụ tính giá (Module 2)
+-- V13: Dữ liệu phục vụ tính giá (Module 2)
 -- 1. service_types.fee_category: nhóm phí của loại dịch vụ (thay cách dò chữ trong tên)
 -- 2. services.code: mã cố định cho dịch vụ hệ thống tự cộng (phụ phí), không phụ thuộc id / tên
 -- 3. Thêm dịch vụ "Phụ phí vượt km"

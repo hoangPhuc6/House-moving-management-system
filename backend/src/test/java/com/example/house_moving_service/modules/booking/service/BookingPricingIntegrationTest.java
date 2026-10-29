@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Chạy trên PostgreSQL thật (dữ liệu seed + migration V12): tạo đơn với phụ phí tự động,
+ * Chạy trên PostgreSQL thật (dữ liệu seed + migration V13): tạo đơn với phụ phí tự động,
  * kiểm tra booking_services lưu đủ các dòng và tổng khớp kết quả tính giá.
  */
 @SpringBootTest
@@ -69,7 +69,7 @@ class BookingPricingIntegrationTest {
     void setUp() {
         customerUserId = userRepository.findByEmail("customer1@gmail.com").orElseThrow().getId();
         truck = serviceRepository.findByName("Xe tải 1.5 Tấn (Nội thành)").orElseThrow();
-        // Migration V12 phải gán đủ mã cho dịch vụ phụ phí
+        // Migration V13 phải gán đủ mã cho dịch vụ phụ phí
         extraKm = serviceRepository.findByCode(SystemServiceCode.SURCHARGE_EXTRA_KM).orElseThrow();
         stairs = serviceRepository.findByCode(SystemServiceCode.SURCHARGE_STAIRS).orElseThrow();
         assertThat(serviceRepository.findByCode(SystemServiceCode.SURCHARGE_DEEP_ALLEY)).isPresent();

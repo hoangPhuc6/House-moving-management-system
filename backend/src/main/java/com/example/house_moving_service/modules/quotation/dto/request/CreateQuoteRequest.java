@@ -1,6 +1,7 @@
-package com.example.house_moving_service.modules.pricing.dto.request;
+package com.example.house_moving_service.modules.quotation.dto.request;
 
 import com.example.house_moving_service.modules.booking.dto.request.BookingItemRequest;
+import com.example.house_moving_service.modules.pricing.dto.request.ServiceItemDto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;

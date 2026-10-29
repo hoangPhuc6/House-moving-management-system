@@ -1,9 +1,9 @@
-package com.example.house_moving_service.modules.pricing.controller.management;
+package com.example.house_moving_service.modules.quotation.controller.management;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
-import com.example.house_moving_service.modules.pricing.dto.response.QuotationResponse;
-import com.example.house_moving_service.modules.pricing.service.QuoteService;
-import com.example.house_moving_service.modules.pricing.dto.request.CreateQuoteRequest;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationResponse;
+import com.example.house_moving_service.modules.quotation.service.QuoteService;
+import com.example.house_moving_service.modules.quotation.dto.request.CreateQuoteRequest;
 import com.example.house_moving_service.security.access.StaffOnly;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,7 +31,7 @@ import java.util.List;
 @Tag(name = "Management - Pricing", description = "APIs lập báo giá chính thức sau khảo sát dành cho Quản trị viên & Điều phối viên")
 @SecurityRequirement(name = "bearerAuth")
 @RequiredArgsConstructor
-public class ManagementPricingController {
+public class ManagementQuotationController {
 
         private final QuoteService quoteService;
 

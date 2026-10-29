@@ -1,4 +1,4 @@
-package com.example.house_moving_service.modules.pricing.repository;
+package com.example.house_moving_service.modules.quotation.repository;
 
 import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
@@ -7,8 +7,8 @@ import com.example.house_moving_service.modules.identity.entity.Customer;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.identity.repository.CustomerRepository;
 import com.example.house_moving_service.modules.identity.repository.UserRepository;
-import com.example.house_moving_service.modules.pricing.entity.Quotation;
-import com.example.house_moving_service.modules.pricing.enums.QuotationStatus;
+import com.example.house_moving_service.modules.quotation.entity.Quotation;
+import com.example.house_moving_service.modules.quotation.enums.QuotationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @Transactional
-class QuotationRepositoryTest {
+class QuotationExpiryQueryTest {
 
     @Autowired
     private QuotationRepository quotationRepository;

@@ -1,4 +1,4 @@
-package com.example.house_moving_service.modules.pricing.dto.request;
+package com.example.house_moving_service.modules.quotation.dto.request;
 
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;

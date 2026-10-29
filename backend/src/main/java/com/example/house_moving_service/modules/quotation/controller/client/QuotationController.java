@@ -1,9 +1,9 @@
-package com.example.house_moving_service.modules.pricing.controller.client;
+package com.example.house_moving_service.modules.quotation.controller.client;
 
 import com.example.house_moving_service.common.dto.ApiResponse;
-import com.example.house_moving_service.modules.pricing.dto.request.RejectQuotationRequest;
-import com.example.house_moving_service.modules.pricing.dto.response.QuotationResponse;
-import com.example.house_moving_service.modules.pricing.service.QuoteService;
+import com.example.house_moving_service.modules.quotation.dto.request.RejectQuotationRequest;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationResponse;
+import com.example.house_moving_service.modules.quotation.service.QuoteService;
 import com.example.house_moving_service.security.access.CustomerOnly;
 import com.example.house_moving_service.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;

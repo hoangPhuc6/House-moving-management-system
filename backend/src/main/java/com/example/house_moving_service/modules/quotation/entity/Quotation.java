@@ -3,6 +3,7 @@ package com.example.house_moving_service.modules.quotation.entity;
 import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.quotation.enums.QuotationStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,6 +17,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,10 +27,14 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "quotations")
+@Table(
+        name = "quotations",
+        uniqueConstraints = @UniqueConstraint(name = "uq_quotations_booking_version", columnNames = {"booking_id", "version"})
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -77,8 +83,15 @@ public class Quotation {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "quotation", fetch = FetchType.LAZY)
-    private List<QuotationItem> items;
+    // Bản nháp khảo sát lưu từng dòng qua QuotationItemRepository; báo giá chính thức lưu kèm dòng qua addItem
+    @Builder.Default
+    @OneToMany(mappedBy = "quotation", fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
+    private List<QuotationItem> items = new ArrayList<>();
+
+    public void addItem(QuotationItem item) {
+        item.setQuotation(this);
+        this.items.add(item);
+    }
 
     @PrePersist
     public void prePersist() {

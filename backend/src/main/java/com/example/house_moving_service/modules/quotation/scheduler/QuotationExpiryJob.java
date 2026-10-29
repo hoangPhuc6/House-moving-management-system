@@ -1,7 +1,7 @@
-package com.example.house_moving_service.modules.pricing.scheduler;
+package com.example.house_moving_service.modules.quotation.scheduler;
 
-import com.example.house_moving_service.modules.pricing.enums.QuotationStatus;
-import com.example.house_moving_service.modules.pricing.repository.QuotationRepository;
+import com.example.house_moving_service.modules.quotation.enums.QuotationStatus;
+import com.example.house_moving_service.modules.quotation.repository.QuotationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

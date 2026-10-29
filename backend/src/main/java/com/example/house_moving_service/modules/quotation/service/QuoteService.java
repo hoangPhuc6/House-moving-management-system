@@ -1,8 +1,8 @@
-package com.example.house_moving_service.modules.pricing.service;
+package com.example.house_moving_service.modules.quotation.service;
 
-import com.example.house_moving_service.modules.pricing.dto.request.CreateQuoteRequest;
-import com.example.house_moving_service.modules.pricing.dto.request.RejectQuotationRequest;
-import com.example.house_moving_service.modules.pricing.dto.response.QuotationResponse;
+import com.example.house_moving_service.modules.quotation.dto.request.CreateQuoteRequest;
+import com.example.house_moving_service.modules.quotation.dto.request.RejectQuotationRequest;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationResponse;
 
 import java.util.List;
 

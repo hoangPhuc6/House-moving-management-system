@@ -169,7 +169,7 @@ class BookingControllerTest {
     void createBooking_Success_Returns201Created() throws Exception {
         CreateBookingRequest request = createValidCreateRequest();
         CustomUserDetails userDetails = createMockCustomerUserDetails(10L, "customer@example.com");
-        BookingDetailResponse response = createMockDetailResponse(1, 10L, "BKG2610190001", BookingStatus.PENDING);
+        BookingDetailResponse response = createMockDetailResponse(1, 10L, "BKG2610190001", BookingStatus.PENDING_SURVEY);
 
         when(bookingService.createBooking(any(CreateBookingRequest.class), eq(10L))).thenReturn(response);
 
@@ -182,7 +182,7 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.message").value("Tạo đơn đặt chuyển nhà thành công"))
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.bookingCode").value("BKG2610190001"))
-                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.status").value("PENDING_SURVEY"))
                 .andExpect(jsonPath("$.data.totalAmount").value("1500000.00"));
     }
 
@@ -258,7 +258,7 @@ class BookingControllerTest {
         BookingSummaryResponse summary = BookingSummaryResponse.builder()
                 .id(1)
                 .bookingCode("BKG2610190001")
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .totalAmount(new BigDecimal("1500000.00"))
                 .discountAmount(new BigDecimal("50000.00"))
                 .pickupAddress("123 Lê Lợi, Q1, TP.HCM")
@@ -291,7 +291,7 @@ class BookingControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/bookings?status=PENDING - Lọc theo status -> Trả về 200 OK")
+    @DisplayName("GET /api/v1/bookings?status=PENDING_SURVEY - Lọc theo status -> Trả về 200 OK")
     void getCustomerBookings_WithStatusFilter_Returns200() throws Exception {
         CustomUserDetails userDetails = createMockCustomerUserDetails(10L, "customer@example.com");
 
@@ -304,12 +304,12 @@ class BookingControllerTest {
                 .items(List.of())
                 .build();
 
-        when(bookingService.getCustomerBookings(eq(10L), eq(BookingStatus.PENDING), any(Pageable.class)))
+        when(bookingService.getCustomerBookings(eq(10L), eq(BookingStatus.PENDING_SURVEY), any(Pageable.class)))
                 .thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/v1/bookings")
                         .with(user(userDetails))
-                        .param("status", "PENDING"))
+                        .param("status", "PENDING_SURVEY"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1000))
                 .andExpect(jsonPath("$.data.totalElements").value(0));
@@ -323,7 +323,7 @@ class BookingControllerTest {
     @DisplayName("GET /api/v1/bookings/{id} - Thành công lấy chi tiết đơn -> Trả về 200 OK")
     void getBookingById_Success_Returns200() throws Exception {
         CustomUserDetails userDetails = createMockCustomerUserDetails(10L, "customer@example.com");
-        BookingDetailResponse response = createMockDetailResponse(1, 10L, "BKG2610190001", BookingStatus.PENDING);
+        BookingDetailResponse response = createMockDetailResponse(1, 10L, "BKG2610190001", BookingStatus.PENDING_SURVEY);
 
         when(bookingService.getBookingById(eq(1), eq(10L))).thenReturn(response);
 

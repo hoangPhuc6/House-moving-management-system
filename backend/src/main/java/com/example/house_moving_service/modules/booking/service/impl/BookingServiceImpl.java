@@ -133,7 +133,7 @@ public class BookingServiceImpl implements BookingService {
                 .totalAmount(finalTotal)
                 .discountAmount(discountAmount != null ? discountAmount : BigDecimal.ZERO)
                 .note(request.getNote())
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .desiredStartAt(request.getSchedule().getDesiredStartAt())
                 .desiredEndAt(request.getSchedule().getDesiredEndAt())
                 .contactName(request.getContactName())
@@ -230,7 +230,7 @@ public class BookingServiceImpl implements BookingService {
         BookingStatusHistory history = BookingStatusHistory.builder()
                 .booking(savedBooking)
                 .oldStatus(null)
-                .newStatus(BookingStatus.PENDING)
+                .newStatus(BookingStatus.PENDING_SURVEY)
                 .changedBy(currentUser)
                 .note("Khách hàng tạo đơn")
                 .build();
@@ -328,8 +328,8 @@ public class BookingServiceImpl implements BookingService {
             throw new AppException(ErrorCode.ERR_BOOKING_FORBIDDEN);
         }
 
-        // 2. Kiểm tra trạng thái: Chỉ cho phép hủy khi đang ở PENDING
-        if (booking.getStatus() != BookingStatus.PENDING) {
+        // 2. Kiểm tra trạng thái: Chỉ cho phép hủy khi đang ở PENDING_SURVEY
+        if (booking.getStatus() != BookingStatus.PENDING_SURVEY) {
             throw new AppException(ErrorCode.ERR_BOOKING_INVALID_STATUS);
         }
 

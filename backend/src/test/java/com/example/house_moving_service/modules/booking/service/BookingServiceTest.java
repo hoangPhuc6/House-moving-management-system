@@ -205,7 +205,7 @@ class BookingServiceTest {
                 .bookingCode("BKG261018ABCD")
                 .customer(customer)
                 .createdBy(user)
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .totalAmount(BigDecimal.valueOf(950000))
                 .discountAmount(BigDecimal.valueOf(50000))
                 .build();
@@ -290,7 +290,7 @@ class BookingServiceTest {
                 .bookingCode("BKG261018ABCD")
                 .customer(customer)
                 .createdBy(user)
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .totalAmount(BigDecimal.valueOf(500000))
                 .discountAmount(BigDecimal.ZERO)
                 .build();
@@ -368,7 +368,7 @@ class BookingServiceTest {
                 .id(100)
                 .bookingCode("BKG202610190001")
                 .customer(customer)
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .totalAmount(BigDecimal.valueOf(1000000))
                 .build();
 
@@ -376,7 +376,7 @@ class BookingServiceTest {
         BookingItem item = BookingItem.builder().id(1).booking(booking).itemName("Ban lam viec").quantity(1).build();
         com.example.house_moving_service.modules.booking.entity.BookingService service = com.example.house_moving_service.modules.booking.entity.BookingService.builder().id(1).booking(booking).build();
         BookingVoucher voucher = BookingVoucher.builder().id(1).booking(booking).build();
-        BookingStatusHistory history = BookingStatusHistory.builder().id(1).booking(booking).newStatus(BookingStatus.PENDING).build();
+        BookingStatusHistory history = BookingStatusHistory.builder().id(1).booking(booking).newStatus(BookingStatus.PENDING_SURVEY).build();
 
         BookingDetailResponse expectedResponse = BookingDetailResponse.builder()
                 .id(100)
@@ -470,12 +470,12 @@ class BookingServiceTest {
     // ==================== Tests for cancelBooking ====================
 
     @Test
-    @DisplayName("cancelBooking: Should cancel booking and record status history when in PENDING")
+    @DisplayName("cancelBooking: Should cancel booking and record status history when in PENDING_SURVEY")
     void testCancelBooking_Success() {
         Booking booking = Booking.builder()
                 .id(100)
                 .bookingCode("BKG001")
-                .status(BookingStatus.PENDING)
+                .status(BookingStatus.PENDING_SURVEY)
                 .customer(customer)
                 .build();
 
@@ -538,7 +538,7 @@ class BookingServiceTest {
     @DisplayName("cancelBooking: Should throw ERR_BOOKING_FORBIDDEN on IDOR attack")
     void testCancelBooking_IdorAttack_ThrowsForbidden() {
         Customer otherCustomer = Customer.builder().id(99L).build();
-        Booking otherBooking = Booking.builder().id(100).customer(otherCustomer).status(BookingStatus.PENDING).build();
+        Booking otherBooking = Booking.builder().id(100).customer(otherCustomer).status(BookingStatus.PENDING_SURVEY).build();
         CancelBookingRequest cancelReq = CancelBookingRequest.builder().reason("Huy don").build();
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));

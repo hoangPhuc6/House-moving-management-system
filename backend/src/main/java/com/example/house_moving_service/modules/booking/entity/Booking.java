@@ -106,7 +106,7 @@ public class Booking {
             this.discountAmount = BigDecimal.ZERO;
         }
         if (this.status == null) {
-            this.status = BookingStatus.PENDING;
+            this.status = BookingStatus.PENDING_SURVEY;
         }
     }
 }

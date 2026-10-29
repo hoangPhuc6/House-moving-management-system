@@ -17,19 +17,22 @@ com.example.house_moving_service/
 │   ├── config/             OpenAPIConfig
 │   ├── dto/                ApiResponse, PageResponse
 │   ├── enums/              PropertyType
-│   └── exception/          AppException, ErrorCode, GlobalExceptionHandler
+│   ├── exception/          AppException, ErrorCode, GlobalExceptionHandler
+│   └── storage/            FileStorageService, MinioFileStorageService, StorageProperties, StoredFile
 ├── security/               # Hạ tầng xác thực & phân quyền
 │   ├── SecurityConfig
-│   ├── access/             AccessZones, @AdminOnly, @StaffOnly, @CustomerOnly, @AuthenticatedUser
+│   ├── access/             AccessZones, @AdminOnly, @StaffOnly, @CustomerOnly, @MoverOnly, @AuthenticatedUser
 │   ├── handler/            CustomAccessDeniedHandler
 │   ├── jwt/                JwtTokenProvider, JwtAuthenticationFilter, JwtAuthenticationEntryPoint
 │   └── userdetails/        CustomUserDetails, CustomUserDetailsService
 └── modules/
-    ├── identity/           # Tài khoản, đăng nhập, role, refresh token        (23 file)
-    ├── catalog/            # Danh mục dịch vụ và nhóm dịch vụ, giá niêm yết   (21 file)
+    ├── identity/           # Tài khoản, đăng nhập, role, refresh token        (29 file)
+    ├── catalog/            # Danh mục dịch vụ và nhóm dịch vụ, giá niêm yết   (23 file)
     ├── voucher/            # Mã giảm giá                                      (5 file)
-    ├── pricing/            # Bộ tính giá (5 cấu phần chi phí, khoảng cách)    (16 file)
-    └── booking/            # Đơn hàng: khách đặt/hủy, nhân viên quản lý       (33 file)
+    ├── pricing/            # Bộ tính giá: dịch vụ, phụ phí tự động, voucher   (18 file)
+    ├── booking/            # Đơn hàng: khách đặt/hủy, nhân viên quản lý       (40 file)
+    ├── quotation/          # Báo giá: hiện mới có bản nháp mở từ khảo sát     (13 file)
+    └── survey/             # Khảo sát: lịch, phân công, hiện trường, tệp      (60 file)
 ```
 
 Test nằm trong `src/test/java` và **dùng cùng package với class được test**, ví dụ `modules/booking/service/BookingServiceTest`.
@@ -50,7 +53,7 @@ Mỗi module chỉ tạo những sub-package mà nó thật sự cần:
 | `repository/` | Spring Data repository (+ `specification/` nếu có) | `booking/repository/specification/BookingSpecification` |
 | `dto/request/`, `dto/response/` | DTO vào/ra của API | `pricing/dto/request/PricingCalculationRequest` |
 | `mapper/` | Chuyển entity ↔ DTO | `booking/mapper/BookingMapper` |
-| Khác | `config/`, `helper/`, `util/`, `seeder/` khi cần | `pricing/helper/RouteDistanceHelper` |
+| Khác | `config/`, `engine/`, `event/`, `helper/`, `util/`, `seeder/` khi cần | `pricing/engine/PricingEngine` |
 
 Hiện trạng từng module:
 
@@ -59,8 +62,10 @@ Hiện trạng từng module:
 | identity | controller, dto, entity, enums, mapper, repository, seeder, service |
 | catalog | controller/{admin,client}, dto, entity, enums, repository, service(+impl) |
 | voucher | entity, enums, repository, service(+impl) |
-| pricing | config, controller, dto, helper, service(+impl) |
-| booking | controller/{client,management}, dto, entity, enums, mapper, repository(+specification), service(+impl), util |
+| pricing | config, controller, dto, engine, helper, service(+impl) |
+| booking | controller/{client,management}, dto, entity, enums, event, mapper, repository(+specification), service(+impl), util |
+| quotation | dto, entity, enums, mapper, repository, service(+impl) — chưa có controller |
+| survey | config, controller/{admin,client,field,management}, dto, entity, enums, mapper, repository(+specification), service(+impl) |
 
 ---
 
@@ -75,7 +80,8 @@ Có **hai lớp kiểm tra**. Cả hai phải cho qua thì request mới vào đ
 | `AUTH` | `/api/auth/**` | Tất cả | Đăng ký, đăng nhập, refresh token |
 | `DOCS` | `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` | Tất cả | Tài liệu API |
 | `ADMIN` | `/api/v1/admin/**` | ADMIN | **Cấu hình hệ thống**: dịch vụ, nhóm dịch vụ, (sau này) voucher, tài khoản |
-| `MANAGEMENT` | `/api/v1/management/**` | ADMIN, DISPATCHER | **Vận hành**: đơn hàng, (sau này) báo giá, phân công |
+| `MANAGEMENT` | `/api/v1/management/**` | ADMIN, DISPATCHER | **Vận hành**: đơn hàng, lịch khảo sát, (sau này) báo giá |
+| `FIELD` | `/api/v1/field/**` | MOVER | **Hiện trường**: khảo sát (sau này vận chuyển) |
 | Còn lại | mọi đường dẫn khác | Đã đăng nhập | API phía người dùng; role cụ thể đặt ở lớp 2 |
 
 Lớp này là lưới an toàn: controller mới đặt dưới `/api/v1/admin/**` mà quên gắn annotation thì vẫn chỉ ADMIN gọi được.
@@ -87,6 +93,7 @@ Lớp này là lưới an toàn: controller mới đặt dưới `/api/v1/admin/
 | `@AdminOnly` | `hasRole('ADMIN')` | Controller trong vùng `ADMIN` |
 | `@StaffOnly` | `hasAnyRole('ADMIN', 'DISPATCHER')` | Controller trong vùng `MANAGEMENT` |
 | `@CustomerOnly` | `hasRole('CUSTOMER')` | API khách thao tác trên dữ liệu của chính mình |
+| `@MoverOnly` | `hasRole('MOVER')` | Controller trong vùng `FIELD` |
 | `@AuthenticatedUser` | `isAuthenticated()` | API mọi tài khoản đã đăng nhập đều dùng được |
 
 **Quy tắc:** không viết chuỗi `@PreAuthorize("...")` trực tiếp trong controller. Cần nhóm quyền mới thì tạo annotation mới trong `security/access/`.
@@ -103,10 +110,15 @@ Các controller hiện có:
 | `pricing/PricingController` | `/api/v1/pricing` | `@AuthenticatedUser` (trên method) |
 | `booking/client/BookingController` | `/api/v1/bookings` | `@CustomerOnly` |
 | `booking/management/ManagementBookingController` | `/api/v1/management/bookings` | `@StaffOnly` |
+| `survey/admin/AdminSurveyTimeSlotController` | `/api/v1/admin/survey-time-slots` | `@AdminOnly` |
+| `survey/management/ManagementSurveyTimeSlotController` | `/api/v1/management/survey-time-slots` | `@StaffOnly` |
+| `survey/management/ManagementSurveyController` | `/api/v1/management/surveys`, `/api/v1/management/bookings/{id}/surveys` | `@StaffOnly` |
+| `survey/field/FieldSurveyController` | `/api/v1/field/surveys` | `@MoverOnly` |
+| `survey/client/CustomerSurveyController` | `/api/v1/bookings/{bookingId}/surveys` | `@CustomerOnly` |
 
 ### Quyền sở hữu dữ liệu (chống IDOR)
 
-Annotation chỉ trả lời câu hỏi *"role này có được gọi API không"*. Câu hỏi *"user này có được xem bản ghi này không"* phải kiểm tra **ở tầng service**. Ví dụ `BookingServiceImpl#getBookingById` so sánh chủ đơn với `currentUserId` và ném `ERR_BOOKING_FORBIDDEN` nếu không khớp.
+Annotation chỉ trả lời câu hỏi *"role này có được gọi API không"*. Câu hỏi *"user này có được xem bản ghi này không"* phải kiểm tra **ở tầng service**. Ví dụ `BookingServiceImpl#getBookingById` so sánh chủ đơn với `currentUserId` và ném `ERR_BOOKING_FORBIDDEN` nếu không khớp; `FieldSurveyServiceImpl` chỉ cho MOVER thao tác lịch được phân công cho chính mình (`ERR_SURVEY_FORBIDDEN`).
 
 ---
 
@@ -115,6 +127,8 @@ Annotation chỉ trả lời câu hỏi *"role này có được gọi API khôn
 ### Sơ đồ phụ thuộc hiện tại
 
 ```
+survey ────► booking, quotation, identity, common.storage
+quotation ─► booking, identity
 booking ──► pricing ──► catalog
    │           │
    │           └──────► voucher
@@ -125,6 +139,9 @@ mọi module ──► common, security
 security ◄──► identity        (ngoại lệ được chấp nhận)
 ```
 
+- **Đảo phụ thuộc quotation / survey:** quotation cần biết "khảo sát mới nhất đã hoàn tất chưa" nhưng không được phụ thuộc survey (survey đã phụ thuộc quotation). Interface `SurveyCompletionChecker` đặt ở `quotation/service`, survey cài đặt (`SurveyCompletionCheckerImpl`).
+- **Sự kiện thay cho phụ thuộc ngược:** booking không gọi survey. Khi đơn bị hủy, booking phát `BookingCancelledEvent`; `BookingCancelledSurveyListener` (survey) hủy lịch khảo sát và bản nháp báo giá **trong cùng transaction**.
+
 ### Quy tắc
 
 1. **Không phụ thuộc vòng** giữa các module.
@@ -134,12 +151,21 @@ security ◄──► identity        (ngoại lệ được chấp nhận)
 
 ### Interface tra cứu dùng chung
 
-Module khác thao tác dữ liệu của `catalog` và `voucher` qua các interface hẹp sau:
+Module khác thao tác dữ liệu của nhau qua các interface hẹp sau:
 
 | Module cung cấp | Interface | Dùng bởi | Method |
 |---|---|---|---|
-| catalog | `ServiceLookupService` | pricing, booking | `findAllByIds`, `getReference` |
+| catalog | `ServiceLookupService` | pricing, booking | `findAllByIds`, `findByCode`, `getReference` |
 | voucher | `VoucherService` | pricing, booking | `getValidVoucher`, `lockValidVoucher`, `getReference`, `increaseUsage`, `releaseUsage` |
+| pricing | `PricingService` | booking, (sau này) quotation | `calculatePrice` (giá tham khảo), `calculate(PricingInput)` (báo giá chính thức) |
+| identity | `StaffLookupService` | survey | `findActiveByRole`, `findSummary`, `getReference`, `isActiveStaffWithRole` |
+| identity | `UserLookupService` | booking, quotation, survey | `getUserReference` |
+| booking | `BookingWorkflowService` | survey, quotation | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
+| quotation | `QuotationDraftService` | survey | Mở / sửa / hết hạn bản nháp báo giá trong lúc khảo sát |
+| quotation (survey cài đặt) | `SurveyCompletionChecker` | quotation | `isLatestSurveyCompleted` |
+| survey | `SurveyStaffScheduleService` | (sau này) điều phối vận chuyển | `hasSurveyBetween`: MOVER có lịch khảo sát trong khoảng giờ không |
+| survey (module khác cài đặt) | `StaffExternalScheduleChecker` | survey | `isBusy`: điểm mở rộng để lịch vận chuyển chặn trùng lịch khảo sát; hiện chưa có bean nào, survey bỏ qua |
+| booking | sự kiện `BookingCancelledEvent` | survey | Phát khi đơn bị hủy (khách hoặc nhân viên) |
 
 `ServiceLookupService` tách riêng khỏi `ServiceCatalogService` (API cho controller), nên module khác chỉ phụ thuộc đúng phần cần dùng. Interface này do một bean riêng (`ServiceLookupServiceImpl`) cài đặt, không dùng chung bean với `ServiceCatalogServiceImpl`: mock hay thay đổi một bên không ảnh hưởng bên kia.
 
@@ -167,7 +193,7 @@ Code mới **không được** thêm vào danh sách này.
 ## 6. Database và migration
 
 - Schema do **Flyway** quản lý (`src/main/resources/db/migration`). Hibernate chạy với `ddl-auto: validate`, nên entity lệch với schema thì **app không khởi động**.
-- Migration hiện có: `V1` … `V12`. **Migration tiếp theo là `V13__<mô_tả>.sql`.**
+- Migration hiện có: `V1` … `V13` (`V10` bảng thanh toán, `V11` bảng báo giá, `V12` bảng khảo sát + 4 khung giờ mặc định, `V13` `service_types.fee_category` + `services.code` + dịch vụ phụ phí vượt km). **Migration tiếp theo là `V14__<mô_tả>.sql`.**
 - **Không sửa migration đã chạy**, vì Flyway sẽ báo lỗi checksum trên mọi máy đã chạy migration đó. Muốn thay đổi thì tạo migration mới.
 - Nhiều nhánh cùng tạo migration thì thống nhất số version trước khi merge để tránh trùng.
 
@@ -181,10 +207,14 @@ Code mới **không được** thêm vào danh sách này.
 | Prefix | Class đọc | Nội dung |
 |---|---|---|
 | `app.jwt.*` | `JwtTokenProvider`, `RefreshTokenService` | Secret, thời hạn access token (mặc định 15 phút), refresh token (mặc định 1 ngày) |
-| `app.pricing.*` | `pricing/config/PricingProperties` | Lead time tối thiểu, số km miễn phí, hệ số đường vòng Haversine |
+| `app.pricing.*` | `pricing/config/PricingProperties` | Lead time tối thiểu, số km đã gồm trong giá xe, hệ số đường vòng Haversine, mốc hẻm sâu (`deep-alley-meters`) |
 | `app.map.*` | `pricing/config/MapApiProperties` | Bật/tắt, nhà cung cấp (Goong), API key, timeout |
+| `app.survey.*` | `survey/config/SurveyProperties` | Số phút được bắt đầu sớm, số tệp đính kèm tối đa, số video tối đa |
+| `app.storage.*` | `common/storage/StorageProperties` | Nhà cung cấp (`MINIO` hoặc để trống), thời hạn link tải, thông tin MinIO |
 
 - **Biến bắt buộc:** `MAP_API_KEY` (không có giá trị mặc định). Các biến khác (`DB_*`, `SERVER_PORT`, `JWT_*`, …) đều có mặc định trong `application.yml`.
+- **Lưu trữ tệp:** `STORAGE_PROVIDER=MINIO` cùng `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`. Để trống `STORAGE_PROVIDER` thì app vẫn chạy, chỉ API upload báo `ERR_FILE_STORAGE`. Chạy MinIO local: `docker compose up -d minio` (`backend/docker-compose.yml`).
+- **Giờ nghiệp vụ:** module survey dùng bean `Clock` múi giờ `Asia/Ho_Chi_Minh` (`SurveyClockConfig`); test thay bằng đồng hồ cố định / chỉnh được.
 
 ---
 
@@ -212,3 +242,7 @@ Code mới **không được** thêm vào danh sách này.
 | #14 | Tách module `voucher` |
 | #15 | Tách module `pricing` |
 | #16 | Tách module `booking`, hoàn tất chia module |
+| #17 | Thêm file tài liệu kiến trúc này |
+| #18 | Tách `VoucherService` cho pricing / booking |
+| #20 | Tách `ServiceLookupService` khỏi `ServiceCatalogService` |
+| Nhánh `feat/survey-management` (chưa merge) | Module `survey` (lịch, phân công, hiện trường, tệp MinIO, khách xem), skeleton `quotation`, vùng `FIELD`; hoàn thiện tính giá: `fee_category`, `services.code`, `PricingEngine`, phụ phí tự động, `PricingService#calculate` |

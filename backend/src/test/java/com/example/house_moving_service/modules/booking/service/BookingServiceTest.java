@@ -52,9 +52,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.house_moving_service.modules.booking.event.BookingCancelledEvent;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -67,6 +70,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -99,6 +103,8 @@ class BookingServiceTest {
     private BookingCodeGenerator bookingCodeGenerator;
     @Mock
     private BookingMapper bookingMapper;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private BookingServiceImpl bookingService;
@@ -151,7 +157,7 @@ class BookingServiceTest {
                 .note("Don nha can than")
                 .schedule(schedule)
                 .route(route)
-                .serviceItems(List.of(ServiceItemDto.builder().serviceId(101).quantity(BigDecimal.ONE).build()))
+                .serviceItems(List.of(ServiceItemDto.builder().serviceId(101).quantity(1).build()))
                 .items(List.of(BookingItemRequest.builder().itemName("Tu lanh").quantity(1).build()))
                 .build();
     }
@@ -182,7 +188,7 @@ class BookingServiceTest {
                 .breakdownItems(List.of(BreakdownItemDto.builder()
                         .serviceId(101)
                         .serviceName("Xe tai 1.5 tan")
-                        .quantity(BigDecimal.ONE)
+                        .quantity(1)
                         .unitPrice(BigDecimal.valueOf(1000000))
                         .totalPrice(BigDecimal.valueOf(1000000))
                         .note("Xe van chuyen")
@@ -245,6 +251,12 @@ class BookingServiceTest {
         verify(bookingServiceRepository).saveAll(anyList());
         verify(bookingVoucherRepository).save(any(BookingVoucher.class));
         verify(bookingStatusHistoryRepository).save(any(BookingStatusHistory.class));
+
+        // Chuỗi điều kiện ra vào giữ đúng định dạng cũ sau khi chuyển sang RouteAccessNoteCodec
+        ArgumentCaptor<BookingRoute> routeCaptor = ArgumentCaptor.forClass(BookingRoute.class);
+        verify(bookingRouteRepository).save(routeCaptor.capture());
+        assertThat(routeCaptor.getValue().getPickupNote()).isEqualTo("Tầng: 1, Thang máy: Không, Cự ly hẻm: 10m");
+        assertThat(routeCaptor.getValue().getDropoffNote()).isEqualTo("Tầng: 5, Thang máy: Có, Cự ly hẻm: 0m");
     }
 
     @Test
@@ -504,6 +516,9 @@ class BookingServiceTest {
         // Verify voucher usedCount decremented
         assertThat(voucher.getUsedCount()).isEqualTo(2);
         verify(voucherRepository).save(voucher);
+
+        // Verify event báo hủy đơn cho module khác
+        verify(eventPublisher).publishEvent(new BookingCancelledEvent(100, userId, "Thay doi ke hoach"));
     }
 
     @Test
@@ -546,6 +561,7 @@ class BookingServiceTest {
         assertThatThrownBy(() -> bookingService.cancelBooking(100, cancelReq, userId))
                 .isInstanceOf(AppException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_BOOKING_INVALID_STATUS);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

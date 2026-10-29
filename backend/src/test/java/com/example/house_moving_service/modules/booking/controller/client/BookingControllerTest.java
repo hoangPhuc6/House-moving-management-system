@@ -125,7 +125,7 @@ class BookingControllerTest {
                         .manualDistanceKm(new BigDecimal("15.00"))
                         .build())
                 .serviceItems(List.of(
-                        ServiceItemDto.builder().serviceId(1).quantity(new BigDecimal("1")).build()
+                        ServiceItemDto.builder().serviceId(1).quantity(1).build()
                 ))
                 .items(List.of(
                         BookingItemRequest.builder()

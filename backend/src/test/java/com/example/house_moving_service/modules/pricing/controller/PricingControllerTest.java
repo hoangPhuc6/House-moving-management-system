@@ -89,7 +89,7 @@ class PricingControllerTest {
                         .manualDistanceKm(new BigDecimal("15.00"))
                         .build())
                 .serviceItems(List.of(
-                        ServiceItemDto.builder().serviceId(1).quantity(new BigDecimal("1")).build()
+                        ServiceItemDto.builder().serviceId(1).quantity(1).build()
                 ))
                 .voucherCode("GIAM50K")
                 .build();
@@ -116,7 +116,7 @@ class PricingControllerTest {
                         BreakdownItemDto.builder()
                                 .serviceId(1)
                                 .serviceName("Xe tải 1.5 Tấn")
-                                .quantity(new BigDecimal("1"))
+                                .quantity(1)
                                 .unitPrice(new BigDecimal("500000.00"))
                                 .totalPrice(new BigDecimal("500000.00"))
                                 .build()
@@ -259,5 +259,19 @@ class PricingControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VOUCHER_EXPIRED.getCode()));
     }
-}
 
+    @Test
+    @DisplayName("POST /api/v1/pricing/estimate - quantity số lẻ (1.5) -> 400, không cắt thành 1")
+    void estimatePrice_BadRequest_WhenQuantityFractional_Returns400() throws Exception {
+        String json = objectMapper.writeValueAsString(createValidRequest());
+        String fractionalJson = json.replace("\"quantity\":1}", "\"quantity\":1.5}");
+        org.junit.jupiter.api.Assertions.assertNotEquals(json, fractionalJson);
+
+        mockMvc.perform(post("/api/v1/pricing/estimate")
+                        .with(user(createMockUserDetails(10L, "customer@example.com")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(fractionalJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_INVALID_INPUT.getCode()));
+    }
+}

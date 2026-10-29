@@ -10,6 +10,7 @@ import com.example.house_moving_service.modules.booking.entity.BookingItem;
 import com.example.house_moving_service.modules.booking.entity.BookingRoute;
 import com.example.house_moving_service.modules.booking.entity.BookingStatusHistory;
 import com.example.house_moving_service.modules.booking.entity.BookingVoucher;
+import com.example.house_moving_service.modules.booking.event.BookingCancelledEvent;
 import com.example.house_moving_service.modules.identity.entity.User;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 import com.example.house_moving_service.common.exception.AppException;
@@ -27,6 +28,7 @@ import com.example.house_moving_service.modules.booking.repository.specification
 import com.example.house_moving_service.modules.booking.service.BookingManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -50,6 +52,7 @@ public class BookingManagementServiceImpl implements BookingManagementService {
     private final UserRepository userRepository;
     private final VoucherService voucherService;
     private final BookingMapper bookingMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -130,6 +133,9 @@ public class BookingManagementServiceImpl implements BookingManagementService {
                 .note(cancelReason)
                 .build();
         bookingStatusHistoryRepository.save(history);
+
+        // Báo cho module khác (survey...) dọn dữ liệu liên quan, chạy cùng transaction này
+        eventPublisher.publishEvent(new BookingCancelledEvent(bookingId, staffUserId, cancelReason));
 
         // Hoàn trả lượt dùng voucher (nếu đơn có áp dụng voucher)
         List<BookingVoucher> bookingVouchers = bookingVoucherRepository.findAllByBookingId(bookingId);

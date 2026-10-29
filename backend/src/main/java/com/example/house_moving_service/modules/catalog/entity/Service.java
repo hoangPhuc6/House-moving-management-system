@@ -58,6 +58,11 @@ public class Service {
     @Column(name = "status", nullable = false, length = 30)
     private ServiceStatus status = ServiceStatus.ACTIVE;
 
+    // Mã cố định của dịch vụ hệ thống tự cộng (xem SystemServiceCode); null với dịch vụ khách / nhân viên tự chọn.
+    // Gán bằng migration, không cập nhật qua API
+    @Column(name = "code", length = 50, updatable = false, insertable = false)
+    private String code;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

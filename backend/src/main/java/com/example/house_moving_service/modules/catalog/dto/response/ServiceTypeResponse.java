@@ -1,5 +1,6 @@
 package com.example.house_moving_service.modules.catalog.dto.response;
 
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,6 +21,7 @@ public class ServiceTypeResponse {
     private String name;
     private String description;
     private Boolean isActive;
+    private FeeCategory feeCategory;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private List<ServiceResponse> services;

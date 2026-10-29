@@ -1,0 +1,633 @@
+package com.example.house_moving_service.modules.survey.service.impl;
+
+import com.example.house_moving_service.common.exception.AppException;
+import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
+import com.example.house_moving_service.modules.booking.dto.response.BookingItemSnapshot;
+import com.example.house_moving_service.modules.booking.dto.response.BookingRouteResponse;
+import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
+import com.example.house_moving_service.modules.booking.entity.Booking;
+import com.example.house_moving_service.modules.booking.enums.BookingStatus;
+import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
+import com.example.house_moving_service.modules.identity.entity.Staff;
+import com.example.house_moving_service.modules.quotation.dto.request.DraftItemCommand;
+import com.example.house_moving_service.modules.quotation.dto.request.DraftItemSeed;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationDraftDto;
+import com.example.house_moving_service.modules.quotation.dto.response.QuotationItemDto;
+import com.example.house_moving_service.modules.quotation.service.QuotationDraftService;
+import com.example.house_moving_service.modules.survey.config.SurveyClockConfig;
+import com.example.house_moving_service.modules.survey.config.SurveyProperties;
+import com.example.house_moving_service.modules.survey.entity.SurveyTimeSlot;
+import com.example.house_moving_service.modules.survey.dto.request.CompleteSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.FailSurveyRequest;
+import com.example.house_moving_service.modules.survey.dto.request.LocationAccessRequest;
+import com.example.house_moving_service.modules.survey.dto.request.RouteAccessRequest;
+import com.example.house_moving_service.modules.survey.dto.request.SurveyItemRequest;
+import com.example.house_moving_service.modules.survey.dto.response.FieldSurveyResponse;
+import com.example.house_moving_service.modules.survey.entity.BookingSurvey;
+import com.example.house_moving_service.modules.survey.enums.SurveyMethod;
+import com.example.house_moving_service.modules.survey.enums.SurveyStatus;
+import com.example.house_moving_service.modules.survey.mapper.SurveyMapper;
+import com.example.house_moving_service.modules.survey.repository.BookingSurveyRepository;
+import com.example.house_moving_service.modules.survey.service.SurveyManagementService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZonedDateTime;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class FieldSurveyServiceTest {
+
+    private static final long MOVER_ID = 8L;
+    private static final long OTHER_MOVER_ID = 9L;
+    private static final int SURVEY_ID = 40;
+    private static final int BOOKING_ID = 7;
+    private static final LocalDate TODAY = LocalDate.of(2026, 11, 2);
+    private static final Clock CLOCK = Clock.fixed(
+            ZonedDateTime.of(TODAY, LocalTime.of(9, 0), SurveyClockConfig.BUSINESS_ZONE).toInstant(),
+            SurveyClockConfig.BUSINESS_ZONE);
+
+    @Mock
+    private BookingSurveyRepository bookingSurveyRepository;
+    @Mock
+    private BookingWorkflowService bookingWorkflowService;
+    @Mock
+    private QuotationDraftService quotationDraftService;
+    @Mock
+    private SurveyManagementService surveyManagementService;
+
+    private FieldSurveyServiceImpl service;
+    private SurveyProperties surveyProperties;
+
+    @BeforeEach
+    void setUp() {
+        surveyProperties = new SurveyProperties();
+        service = new FieldSurveyServiceImpl(bookingSurveyRepository, bookingWorkflowService, quotationDraftService,
+                surveyManagementService, new SurveyMapper(), surveyProperties, CLOCK);
+    }
+
+    private static BookingSurvey survey(SurveyStatus status, Long staffId) {
+        return BookingSurvey.builder()
+                .id(SURVEY_ID)
+                .booking(Booking.builder().id(BOOKING_ID).bookingCode("BK-0007").build())
+                .surveyMethod(SurveyMethod.ONSITE).status(status).surveyDate(TODAY)
+                .surveyStaff(staffId != null ? Staff.builder().id(staffId).build() : null)
+                .build();
+    }
+
+    private static void assertError(Runnable call, ErrorCode expected) {
+        assertThatThrownBy(call::run)
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", expected);
+    }
+
+    // ---------- getMySurveys ----------
+
+    @Test
+    @DisplayName("getMySurveys: không truyền ngày → hôm nay đến 7 ngày sau, mọi trạng thái, chỉ lịch của người gọi")
+    void testGetMySurveys_Defaults() {
+        when(bookingSurveyRepository.findByStaffAndDateRange(MOVER_ID, TODAY, TODAY.plusDays(7), EnumSet.allOf(SurveyStatus.class)))
+                .thenReturn(List.of(survey(SurveyStatus.CONFIRMED, MOVER_ID)));
+
+        assertThat(service.getMySurveys(MOVER_ID, null, null, null))
+                .singleElement()
+                .satisfies(s -> assertThat(s.getBookingCode()).isEqualTo("BK-0007"));
+    }
+
+    @Test
+    @DisplayName("getMySurveys: chỉ truyền from → to = from + 7; lọc theo một trạng thái")
+    void testGetMySurveys_FromAndStatus() {
+        LocalDate from = TODAY.plusDays(3);
+        when(bookingSurveyRepository.findByStaffAndDateRange(MOVER_ID, from, from.plusDays(7), EnumSet.of(SurveyStatus.COMPLETED)))
+                .thenReturn(List.of());
+
+        assertThat(service.getMySurveys(MOVER_ID, from, null, SurveyStatus.COMPLETED)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getMySurveys: to trước from → ERR_INVALID_INPUT; khoảng hơn 31 ngày → ERR_INVALID_INPUT")
+    void testGetMySurveys_InvalidRange() {
+        assertError(() -> service.getMySurveys(MOVER_ID, TODAY, TODAY.minusDays(1), null), ErrorCode.ERR_INVALID_INPUT);
+        assertError(() -> service.getMySurveys(MOVER_ID, TODAY, TODAY.plusDays(32), null), ErrorCode.ERR_INVALID_INPUT);
+        verifyNoInteractions(bookingSurveyRepository);
+    }
+
+    @Test
+    @DisplayName("getMySurveys: đúng 31 ngày vẫn được")
+    void testGetMySurveys_MaxRangeAllowed() {
+        when(bookingSurveyRepository.findByStaffAndDateRange(any(), any(), any(), any())).thenReturn(List.of());
+
+        assertThat(service.getMySurveys(MOVER_ID, TODAY, TODAY.plusDays(31), null)).isEmpty();
+    }
+
+    // ---------- getMySurvey ----------
+
+    private void givenBookingData() {
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(BookingSnapshot.builder()
+                .id(BOOKING_ID).bookingCode("BK-0007").contactName("Nguyễn Văn A").contactPhone("0901234567")
+                .desiredStartAt(TODAY.plusDays(6).atTime(8, 0)).note("Gọi trước 30 phút").build());
+        when(bookingWorkflowService.getRoute(BOOKING_ID))
+                .thenReturn(BookingRouteResponse.builder().pickupAddress("12 Lê Lợi, Q1").build());
+        when(bookingWorkflowService.getItems(BOOKING_ID))
+                .thenReturn(List.of(BookingItemSnapshot.builder().id(1).itemName("Tủ lạnh").quantity(1).build()));
+    }
+
+    @Test
+    @DisplayName("getMySurvey: lịch CONFIRMED của mình → có liên hệ, tuyến đường, đồ khách khai; chưa có bản nháp")
+    void testGetMySurvey_Confirmed_NoDraft() {
+        when(bookingSurveyRepository.findById(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.CONFIRMED, MOVER_ID)));
+        givenBookingData();
+
+        FieldSurveyResponse result = service.getMySurvey(SURVEY_ID, MOVER_ID);
+
+        assertThat(result.getBooking().getContactPhone()).isEqualTo("0901234567");
+        assertThat(result.getBooking().getNote()).isEqualTo("Gọi trước 30 phút");
+        assertThat(result.getRoute().getPickupAddress()).isEqualTo("12 Lê Lợi, Q1");
+        assertThat(result.getDeclaredItems()).extracting(BookingItemSnapshot::itemName).containsExactly("Tủ lạnh");
+        assertThat(result.getDraftItems()).isNull();
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("getMySurvey: lịch IN_PROGRESS mới nhất → có đồ đạc trên bản nháp")
+    void testGetMySurvey_InProgress_WithDraft() {
+        BookingSurvey inProgress = survey(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        when(bookingSurveyRepository.findById(SURVEY_ID)).thenReturn(Optional.of(inProgress));
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(inProgress));
+        givenBookingData();
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.of(QuotationDraftDto.builder().id(30).build()));
+        when(quotationDraftService.listItems(30)).thenReturn(List.of(
+                QuotationItemDto.builder().id(1).itemName("Tủ lạnh").build(),
+                QuotationItemDto.builder().id(2).itemName("Sofa").build()));
+
+        FieldSurveyResponse result = service.getMySurvey(SURVEY_ID, MOVER_ID);
+
+        assertThat(result.getDraftItems()).extracting(QuotationItemDto::itemName).containsExactly("Tủ lạnh", "Sofa");
+    }
+
+    @Test
+    @DisplayName("getMySurvey: lịch COMPLETED nhưng không phải lần mới nhất → không hiện bản nháp của lần sau")
+    void testGetMySurvey_CompletedNotLatest_NoDraft() {
+        when(bookingSurveyRepository.findById(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.COMPLETED, MOVER_ID)));
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID))
+                .thenReturn(Optional.of(BookingSurvey.builder().id(99).build()));
+        givenBookingData();
+
+        assertThat(service.getMySurvey(SURVEY_ID, MOVER_ID).getDraftItems()).isNull();
+        verify(quotationDraftService, never()).findCurrentDraft(any());
+    }
+
+    @Test
+    @DisplayName("getMySurvey: lịch của MOVER khác / chưa phân công → ERR_SURVEY_FORBIDDEN, không lộ dữ liệu đơn")
+    void testGetMySurvey_NotOwner() {
+        when(bookingSurveyRepository.findById(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.CONFIRMED, OTHER_MOVER_ID)));
+        assertError(() -> service.getMySurvey(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+
+        when(bookingSurveyRepository.findById(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.PENDING, null)));
+        assertError(() -> service.getMySurvey(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+
+        verifyNoInteractions(bookingWorkflowService, quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("getMySurvey: không tồn tại → ERR_SURVEY_NOT_FOUND")
+    void testGetMySurvey_NotFound() {
+        when(bookingSurveyRepository.findById(99)).thenReturn(Optional.empty());
+
+        assertError(() -> service.getMySurvey(99, MOVER_ID), ErrorCode.ERR_SURVEY_NOT_FOUND);
+    }
+
+    // ---------- start (bây giờ = 2026-11-02 09:00, cho phép sớm 60 phút) ----------
+
+    private BookingSurvey givenConfirmedSurveyAt(LocalDate date, String slotStart, Long staffId) {
+        BookingSurvey s = survey(SurveyStatus.CONFIRMED, staffId);
+        s.setSurveyDate(date);
+        s.setTimeSlot(SurveyTimeSlot.builder().id(1)
+                .startTime(LocalTime.parse(slotStart)).endTime(LocalTime.parse(slotStart).plusHours(2)).build());
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        return s;
+    }
+
+    private void givenBookingStatus(BookingStatus status) {
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID))
+                .thenReturn(BookingSnapshot.builder().id(BOOKING_ID).bookingCode("BK-0007").status(status).build());
+    }
+
+    // Phần dựng response sau khi bắt đầu: tuyến đường, đồ khách khai, bản nháp vừa mở
+    private void givenResponseData(BookingSurvey s) {
+        when(bookingWorkflowService.getRoute(BOOKING_ID)).thenReturn(BookingRouteResponse.builder().build());
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of(
+                BookingItemSnapshot.builder().id(11).itemName("Tủ lạnh").quantity(1)
+                        .estimatedVolumeM3(new BigDecimal("1.20")).isFragile(true).packingRequired(false)
+                        .disassemblyRequired(false).note("Hàng Samsung").build()));
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.of(QuotationDraftDto.builder().id(30).build()));
+        when(quotationDraftService.listItems(30)).thenReturn(List.of(QuotationItemDto.builder().id(1).itemName("Tủ lạnh").build()));
+    }
+
+    @Test
+    @DisplayName("start: đúng người, đúng ngày → IN_PROGRESS + actualStartAt; booking → SURVEYING; mở bản nháp với seed từ đồ khách khai")
+    void testStart_Success() {
+        BookingSurvey s = givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(s);
+
+        FieldSurveyResponse result = service.start(SURVEY_ID, MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+        assertThat(s.getActualStartAt()).isEqualTo(TODAY.atTime(9, 0));
+        verify(bookingSurveyRepository).saveAndFlush(s);
+        verify(bookingWorkflowService).changeStatus(BOOKING_ID, EnumSet.of(BookingStatus.PENDING, BookingStatus.PENDING_SURVEY),
+                BookingStatus.SURVEYING, MOVER_ID, "Bắt đầu khảo sát (lịch #40)");
+        verify(quotationDraftService).openDraftForSurvey(BOOKING_ID, SURVEY_ID, MOVER_ID, List.of(new DraftItemSeed(
+                11, "Tủ lạnh", 1, new BigDecimal("1.20"), true, false, false, "Hàng Samsung")));
+        assertThat(result.getDraftItems()).extracting(QuotationItemDto::itemName).containsExactly("Tủ lạnh");
+    }
+
+    @Test
+    @DisplayName("start: sớm đúng 60 phút (khung 10:00) → được; sớm 61 phút (khung 10:01) → ERR_SURVEY_INVALID_DATE")
+    void testStart_EarlyLimit() {
+        BookingSurvey ok = givenConfirmedSurveyAt(TODAY, "10:00", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(ok);
+        service.start(SURVEY_ID, MOVER_ID);
+        assertThat(ok.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+
+        givenConfirmedSurveyAt(TODAY, "10:01", MOVER_ID);
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+    }
+
+    @Test
+    @DisplayName("start: cấu hình 0 phút → khung 09:30 lúc 09:00 bị coi là quá sớm")
+    void testStart_ConfigZeroMinutes() {
+        surveyProperties.setEarlyStartMinutes(0);
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+    }
+
+    @Test
+    @DisplayName("start: bắt đầu muộn 2 tiếng (khung 07:00) → vẫn được")
+    void testStart_LateAllowed() {
+        BookingSurvey s = givenConfirmedSurveyAt(TODAY, "07:00", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        givenResponseData(s);
+
+        service.start(SURVEY_ID, MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+    }
+
+    @Test
+    @DisplayName("start: khác ngày khảo sát (hôm qua / ngày mai) → ERR_SURVEY_INVALID_DATE, không đổi gì")
+    void testStart_WrongDay() {
+        for (LocalDate day : List.of(TODAY.minusDays(1), TODAY.plusDays(1))) {
+            BookingSurvey s = givenConfirmedSurveyAt(day, "08:00", MOVER_ID);
+            givenBookingStatus(BookingStatus.PENDING_SURVEY);
+
+            assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_DATE);
+            assertThat(s.getStatus()).isEqualTo(SurveyStatus.CONFIRMED);
+        }
+        verify(quotationDraftService, never()).openDraftForSurvey(any(), any(), any(), anyList());
+    }
+
+    @Test
+    @DisplayName("start: lịch của MOVER khác → ERR_SURVEY_FORBIDDEN")
+    void testStart_NotOwner() {
+        givenConfirmedSurveyAt(TODAY, "09:30", OTHER_MOVER_ID);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+        verifyNoInteractions(bookingWorkflowService, quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("start: lịch PENDING / IN_PROGRESS / COMPLETED → ERR_SURVEY_INVALID_STATUS")
+    void testStart_InvalidStatus() {
+        for (SurveyStatus status : new SurveyStatus[]{SurveyStatus.PENDING, SurveyStatus.IN_PROGRESS, SurveyStatus.COMPLETED}) {
+            BookingSurvey s = givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+            s.setStatus(status);
+
+            assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        verifyNoInteractions(bookingWorkflowService, quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("start: đơn đã hủy → ERR_SURVEY_BOOKING_INVALID_STATUS")
+    void testStart_BookingCancelled() {
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.CANCELLED);
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_SURVEY_BOOKING_INVALID_STATUS);
+    }
+
+    @Test
+    @DisplayName("start: mở bản nháp lỗi (vd. đã có báo giá được chấp nhận) → lỗi lan ra để transaction hoàn tác")
+    void testStart_OpenDraftFails() {
+        givenConfirmedSurveyAt(TODAY, "09:30", MOVER_ID);
+        givenBookingStatus(BookingStatus.PENDING_SURVEY);
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of());
+        doThrow(new AppException(ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED))
+                .when(quotationDraftService).openDraftForSurvey(any(), any(), any(), anyList());
+
+        assertError(() -> service.start(SURVEY_ID, MOVER_ID), ErrorCode.ERR_QUOTATION_ALREADY_ACCEPTED);
+        verify(bookingWorkflowService, never()).getRoute(any());
+    }
+
+    // ---------- addItem / updateItem / deleteItem ----------
+
+    private void givenSurveyForEditing(SurveyStatus status, Long staffId) {
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(status, staffId)));
+    }
+
+    private void givenCurrentDraft(Integer draftId) {
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(draftId != null
+                ? Optional.of(QuotationDraftDto.builder().id(draftId).build())
+                : Optional.empty());
+    }
+
+    private static SurveyItemRequest sofa() {
+        return SurveyItemRequest.builder().itemName("  Sofa góc  ").quantity(1).unit("bộ")
+                .estimatedVolumeM3(new BigDecimal("2.50")).isFragile(null).packingRequired(true).note("Da thật").build();
+    }
+
+    @Test
+    @DisplayName("addItem: IN_PROGRESS → thêm vào bản nháp hiện tại; tên được trim, boolean null → false, không có giá")
+    void testAddItem_Success() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+        QuotationItemDto created = QuotationItemDto.builder().id(5).itemName("Sofa góc").build();
+        when(quotationDraftService.addItem(eq(30), any(DraftItemCommand.class))).thenReturn(created);
+
+        assertThat(service.addItem(SURVEY_ID, sofa(), MOVER_ID)).isSameAs(created);
+        verify(quotationDraftService).addItem(30, new DraftItemCommand(
+                "Sofa góc", 1, "bộ", new BigDecimal("2.50"), false, true, false, "Da thật"));
+    }
+
+    @Test
+    @DisplayName("updateItem / deleteItem: gọi quotation với đúng bản nháp và id dòng")
+    void testUpdateAndDeleteItem() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+
+        service.updateItem(SURVEY_ID, 5, sofa(), MOVER_ID);
+        service.deleteItem(SURVEY_ID, 6, MOVER_ID);
+
+        verify(quotationDraftService).updateItem(eq(30), eq(5), any(DraftItemCommand.class));
+        verify(quotationDraftService).deleteItem(30, 6);
+    }
+
+    @Test
+    @DisplayName("Sửa đồ khi lịch CONFIRMED / COMPLETED / RESURVEY_REQUIRED → ERR_SURVEY_INVALID_STATUS, không đụng bản nháp")
+    void testItems_InvalidStatus() {
+        for (SurveyStatus status : new SurveyStatus[]{SurveyStatus.CONFIRMED, SurveyStatus.COMPLETED, SurveyStatus.RESURVEY_REQUIRED}) {
+            givenSurveyForEditing(status, MOVER_ID);
+
+            assertError(() -> service.addItem(SURVEY_ID, sofa(), MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        }
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("Sửa đồ khi không còn bản nháp (vd. đơn vừa bị hủy) → ERR_SURVEY_INVALID_STATUS")
+    void testItems_NoDraft() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(null);
+
+        assertError(() -> service.deleteItem(SURVEY_ID, 6, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+        verify(quotationDraftService, never()).deleteItem(any(), any());
+    }
+
+    @Test
+    @DisplayName("Sửa đồ trên lịch của MOVER khác → ERR_SURVEY_FORBIDDEN")
+    void testItems_NotOwner() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID);
+
+        assertError(() -> service.updateItem(SURVEY_ID, 5, sofa(), MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("Dòng không thuộc bản nháp → lỗi ERR_QUOTATION_ITEM_NOT_FOUND từ quotation lan ra")
+    void testItems_ItemNotInDraft() {
+        givenSurveyForEditing(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        givenCurrentDraft(30);
+        when(quotationDraftService.updateItem(eq(30), eq(999), any()))
+                .thenThrow(new AppException(ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND, 999));
+
+        assertError(() -> service.updateItem(SURVEY_ID, 999, sofa(), MOVER_ID), ErrorCode.ERR_QUOTATION_ITEM_NOT_FOUND);
+    }
+
+    // ---------- updateRouteAccess (bây giờ = 2026-11-02 09:00) ----------
+
+    private static final RouteAccessInfo OLD_PICKUP = new RouteAccessInfo(3, true, 20, null);
+    private static final RouteAccessInfo OLD_DROPOFF = new RouteAccessInfo(1, false, 0, null);
+
+    private static LocationAccessRequest access(int floor, boolean elevator, int walking, String extra) {
+        return LocationAccessRequest.builder().floorNumber(floor).hasElevator(elevator)
+                .walkingDistanceMeters(walking).extraNote(extra).build();
+    }
+
+    private static RouteAccessRequest routeRequest(LocationAccessRequest pickup, LocationAccessRequest dropoff) {
+        return RouteAccessRequest.builder().pickup(pickup).dropoff(dropoff).build();
+    }
+
+    // Lịch IN_PROGRESS của mình + tuyến đường hiện tại; phần dựng response sau khi cập nhật để mock trả rỗng
+    private BookingSurvey givenRouteEditing(RouteAccessInfo pickup, RouteAccessInfo dropoff) {
+        BookingSurvey s = survey(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        when(bookingWorkflowService.getRoute(BOOKING_ID))
+                .thenReturn(BookingRouteResponse.builder().pickupAccess(pickup).dropoffAccess(dropoff).build());
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(BookingSnapshot.builder().id(BOOKING_ID).build());
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of());
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.empty());
+        return s;
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: đổi cả hai đầu → ghi xuống booking; note ghi cũ → mới; extraNote được trim")
+    void testUpdateRouteAccess_BothChanged() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(5, false, 50, "  Hẻm xe máy  "), access(2, true, 10, " ")), MOVER_ID);
+
+        verify(bookingWorkflowService).updateRouteAccess(BOOKING_ID,
+                new RouteAccessInfo(5, false, 50, "Hẻm xe máy"), new RouteAccessInfo(2, true, 10, null));
+        assertThat(s.getNote()).isEqualTo("[2026-11-02 09:00][ROUTE_UPDATE][user#8] "
+                + "Lấy hàng: Tầng 3, có thang máy, hẻm 20m → Tầng 5, không thang máy, hẻm 50m (Hẻm xe máy); "
+                + "Giao hàng: Tầng 1, không thang máy, hẻm 0m → Tầng 2, có thang máy, hẻm 10m");
+        verify(bookingSurveyRepository).saveAndFlush(s);
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: chỉ đổi điểm lấy → điểm giao truyền null (giữ nguyên), note ghi '(không đổi)'")
+    void testUpdateRouteAccess_OnlyPickupChanged() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(4, true, 20, null), access(1, false, 0, null)), MOVER_ID);
+
+        verify(bookingWorkflowService).updateRouteAccess(eq(BOOKING_ID), eq(new RouteAccessInfo(4, true, 20, null)), isNull());
+        assertThat(s.getNote()).endsWith("; Giao hàng: (không đổi)");
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: giống hệt giá trị cũ → không ghi booking, không ghi note, không lưu")
+    void testUpdateRouteAccess_NoChange() {
+        BookingSurvey s = givenRouteEditing(OLD_PICKUP, OLD_DROPOFF);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(3, true, 20, null), access(1, false, 0, null)), MOVER_ID);
+
+        verify(bookingWorkflowService, never()).updateRouteAccess(any(), any(), any());
+        verify(bookingSurveyRepository, never()).saveAndFlush(any());
+        assertThat(s.getNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: ghi chú cũ khách gõ tự do / chưa có → note giữ lại nguyên văn chữ cũ / ghi '(chưa có)'")
+    void testUpdateRouteAccess_OldFreeTextAndEmpty() {
+        RouteAccessInfo freeText = new RouteAccessInfo(0, false, 0, "Nhà trong hẻm sâu, gọi trước");
+        BookingSurvey s = givenRouteEditing(freeText, RouteAccessInfo.EMPTY);
+
+        service.updateRouteAccess(SURVEY_ID, routeRequest(access(2, false, 80, null), access(1, false, 0, null)), MOVER_ID);
+
+        assertThat(s.getNote())
+                .contains("Lấy hàng: Tầng 0, không thang máy, hẻm 0m (Nhà trong hẻm sâu, gọi trước) → Tầng 2, không thang máy, hẻm 80m")
+                .contains("Giao hàng: (chưa có) → Tầng 1, không thang máy, hẻm 0m");
+    }
+
+    @Test
+    @DisplayName("updateRouteAccess: lịch không IN_PROGRESS → ERR_SURVEY_INVALID_STATUS; lịch người khác → ERR_SURVEY_FORBIDDEN")
+    void testUpdateRouteAccess_InvalidStatusAndNotOwner() {
+        RouteAccessRequest request = routeRequest(access(2, false, 0, null), access(1, false, 0, null));
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.CONFIRMED, MOVER_ID)));
+        assertError(() -> service.updateRouteAccess(SURVEY_ID, request, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID)));
+        assertError(() -> service.updateRouteAccess(SURVEY_ID, request, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+
+        verifyNoInteractions(bookingWorkflowService);
+    }
+
+    // ---------- complete / fail (bây giờ = 2026-11-02 09:00) ----------
+
+    // Lịch IN_PROGRESS của mình + bản nháp 30 + phần dựng response
+    private BookingSurvey givenInProgressWithDraft(long itemCount) {
+        BookingSurvey s = survey(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        s.setActualStartAt(TODAY.atTime(8, 10));
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.findCurrentDraft(BOOKING_ID)).thenReturn(Optional.of(QuotationDraftDto.builder().id(30).build()));
+        when(quotationDraftService.countItems(30)).thenReturn(itemCount);
+        return s;
+    }
+
+    private void givenResponseAfterFinish(BookingSurvey s) {
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(BookingSnapshot.builder().id(BOOKING_ID).build());
+        when(bookingWorkflowService.getRoute(BOOKING_ID)).thenReturn(BookingRouteResponse.builder().build());
+        when(bookingWorkflowService.getItems(BOOKING_ID)).thenReturn(List.of());
+    }
+
+    @Test
+    @DisplayName("complete: có đồ → COMPLETED + actualEndAt + note RESULT; booking không đổi trạng thái")
+    void testComplete_Success() {
+        BookingSurvey s = givenInProgressWithDraft(3);
+        givenResponseAfterFinish(s);
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.listItems(30)).thenReturn(List.of());
+
+        FieldSurveyResponse result = service.complete(SURVEY_ID,
+                CompleteSurveyRequest.builder().resultNote("  Cầu thang hẹp, phải tháo cửa tủ lạnh  ").build(), MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.COMPLETED);
+        assertThat(s.getActualEndAt()).isEqualTo(TODAY.atTime(9, 0));
+        assertThat(s.getNote()).isEqualTo("[2026-11-02 09:00][RESULT][user#8] Cầu thang hẹp, phải tháo cửa tủ lạnh");
+        assertThat(result.getStatus()).isEqualTo(SurveyStatus.COMPLETED);
+        verify(bookingSurveyRepository).saveAndFlush(s);
+        verify(bookingWorkflowService, never()).changeStatus(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("complete: không gửi body / nhận xét rỗng → vẫn hoàn tất, không ghi note")
+    void testComplete_NoNote() {
+        BookingSurvey s = givenInProgressWithDraft(1);
+        givenResponseAfterFinish(s);
+        when(bookingSurveyRepository.findTopByBookingIdOrderByCreatedAtDesc(BOOKING_ID)).thenReturn(Optional.of(s));
+        when(quotationDraftService.listItems(30)).thenReturn(List.of());
+
+        service.complete(SURVEY_ID, null, MOVER_ID);
+
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.COMPLETED);
+        assertThat(s.getNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("complete: bản nháp 0 món đồ → ERR_SURVEY_RESULT_INCOMPLETE, lịch giữ IN_PROGRESS")
+    void testComplete_NoItems() {
+        BookingSurvey s = givenInProgressWithDraft(0);
+
+        assertError(() -> service.complete(SURVEY_ID, null, MOVER_ID), ErrorCode.ERR_SURVEY_RESULT_INCOMPLETE);
+        assertThat(s.getStatus()).isEqualTo(SurveyStatus.IN_PROGRESS);
+        assertThat(s.getActualEndAt()).isNull();
+        verify(bookingSurveyRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("complete: lịch CONFIRMED (chưa bắt đầu) → ERR_SURVEY_INVALID_STATUS; lịch người khác → ERR_SURVEY_FORBIDDEN")
+    void testComplete_InvalidStatusAndNotOwner() {
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.CONFIRMED, MOVER_ID)));
+        assertError(() -> service.complete(SURVEY_ID, null, MOVER_ID), ErrorCode.ERR_SURVEY_INVALID_STATUS);
+
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID)));
+        assertError(() -> service.complete(SURVEY_ID, null, MOVER_ID), ErrorCode.ERR_SURVEY_FORBIDDEN);
+
+        verifyNoInteractions(quotationDraftService);
+    }
+
+    @Test
+    @DisplayName("fail: đúng người → khóa lịch rồi gọi SurveyManagementService.fail với đúng tham số")
+    void testFail_DelegatesWithLock() {
+        BookingSurvey s = survey(SurveyStatus.IN_PROGRESS, MOVER_ID);
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(s));
+        givenResponseAfterFinish(s);
+        FailSurveyRequest request = FailSurveyRequest.builder().reason("Khách vắng nhà").build();
+
+        service.fail(SURVEY_ID, request, MOVER_ID);
+
+        verify(surveyManagementService).fail(SURVEY_ID, request, MOVER_ID);
+        verify(bookingSurveyRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("fail: lịch của MOVER khác → ERR_SURVEY_FORBIDDEN, không gọi SurveyManagementService")
+    void testFail_NotOwner() {
+        when(bookingSurveyRepository.findByIdForUpdate(SURVEY_ID)).thenReturn(Optional.of(survey(SurveyStatus.IN_PROGRESS, OTHER_MOVER_ID)));
+
+        assertError(() -> service.fail(SURVEY_ID, FailSurveyRequest.builder().reason("x").build(), MOVER_ID),
+                ErrorCode.ERR_SURVEY_FORBIDDEN);
+        verifyNoInteractions(surveyManagementService);
+    }
+}

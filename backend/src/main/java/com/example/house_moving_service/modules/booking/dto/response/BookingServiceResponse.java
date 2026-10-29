@@ -31,5 +31,8 @@ public class BookingServiceResponse {
     private BigDecimal totalPrice;
 
     private String note;
+
+    // true: phụ phí hệ thống tự cộng khi tính giá (dịch vụ có mã), không phải dịch vụ khách chọn
+    private boolean autoApplied;
 }
 

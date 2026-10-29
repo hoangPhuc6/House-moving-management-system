@@ -4,6 +4,7 @@ import com.example.house_moving_service.modules.catalog.entity.Service;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Tra cứu entity Service dành cho module khác (pricing, booking) — tách khỏi ServiceCatalogService
@@ -16,4 +17,7 @@ public interface ServiceLookupService {
 
     /** Reference (proxy) tới dịch vụ để gắn quan hệ JPA, không truy vấn database ngay. */
     Service getReference(Integer id);
+
+    // Dịch vụ hệ thống tự cộng theo mã cố định (SystemServiceCode), kèm loại dịch vụ. Không có → Optional.empty()
+    Optional<Service> findByCode(String code);
 }

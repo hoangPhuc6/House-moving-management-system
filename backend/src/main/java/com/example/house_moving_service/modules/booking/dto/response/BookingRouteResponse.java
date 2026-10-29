@@ -1,6 +1,7 @@
 package com.example.house_moving_service.modules.booking.dto.response;
 
 import com.example.house_moving_service.common.enums.PropertyType;
+import com.example.house_moving_service.modules.booking.dto.RouteAccessInfo;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,5 +31,8 @@ public class BookingRouteResponse {
     private PropertyType dropoffPropertyType;
     private String dropoffNote;
     private BigDecimal estimatedDistanceKm;
+    // Tầng / thang máy / cự ly hẻm tách từ pickupNote, dropoffNote
+    private RouteAccessInfo pickupAccess;
+    private RouteAccessInfo dropoffAccess;
 }
 

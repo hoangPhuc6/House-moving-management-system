@@ -31,7 +31,7 @@ com.example.house_moving_service/
     ├── voucher/            # Mã giảm giá                                      (5 file)
     ├── pricing/            # Bộ tính giá: dịch vụ, phụ phí tự động, voucher   (18 file)
     ├── booking/            # Đơn hàng: khách đặt/hủy, nhân viên quản lý       (40 file)
-    ├── quotation/          # Báo giá: hiện mới có bản nháp mở từ khảo sát     (13 file)
+    ├── quotation/          # Báo giá: bản nháp khảo sát, báo giá chính thức, chấp thuận/từ chối, hết hạn
     └── survey/             # Khảo sát: lịch, phân công, hiện trường, tệp      (60 file)
 ```
 
@@ -64,7 +64,7 @@ Hiện trạng từng module:
 | voucher | entity, enums, repository, service(+impl) |
 | pricing | config, controller, dto, engine, helper, service(+impl) |
 | booking | controller/{client,management}, dto, entity, enums, event, mapper, repository(+specification), service(+impl), util |
-| quotation | dto, entity, enums, mapper, repository, service(+impl) — chưa có controller |
+| quotation | controller, dto, entity, enums, mapper, repository, scheduler, service(+impl) |
 | survey | config, controller/{admin,client,field,management}, dto, entity, enums, mapper, repository(+specification), service(+impl) |
 
 ---
@@ -110,6 +110,8 @@ Các controller hiện có:
 | `pricing/PricingController` | `/api/v1/pricing` | `@AuthenticatedUser` (trên method) |
 | `booking/client/BookingController` | `/api/v1/bookings` | `@CustomerOnly` |
 | `booking/management/ManagementBookingController` | `/api/v1/management/bookings` | `@StaffOnly` |
+| `quotation/client/QuotationController` | `/api/v1/bookings/{bookingId}/quotations` | `@CustomerOnly` |
+| `quotation/management/ManagementQuotationController` | `/api/v1/management/pricing/bookings/{id}/quote`, `.../quotations` | `@StaffOnly` |
 | `survey/admin/AdminSurveyTimeSlotController` | `/api/v1/admin/survey-time-slots` | `@AdminOnly` |
 | `survey/management/ManagementSurveyTimeSlotController` | `/api/v1/management/survey-time-slots` | `@StaffOnly` |
 | `survey/management/ManagementSurveyController` | `/api/v1/management/surveys`, `/api/v1/management/bookings/{id}/surveys` | `@StaffOnly` |
@@ -128,7 +130,7 @@ Annotation chỉ trả lời câu hỏi *"role này có được gọi API khôn
 
 ```
 survey ────► booking, quotation, identity, common.storage
-quotation ─► booking, identity
+quotation ─► booking, pricing, voucher, catalog, identity
 booking ──► pricing ──► catalog
    │           │
    │           └──────► voucher
@@ -157,7 +159,7 @@ Module khác thao tác dữ liệu của nhau qua các interface hẹp sau:
 |---|---|---|---|
 | catalog | `ServiceLookupService` | pricing, booking | `findAllByIds`, `findByCode`, `getReference` |
 | voucher | `VoucherService` | pricing, booking | `getValidVoucher`, `lockValidVoucher`, `getReference`, `increaseUsage`, `releaseUsage` |
-| pricing | `PricingService` | booking, (sau này) quotation | `calculatePrice` (giá tham khảo), `calculate(PricingInput)` (báo giá chính thức) |
+| pricing | `PricingService` | booking, quotation | `calculatePrice` (giá tham khảo), `calculate(PricingInput)` (báo giá chính thức) |
 | identity | `StaffLookupService` | survey | `findActiveByRole`, `findSummary`, `getReference`, `isActiveStaffWithRole` |
 | identity | `UserLookupService` | booking, quotation, survey | `getUserReference` |
 | booking | `BookingWorkflowService` | survey, quotation | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
@@ -207,7 +209,7 @@ Code mới **không được** thêm vào danh sách này.
 | Prefix | Class đọc | Nội dung |
 |---|---|---|
 | `app.jwt.*` | `JwtTokenProvider`, `RefreshTokenService` | Secret, thời hạn access token (mặc định 15 phút), refresh token (mặc định 1 ngày) |
-| `app.pricing.*` | `pricing/config/PricingProperties` | Lead time tối thiểu, số km đã gồm trong giá xe, hệ số đường vòng Haversine, mốc hẻm sâu (`deep-alley-meters`) |
+| `app.pricing.*` | `pricing/config/PricingProperties` | Lead time tối thiểu, số km đã gồm trong giá xe, hệ số đường vòng Haversine, mốc hẻm sâu (`deep-alley-meters`), số ngày hiệu lực báo giá (`quote-valid-days`), lịch quét báo giá quá hạn (`quote-expiry-cron`) |
 | `app.map.*` | `pricing/config/MapApiProperties` | Bật/tắt, nhà cung cấp (Goong), API key, timeout |
 | `app.survey.*` | `survey/config/SurveyProperties` | Số phút được bắt đầu sớm, số tệp đính kèm tối đa, số video tối đa |
 | `app.storage.*` | `common/storage/StorageProperties` | Nhà cung cấp (`MINIO` hoặc để trống), thời hạn link tải, thông tin MinIO |

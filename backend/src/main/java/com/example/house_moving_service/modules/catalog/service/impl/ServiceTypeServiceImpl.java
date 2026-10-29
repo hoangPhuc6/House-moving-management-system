@@ -6,6 +6,8 @@ import com.example.house_moving_service.modules.catalog.dto.response.ServiceType
 import com.example.house_moving_service.modules.catalog.entity.ServiceType;
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
+import com.example.house_moving_service.modules.catalog.repository.ServiceRepository;
 import com.example.house_moving_service.modules.catalog.repository.ServiceTypeRepository;
 import com.example.house_moving_service.modules.catalog.service.ServiceTypeService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.List;
 public class ServiceTypeServiceImpl implements ServiceTypeService {
 
     private final ServiceTypeRepository serviceTypeRepository;
+    private final ServiceRepository serviceRepository;
 
     @Override
     @Transactional
@@ -32,6 +35,7 @@ public class ServiceTypeServiceImpl implements ServiceTypeService {
                 .name(trimmedName)
                 .description(req.getDescription())
                 .isActive(req.getIsActive() != null ? req.getIsActive() : true)
+                .feeCategory(req.getFeeCategory() != null ? req.getFeeCategory() : FeeCategory.TRANSPORT)
                 .build();
 
         ServiceType saved = serviceTypeRepository.save(serviceType);
@@ -49,9 +53,21 @@ public class ServiceTypeServiceImpl implements ServiceTypeService {
             throw new AppException(ErrorCode.ERR_DUPLICATE_NAME, trimmedName);
         }
 
+        boolean deactivating = Boolean.TRUE.equals(serviceType.getIsActive()) && !Boolean.TRUE.equals(req.getIsActive());
+        boolean changingCategory = req.getFeeCategory() != null && req.getFeeCategory() != serviceType.getFeeCategory();
+        if (deactivating) {
+            ensureNoSystemService(serviceType, "ngừng kích hoạt loại dịch vụ đang chứa nó");
+        }
+        if (changingCategory) {
+            ensureNoSystemService(serviceType, "đổi nhóm phí của loại dịch vụ đang chứa nó");
+        }
+
         serviceType.setName(trimmedName);
         serviceType.setDescription(req.getDescription());
         serviceType.setIsActive(req.getIsActive());
+        if (req.getFeeCategory() != null) {
+            serviceType.setFeeCategory(req.getFeeCategory());
+        }
 
         ServiceType updated = serviceTypeRepository.save(serviceType);
         return mapToResponse(updated);
@@ -63,6 +79,9 @@ public class ServiceTypeServiceImpl implements ServiceTypeService {
         ServiceType serviceType = serviceTypeRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ERR_SERVICE_TYPE_NOT_FOUND, id));
 
+        if (Boolean.TRUE.equals(serviceType.getIsActive())) {
+            ensureNoSystemService(serviceType, "ngừng kích hoạt loại dịch vụ đang chứa nó");
+        }
         serviceType.setIsActive(!Boolean.TRUE.equals(serviceType.getIsActive()));
         ServiceType updated = serviceTypeRepository.save(serviceType);
         return mapToResponse(updated);
@@ -92,12 +111,20 @@ public class ServiceTypeServiceImpl implements ServiceTypeService {
                 .toList();
     }
 
+    // Tắt loại dịch vụ / đổi nhóm phí làm dịch vụ phụ phí bên trong ngừng tự cộng hoặc cộng sai nhóm
+    private void ensureNoSystemService(ServiceType serviceType, String action) {
+        if (serviceRepository.existsByServiceTypeIdAndCodeIsNotNull(serviceType.getId())) {
+            throw new AppException(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, action);
+        }
+    }
+
     private ServiceTypeResponse mapToResponse(ServiceType entity) {
         return ServiceTypeResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())
                 .description(entity.getDescription())
                 .isActive(entity.getIsActive())
+                .feeCategory(entity.getFeeCategory())
                 .build();
     }
 }

@@ -1,5 +1,6 @@
 package com.example.house_moving_service.modules.catalog.dto.request;
 
+import com.example.house_moving_service.modules.catalog.enums.FeeCategory;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -24,5 +25,8 @@ public class UpdateServiceTypeRequest {
 
     @NotNull(message = "Trạng thái kích hoạt không được để trống")
     private Boolean isActive;
+
+    // Không bắt buộc: để trống thì giữ nhóm phí hiện tại
+    private FeeCategory feeCategory;
 }
 

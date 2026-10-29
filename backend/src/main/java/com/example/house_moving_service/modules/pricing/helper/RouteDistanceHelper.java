@@ -7,6 +7,7 @@ import com.example.house_moving_service.modules.pricing.dto.request.RouteDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -29,13 +30,19 @@ public class RouteDistanceHelper {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
+    @Autowired
     public RouteDistanceHelper(PricingProperties pricingProperties, MapApiProperties mapApiProperties) {
+        this(pricingProperties, mapApiProperties, HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(2000))
+                .build());
+    }
+
+    // Cho test truyền HttpClient giả lập, không gọi mạng thật
+    RouteDistanceHelper(PricingProperties pricingProperties, MapApiProperties mapApiProperties, HttpClient httpClient) {
         this.pricingProperties = pricingProperties;
         this.mapApiProperties = mapApiProperties;
         this.objectMapper = new ObjectMapper();
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(2000))
-                .build();
+        this.httpClient = httpClient;
     }
 
     /**

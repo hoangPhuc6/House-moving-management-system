@@ -65,6 +65,10 @@ public class ServiceCatalogServiceImpl implements ServiceCatalogService {
             if (!Boolean.TRUE.equals(newServiceType.getIsActive())) {
                 throw new AppException(ErrorCode.ERR_SERVICE_TYPE_INACTIVE);
             }
+            // Dịch vụ hệ thống chỉ được chuyển sang loại cùng nhóm phí, để phụ phí không bị cộng sai cột
+            if (service.getCode() != null && newServiceType.getFeeCategory() != service.getServiceType().getFeeCategory()) {
+                throw new AppException(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, "chuyển sang loại dịch vụ khác nhóm phí");
+            }
             service.setServiceType(newServiceType);
         }
 
@@ -88,6 +92,9 @@ public class ServiceCatalogServiceImpl implements ServiceCatalogService {
                 .orElseThrow(() -> new AppException(ErrorCode.ERR_SERVICE_NOT_FOUND, id));
 
         ServiceStatus newStatus = req.toServiceStatus();
+        if (newStatus == ServiceStatus.INACTIVE && service.getCode() != null) {
+            throw new AppException(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, "ngừng kích hoạt");
+        }
         if (newStatus == ServiceStatus.ACTIVE && !Boolean.TRUE.equals(service.getServiceType().getIsActive())) {
             throw new AppException(ErrorCode.ERR_SERVICE_TYPE_INACTIVE);
         }
@@ -102,6 +109,9 @@ public class ServiceCatalogServiceImpl implements ServiceCatalogService {
     public void softDelete(Integer id) {
         Service service = serviceRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ERR_SERVICE_NOT_FOUND, id));
+        if (service.getCode() != null) {
+            throw new AppException(ErrorCode.ERR_SERVICE_SYSTEM_PROTECTED, "xóa");
+        }
 
         service.setStatus(ServiceStatus.INACTIVE);
         serviceRepository.save(service);
@@ -169,6 +179,7 @@ public class ServiceCatalogServiceImpl implements ServiceCatalogService {
                             .name(type.getName())
                             .description(type.getDescription())
                             .isActive(type.getIsActive())
+                            .feeCategory(type.getFeeCategory())
                             .services(activeServices)
                             .build();
                 })
@@ -184,6 +195,7 @@ public class ServiceCatalogServiceImpl implements ServiceCatalogService {
                 .description(entity.getDescription())
                 .basePrice(entity.getBasePrice())
                 .status(entity.getStatus())
+                .code(entity.getCode())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

@@ -1,0 +1,22 @@
+# Dịch vụ chạy kèm backend khi phát triển trên máy. Hiện chỉ có MinIO (lưu tệp đính kèm khảo sát).
+# Chạy:   docker compose up -d minio      (trong thư mục backend)
+# Dừng:   docker compose stop minio
+# Docker Compose tự đọc file .env cùng thư mục, nên tài khoản MinIO dùng chung biến với backend.
+services:
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: house-moving-minio
+    user: "0:0"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"   # API: backend gọi vào (MINIO_ENDPOINT)
+      - "9001:9001"   # Trang quản trị: http://localhost:9001
+    volumes:
+      - minio-data:/data  
+    restart: unless-stopped
+
+volumes:
+  minio-data:

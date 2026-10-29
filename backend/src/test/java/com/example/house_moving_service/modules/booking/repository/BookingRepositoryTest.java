@@ -338,5 +338,23 @@ class BookingRepositoryTest {
         assertThat(pendingPage.getTotalElements()).isEqualTo(1);
         assertThat(pendingPage.getContent().get(0).getBookingCode()).isEqualTo("BKG-STATUS-001");
     }
+
+    @Test
+    @DisplayName("findByIdForUpdate: Khóa dòng (SELECT ... FOR UPDATE) chạy được trên PostgreSQL và trả đúng đơn")
+    void testFindByIdForUpdate_ReturnsBooking() {
+        Booking booking = bookingRepository.save(Booking.builder()
+                .bookingCode("BKG-LOCK-001")
+                .customer(customer1)
+                .totalAmount(new BigDecimal("500000.00"))
+                .discountAmount(BigDecimal.ZERO)
+                .status(BookingStatus.PENDING_SURVEY)
+                .build());
+
+        Optional<Booking> locked = bookingRepository.findByIdForUpdate(booking.getId());
+
+        assertThat(locked).isPresent();
+        assertThat(locked.get().getBookingCode()).isEqualTo("BKG-LOCK-001");
+        assertThat(bookingRepository.findByIdForUpdate(-1)).isEmpty();
+    }
 }
 

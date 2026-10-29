@@ -24,6 +24,9 @@ public class ServiceResponse {
     private String description;
     private BigDecimal basePrice;
     private ServiceStatus status;
+
+    // Mã dịch vụ hệ thống tự cộng (phụ phí); null với dịch vụ thường
+    private String code;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

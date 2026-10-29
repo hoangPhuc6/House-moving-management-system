@@ -23,6 +23,10 @@ public class PricingCalculationResponse {
 
     private BigDecimal calculatedDistanceKm;
 
+    // Số km đã gồm trong giá xe và số km vượt bị tính phụ phí (làm tròn lên)
+    private BigDecimal includedKm;
+    private Integer chargeableExtraKm;
+
     @Builder.Default
     private String currency = "VND";
 

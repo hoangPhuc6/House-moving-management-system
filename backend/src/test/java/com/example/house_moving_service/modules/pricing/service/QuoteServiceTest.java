@@ -132,7 +132,7 @@ class QuoteServiceTest {
 
     private CreateQuoteRequest quoteRequest() {
         return CreateQuoteRequest.builder()
-                .serviceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(BigDecimal.valueOf(2)).build()))
+                .serviceItems(List.of(ServiceItemDto.builder().serviceId(1).quantity(2).build()))
                 .actualDistanceKm(BigDecimal.valueOf(12.5))
                 .note("Khảo sát thực tế phát sinh thêm tủ lạnh")
                 .build();
@@ -149,7 +149,7 @@ class QuoteServiceTest {
                 .breakdownItems(List.of(BreakdownItemDto.builder()
                         .serviceId(1)
                         .serviceName("Xe tải 1.5 tấn")
-                        .quantity(BigDecimal.valueOf(2))
+                        .quantity(2)
                         .unitPrice(subtotal.divide(BigDecimal.valueOf(2)))
                         .totalPrice(subtotal)
                         .build()))

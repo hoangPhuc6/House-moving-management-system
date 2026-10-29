@@ -43,7 +43,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -375,29 +374,23 @@ public class QuoteServiceImpl implements QuoteService {
     }
 
     private QuotationItem toQuotationItem(BreakdownItemDto breakdown) {
-        BigDecimal quantity = breakdown.getQuantity();
-        boolean fractional = quantity != null && quantity.stripTrailingZeros().scale() > 0;
-        String note = fractional
-                ? "Số lượng thực tế: " + quantity.stripTrailingZeros().toPlainString()
-                : breakdown.getNote();
-
         return QuotationItem.builder()
                 .itemName(breakdown.getServiceName() != null ? breakdown.getServiceName() : "Dịch vụ #" + breakdown.getServiceId())
-                .quantity(toIntQuantity(quantity))
+                .quantity(toIntQuantity(breakdown.getQuantity()))
                 .unitPrice(breakdown.getUnitPrice())
                 .lineAmount(breakdown.getTotalPrice())
-                .note(note)
+                .note(breakdown.getNote())
                 .build();
     }
 
     /**
-     * Cột quantity trong DB là số nguyên > 0: làm tròn số lượng thập phân và tối thiểu là 1.
+     * Cột quantity trong DB là số nguyên > 0: tối thiểu là 1.
      */
-    private int toIntQuantity(BigDecimal quantity) {
+    private int toIntQuantity(Integer quantity) {
         if (quantity == null) {
             return 1;
         }
-        return Math.max(1, quantity.setScale(0, RoundingMode.HALF_UP).intValue());
+        return Math.max(1, quantity);
     }
 
     private Booking findOwnedBooking(Integer bookingId, Long currentUserId) {

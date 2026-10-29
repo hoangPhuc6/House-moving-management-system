@@ -32,5 +32,10 @@ public class PricingProperties {
      * Cự ly đi bộ (mét) từ chỗ đậu xe vượt mốc này thì tính phụ phí hẻm sâu. Mặc định là 50 m.
      */
     private int deepAlleyMeters = 50;
+
+    /**
+     * Số ngày báo giá chính thức còn hiệu lực kể từ lúc lập. Mặc định là 7 ngày.
+     */
+    private int quoteValidDays = 7;
 }
 

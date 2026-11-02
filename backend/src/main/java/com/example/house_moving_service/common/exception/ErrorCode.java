@@ -51,6 +51,9 @@ public enum ErrorCode {
     ERR_QUOTATION_ALREADY_ACCEPTED(6004, HttpStatus.CONFLICT, "Đơn hàng đã có báo giá được chấp nhận, không thể khảo sát lại"),
     ERR_QUOTATION_INVALID_STATUS(6005, HttpStatus.BAD_REQUEST, "Trạng thái báo giá hiện tại không cho phép thực hiện thao tác này"),
     ERR_QUOTATION_EXPIRED(6006, HttpStatus.BAD_REQUEST, "Báo giá đã hết hạn, vui lòng chờ nhân viên lập báo giá mới"),
+    ERR_PAYMENT_NOT_FOUND(7001, HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch thanh toán với ID: %s"),
+    ERR_PAYMENT_INVALID_STATUS(7002, HttpStatus.BAD_REQUEST, "Trạng thái giao dịch không cho phép thực hiện thao tác này: %s"),
+    ERR_PAYMENT_ALREADY_PROCESSED(7003, HttpStatus.BAD_REQUEST, "Giao dịch thanh toán đã được xử lý trước đó"),
     ERR_INTERNAL_SERVER(9999, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống ngoài dự tính");
 
     private final int code;

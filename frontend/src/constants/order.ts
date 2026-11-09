@@ -34,6 +34,18 @@ export const PROCESS_STEPS: { title: string; short: string; detail: string; stat
   { title: 'Bàn giao & Đóng', short: 'Close', detail: 'Admin xác nhận thu hồi dụng cụ, công nợ = 0đ rồi mới đóng hồ sơ.', statuses: ['COMPLETED'] },
 ];
 
+/**
+ * Thanh tiến độ rút gọn 5 bước hiển thị cho khách hàng.
+ * Bước đang diễn ra = bước chứa trạng thái hiện tại; "Đặt lịch" luôn hoàn tất khi đơn đã tạo.
+ */
+export const CUSTOMER_PROCESS_STEPS: { title: string; statuses: OrderStatus[] }[] = [
+  { title: 'Đặt lịch', statuses: [] },
+  { title: 'Khảo sát', statuses: ['NEW_PENDING_SURVEY'] },
+  { title: 'Báo giá & Cọc', statuses: ['SURVEYED_PENDING_CONFIRM'] },
+  { title: 'Vận chuyển', statuses: ['QUOTED_PENDING_SCHEDULE', 'ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'] },
+  { title: 'Bàn giao', statuses: ['PENDING_PAYMENT_OR_CLAIM', 'COMPLETED'] },
+];
+
 export const HOUSE_TYPE_META: Record<HouseType, { label: string; hint: string }> = {
   GROUND_FLOOR: { label: 'Nhà mặt tiền', hint: 'Xe tải đỗ sát cửa' },
   APARTMENT: { label: 'Chung cư', hint: 'Có thang máy / thang bộ' },

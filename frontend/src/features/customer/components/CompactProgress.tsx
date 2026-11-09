@@ -1,6 +1,6 @@
 import { cx } from '@/components/ui';
-import { PROCESS_STEPS } from '@/constants/order';
-import { stepIndexOf } from '@/services/order';
+import { CUSTOMER_PROCESS_STEPS as PROCESS_STEPS } from '@/constants/order';
+import { customerStepIndexOf as stepIndexOf } from '@/services/order';
 import type { Order } from '@/types';
 
 export const CompactProgress = ({ order }: { order: Order }) => {
@@ -29,7 +29,7 @@ export const CompactProgress = ({ order }: { order: Order }) => {
       </div>
       {!cancelled && step && (
         <p className="mt-2 text-xs text-slate-500">
-          Bước <b className="text-slate-900 tabular-nums">{idx + 1}/7</b> ·{" "}
+          Bước <b className="text-slate-900 tabular-nums">{idx + 1}/{PROCESS_STEPS.length}</b> ·{" "}
           {step.title}
         </p>
       )}

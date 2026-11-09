@@ -188,6 +188,40 @@ export interface BookingItem {
   fragile: boolean;
 }
 
+/** Hình thức chuyển nhà khách chọn ở Bước 2. */
+export type ServiceMode = 'FULL_PACKAGE' | 'TRUCK_ONLY';
+
+/** Hình thức khảo sát khách mong muốn ở Bước 3 (Điều phối vẫn quyết định phương thức cuối cùng). */
+export type SurveyPreference = 'VIDEO_CALL' | 'ON_SITE' | 'PHOTOS_ONLY';
+
+export interface AddressDetail {
+  province: string;
+  district: string;
+  ward: string;
+  street: string;
+  /** Loại bất động sản & lối đi (nhãn hiển thị). */
+  propertyType: string;
+  /** Tầng / lầu bốc dỡ (nhãn hiển thị). */
+  floor: string;
+  note: string;
+}
+
+export interface BookingDetails {
+  from: AddressDetail;
+  to: AddressDetail;
+  serviceMode: ServiceMode;
+  /** Quy mô nhà ở (VD: "2 phòng ngủ"). */
+  homeScale: string;
+  surveyPreference: SurveyPreference;
+  /** Khung giờ khách muốn được liên hệ khảo sát. */
+  surveyContactSlot: string;
+  /** Khách chưa cố định giờ, cần tư vấn thêm. */
+  flexibleTime: boolean;
+  scheduleNote: string;
+  email: string;
+  customerNote: string;
+}
+
 export interface Order {
   id: string;
   customerName: string;
@@ -233,6 +267,8 @@ export interface Order {
   autoCancelDeadline: number | null;
   depositReservedUntil: string | null;
   createdAt: number;
+  /** Chi tiết khách khai báo khi đặt đơn (đơn tạo qua wizard). */
+  bookingDetails?: BookingDetails | null;
 }
 
 export type ClaimStatus = 'OPEN' | 'INVESTIGATING' | 'APPROVED' | 'REJECTED';
@@ -331,6 +367,8 @@ export interface NewOrderInput {
   items: BookingItem[];
   requestedServices: string[];
   referenceQuote: ReferenceQuote;
+  /** Thông tin chi tiết khách khai báo qua wizard đặt đơn 4 bước. */
+  details?: BookingDetails;
 }
 
 export type QuoteItemPatch = Pick<QuoteItem, 'id' | 'quantity' | 'unitPrice'>;

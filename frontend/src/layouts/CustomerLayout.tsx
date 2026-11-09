@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CircleHelp, CreditCard, History, Home, LogOut, MapPin, Plus, ShieldCheck } from 'lucide-react';
 import { CUSTOMER } from '@/features/customer/constants';
 import { isOpenOrder, needsAction, selectMyOrders } from '@/features/customer/utils';
@@ -11,6 +11,7 @@ import { useApp } from '@/services/store/AppStore';
 export const CustomerLayout = () => {
   const { state } = useApp();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const myOrders = selectMyOrders(state.orders, state.activeOrderId);
   const actionCount = myOrders.filter(isOpenOrder).filter(needsAction).length;
 
@@ -28,7 +29,7 @@ export const CustomerLayout = () => {
   ];
 
   return (
-    <MobileShell nav={nav} user={CUSTOMER} userMenuItems={accountMenu} notificationOrderIds={myOrders.map((o) => o.id)} maxWidth="max-w-5xl">
+    <MobileShell nav={nav} user={CUSTOMER} userMenuItems={accountMenu} notificationOrderIds={myOrders.map((o) => o.id)} maxWidth={pathname === ROUTES.customer.create ? 'max-w-6xl' : 'max-w-5xl'}>
       <Outlet />
     </MobileShell>
   );

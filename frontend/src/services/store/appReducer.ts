@@ -126,6 +126,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         autoCancelDeadline: null,
         depositReservedUntil: null,
         createdAt: Date.now(),
+        bookingDetails: action.input.details ?? null,
       };
       return toast({ ...state, activeOrderId: id, orders: [order, ...state.orders] }, 'success', `Đã gửi yêu cầu ${id}. Báo giá tham khảo đã sẵn sàng; báo giá chính thức sẽ gửi sau khi khảo sát.`);
     }

@@ -1,10 +1,10 @@
 import { Check } from 'lucide-react';
 import { cx } from '@/components/ui';
-import { PROCESS_STEPS } from '@/constants/order';
-import { stepIndexOf } from '@/services/order';
+import { CUSTOMER_PROCESS_STEPS as PROCESS_STEPS } from '@/constants/order';
+import { customerStepIndexOf as stepIndexOf } from '@/services/order';
 import type { OrderStatus } from '@/types';
 
-/** Stepper 7 bước ánh xạ từ OrderStatus. */
+/** Thanh tiến độ 5 bước của khách hàng, ánh xạ từ OrderStatus. */
 export const ProcessStepper = ({ status }: { status: OrderStatus }) => {
   const current = stepIndexOf(status);
   const cancelled = status === 'CANCELLED_EXPIRED';
@@ -17,7 +17,7 @@ export const ProcessStepper = ({ status }: { status: OrderStatus }) => {
         const isDone = !cancelled && (i < current || done);
         const isCurrent = !cancelled && !done && i === current;
         return (
-          <li key={step.title} className="flex min-w-[112px] flex-1 flex-col items-center text-center">
+          <li key={step.title} className="flex min-w-[96px] flex-1 flex-col items-center text-center">
             <div className="flex w-full items-center">
               <div className={cx('h-0.5 flex-1', i === 0 ? 'invisible' : isDone || isCurrent ? 'bg-brand' : 'bg-slate-200')} />
               <div

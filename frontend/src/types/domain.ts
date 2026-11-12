@@ -68,6 +68,8 @@ export interface QuoteItem {
   unit: string;
   unitPrice: number;
   quantity: number;
+  /** Diễn giải cách ra đơn giá / số lượng (VD: "Giá chuyến 900.000 đ (gồm 10 km) + 8 km vượt × 15.000 đ"). */
+  note?: string;
 }
 
 export type ActorRole = Exclude<RoleType, 'LANDING' | 'AUTH'> | 'SYSTEM';

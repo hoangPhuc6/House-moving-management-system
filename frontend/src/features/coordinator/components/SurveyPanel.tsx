@@ -15,6 +15,7 @@ import {
 import { Alert, Badge, Button, cx, Field, Input, NumberStepper, Select } from '@/components/ui';
 import { VEHICLE_PRICING } from '@/constants/pricing';
 import { surveyInputFromOrder } from '@/features/coordinator/utils';
+import { QuoteBreakdownTable } from '@/features/order/components/QuoteBreakdownTable';
 import {
   appointmentLabel,
   isMediaSubmitted,
@@ -197,15 +198,12 @@ const QuoteForm = ({ order, truckOnly, blocked }: { order: Order; truckOnly: boo
         {stepper('Độ sâu hẻm', 'alleyMeters', { max: 500, step: 50, suffix: 'm' })}
       </div>
 
+      <QuoteBreakdownTable items={items} reference={order.referenceQuote?.financialSummary.totalEstimated ?? null} />
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
         <div>
-          <p className="text-xs text-slate-500">Báo giá tự động · {items.length} hạng mục</p>
+          <p className="text-xs text-slate-500">Tổng gửi khách</p>
           <p className="text-xl font-bold tabular-nums">{formatVND(quoteSubtotal(items))}</p>
-          {order.referenceQuote && (
-            <p className="text-xs text-slate-500">
-              Báo giá tham khảo khách đã xem: <span className="tabular-nums">{formatVND(order.referenceQuote.financialSummary.totalEstimated)}</span>
-            </p>
-          )}
         </div>
         <div className="flex flex-col items-end gap-1">
           <Button

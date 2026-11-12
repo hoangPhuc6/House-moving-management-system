@@ -101,7 +101,10 @@ export const EditorTab = ({
                     <tr key={it.id}>
                       <td className="px-6 py-2.5">
                         <p className="font-medium text-slate-900">{it.name}</p>
-                        <p className="text-xs text-slate-400">{it.unit}</p>
+                        <p className="text-xs text-slate-400">
+                          {it.unit}
+                          {it.note && <> · {it.note}</>}
+                        </p>
                       </td>
                       <td className="px-2 py-2.5">
                         <input

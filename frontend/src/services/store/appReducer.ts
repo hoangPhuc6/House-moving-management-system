@@ -385,8 +385,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         const changes: string[] = [];
         if (p.quantity !== it.quantity) changes.push(`SL ${it.quantity} → ${p.quantity}`);
         if (p.unitPrice !== it.unitPrice) changes.push(`đơn giá ${formatVND(it.unitPrice)} → ${formatVND(p.unitPrice)}`);
-        if (changes.length) entries.push(audit('COORDINATOR', 'Chỉnh sửa báo giá', `${it.name}: ${changes.join(', ')}${action.note ? ` — ${action.note}` : ''}.`));
-        return { ...it, quantity: p.quantity, unitPrice: p.unitPrice };
+        if (!changes.length) return it;
+        entries.push(audit('COORDINATOR', 'Chỉnh sửa báo giá', `${it.name}: ${changes.join(', ')}${action.note ? ` — ${action.note}` : ''}.`));
+        // Cách tính tự động không còn đúng sau khi sửa tay — thay bằng diễn giải chỉnh sửa.
+        return { ...it, quantity: p.quantity, unitPrice: p.unitPrice, note: `Điều phối chỉnh ${changes.join(', ')}${action.note ? ` — ${action.note}` : ''}` };
       });
       const discountPercent = Math.min(100, Math.max(0, action.discountPercent));
       if (discountPercent !== o.discountPercent) entries.push(audit('COORDINATOR', 'Cập nhật giảm giá toàn đơn', `Giảm giá ${o.discountPercent}% → ${discountPercent}% trên toàn đơn${action.note ? ` — ${action.note}` : ''}.`));

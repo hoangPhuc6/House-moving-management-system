@@ -1,19 +1,4 @@
-import {
-  Armchair,
-  Bed,
-  Box,
-  Fan,
-  Monitor,
-  Package,
-  Refrigerator,
-  Shirt,
-  Truck,
-  Video,
-  WashingMachine,
-  Camera,
-  MapPinned,
-  type LucideIcon,
-} from 'lucide-react';
+import { Camera, MapPinned, Package, Truck, Video, type LucideIcon } from 'lucide-react';
 import type { AddressDetail, HouseType, ServiceMode, SurveyPreference } from '@/types';
 
 export const WIZARD_STEPS: { title: string; subtitle: string }[] = [
@@ -97,32 +82,13 @@ export const SERVICE_MODES: Record<ServiceMode, { title: string; badge: string; 
 /** Tên dịch vụ nhân công được tự thêm khi chọn gói trọn gói. */
 export const LABOR_SERVICE_KEYWORD = 'bốc xếp';
 
-export const HOME_SCALES: { label: string; hint: string; preset: Record<string, number> }[] = [
-  { label: 'Phòng trọ / Studio', hint: '≈ 20 – 30 m²', preset: { 'Tủ lạnh': 1, 'Máy giặt': 1, 'Giường ngủ': 1, 'Thùng carton đồ cá nhân': 8 } },
-  { label: '1 phòng ngủ', hint: '≈ 40 – 55 m²', preset: { 'Tủ lạnh': 1, 'Máy giặt': 1, 'Giường ngủ': 1, 'Tủ quần áo': 1, 'Tivi': 1, 'Thùng carton đồ cá nhân': 12 } },
-  { label: '2 phòng ngủ', hint: '≈ 65 – 80 m²', preset: { 'Tủ lạnh': 1, 'Máy giặt': 1, 'Giường ngủ': 2, 'Tủ quần áo': 1, 'Bộ sofa + bàn trà': 1, 'Tivi': 1, 'Thùng carton đồ cá nhân': 18 } },
-  { label: '3+ phòng ngủ', hint: '> 90 m²', preset: { 'Tủ lạnh': 1, 'Máy giặt': 1, 'Giường ngủ': 3, 'Tủ quần áo': 2, 'Bộ sofa + bàn trà': 1, 'Tivi': 2, 'Máy lạnh': 2, 'Thùng carton đồ cá nhân': 25 } },
-  { label: 'Nhà nguyên căn / Văn phòng', hint: 'Khối lượng lớn', preset: { 'Bàn làm việc': 6, 'Máy lạnh': 3, 'Tủ lạnh': 1, 'Bộ sofa + bàn trà': 1, 'Thùng carton đồ cá nhân': 30 } },
-];
-
-export interface InventoryPreset {
-  name: string;
-  hint: string;
-  volumeM3: number;
-  fragile: boolean;
-  icon: LucideIcon;
-}
-
-export const INVENTORY_PRESETS: InventoryPreset[] = [
-  { name: 'Tủ lạnh', hint: 'Cần giữ thẳng đứng, bọc kỹ', volumeM3: 1.2, fragile: false, icon: Refrigerator },
-  { name: 'Máy giặt', hint: 'Kèm tháo/lắp vòi cấp nước', volumeM3: 0.6, fragile: false, icon: WashingMachine },
-  { name: 'Giường ngủ', hint: 'Thường cần tháo lắp mộc', volumeM3: 1.5, fragile: false, icon: Bed },
-  { name: 'Tủ quần áo', hint: 'Gỗ công nghiệp / gỗ tự nhiên', volumeM3: 1.5, fragile: false, icon: Shirt },
-  { name: 'Bộ sofa + bàn trà', hint: 'Bọc màng PE & chống sốc', volumeM3: 2, fragile: false, icon: Armchair },
-  { name: 'Tivi', hint: 'Đồ dễ vỡ, cần thùng/xốp riêng', volumeM3: 0.3, fragile: true, icon: Monitor },
-  { name: 'Máy lạnh', hint: 'Cục nóng + cục lạnh', volumeM3: 0.3, fragile: false, icon: Fan },
-  { name: 'Bàn làm việc', hint: 'Bàn đơn, kèm ghế', volumeM3: 0.8, fragile: false, icon: Box },
-  { name: 'Thùng carton đồ cá nhân', hint: 'Dự kiến thùng tiêu chuẩn 60x40x40', volumeM3: 0.1, fragile: false, icon: Package },
+/** Quy mô nhà (gói trọn gói) → xe & số nhân viên bốc xếp ước lượng cho giá tham khảo; chốt lại sau khảo sát. */
+export const HOME_SCALES: { label: string; hint: string; vehicleTons: number; labor: number }[] = [
+  { label: 'Phòng trọ / Studio', hint: '≈ 20 – 30 m²', vehicleTons: 1.25, labor: 2 },
+  { label: '1 phòng ngủ', hint: '≈ 40 – 55 m²', vehicleTons: 1.25, labor: 2 },
+  { label: '2 phòng ngủ', hint: '≈ 65 – 80 m²', vehicleTons: 2, labor: 3 },
+  { label: '3+ phòng ngủ', hint: '> 90 m²', vehicleTons: 5, labor: 4 },
+  { label: 'Nhà nguyên căn / Văn phòng', hint: 'Khối lượng lớn', vehicleTons: 5, labor: 5 },
 ];
 
 export const SURVEY_PREFERENCES: Record<SurveyPreference, { title: string; badge?: string; desc: string; meta: string[]; icon: LucideIcon }> = {

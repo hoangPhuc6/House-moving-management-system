@@ -14,7 +14,7 @@ export const OrderDetail = ({ order }: { order: Order }) => {
   return (
     <div className={cx("space-y-8", stickyBar && "pb-20 md:pb-0")}>
       <OrderOverview order={order} />
-      {order.status !== "CANCELLED_EXPIRED" && <QuoteSection order={order} />}
+      {order.status !== "CANCELLED_EXPIRED" && order.quoteItems.length > 0 && <QuoteSection order={order} />}
       {PAYMENT_STATUSES.includes(order.status) && (
         <PaymentSection order={order} />
       )}

@@ -49,10 +49,10 @@ const NavButtons = ({ step, onNext, onBack, onSaveDraft }: WizardNavProps) => {
 };
 
 export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; nav: WizardNavProps; onEdit: (s: number) => void }) => {
-  const { draft, fromAddress, toAddress, routeReady, distanceKm, items, referenceQuote, requestedServices } = wizard;
+  const { draft, fromAddress, toAddress, routeReady, distanceKm, homeScale, referenceQuote, requestedServices } = wizard;
   const { step } = nav;
   const hasRoute = Boolean(draft.from.street.trim() || draft.to.street.trim());
-  const showEstimate = step >= 1 && routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? items.length > 0 : Boolean(draft.vehicleService));
+  const showEstimate = step >= 1 && routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? Boolean(homeScale) : Boolean(draft.vehicleService));
 
   return (
     <div className="space-y-4">

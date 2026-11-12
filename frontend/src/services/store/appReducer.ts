@@ -157,6 +157,47 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       return toast(next, 'info', `${o.id}: đã hủy yêu cầu khảo sát trực tiếp.`);
     }
 
+    case 'CUSTOMER_ADD_SURVEY_MEDIA': {
+      const o = findOrder(state, action.orderId);
+      if (!o || o.status !== 'NEW_PENDING_SURVEY' || action.names.length === 0) return state;
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog({ ...ord, customerPhotos: [...ord.customerPhotos, ...action.names] }, audit('CUSTOMER', 'Tải ảnh / video khảo sát', `Khách tải thêm ${action.names.length} tệp.`)),
+      );
+      return toast(next, 'success', `Đã tải lên ${action.names.length} tệp.`);
+    }
+
+    case 'CUSTOMER_SUBMIT_SURVEY_MEDIA': {
+      const o = findOrder(state, action.orderId);
+      if (!o || o.status !== 'NEW_PENDING_SURVEY') return state;
+      if (o.customerPhotos.length === 0) return toast(state, 'warning', 'Hãy tải lên ít nhất 1 ảnh hoặc video trước khi gửi.');
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog({ ...ord, surveyMediaSubmittedAt: Date.now() }, audit('CUSTOMER', 'Gửi ảnh / video khảo sát', `Khách gửi ${ord.customerPhotos.length} tệp để lập báo giá.`)),
+      );
+      return toast(next, 'success', 'Đã gửi ảnh / video cho chuyên viên. Báo giá sẽ được gửi sớm nhất.');
+    }
+
+    case 'CUSTOMER_UPDATE_SURVEY': {
+      const o = findOrder(state, action.orderId);
+      if (!o?.bookingDetails || o.status !== 'NEW_PENDING_SURVEY') return state;
+      const appointment = action.preference !== 'PHOTOS_ONLY';
+      const label = { VIDEO_CALL: 'Video call', ON_SITE: 'Trực tiếp tận nơi', PHOTOS_ONLY: 'Gửi ảnh / video' }[action.preference];
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          {
+            ...ord,
+            bookingDetails: ord.bookingDetails && {
+              ...ord.bookingDetails,
+              surveyPreference: action.preference,
+              surveyDate: appointment ? action.date : '',
+              surveyContactSlot: appointment ? action.slot : '',
+            },
+          },
+          audit('CUSTOMER', 'Cập nhật lịch khảo sát', appointment ? `${label} — ${action.date.split('-').reverse().join('/')} (${action.slot}).` : `Đổi sang ${label}.`),
+        ),
+      );
+      return toast(next, 'success', 'Đã cập nhật hình thức / lịch khảo sát.');
+    }
+
     case 'SUBMIT_SURVEY': {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');

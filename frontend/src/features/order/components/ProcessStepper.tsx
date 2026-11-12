@@ -4,8 +4,11 @@ import { CUSTOMER_PROCESS_STEPS as PROCESS_STEPS } from '@/constants/order';
 import { customerStepIndexOf as stepIndexOf } from '@/services/order';
 import type { OrderStatus } from '@/types';
 
+/** Tiêu đề thay thế & nhãn phụ cho từng bước (tùy chọn). */
+export type ProcessStepMeta = { title?: string; sub?: string | null };
+
 /** Thanh tiến độ 5 bước của khách hàng, ánh xạ từ OrderStatus. */
-export const ProcessStepper = ({ status }: { status: OrderStatus }) => {
+export const ProcessStepper = ({ status, meta }: { status: OrderStatus; meta?: ProcessStepMeta[] }) => {
   const current = stepIndexOf(status);
   const cancelled = status === 'CANCELLED_EXPIRED';
   const done = status === 'COMPLETED';
@@ -32,7 +35,10 @@ export const ProcessStepper = ({ status }: { status: OrderStatus }) => {
               </div>
               <div className={cx('h-0.5 flex-1', i === PROCESS_STEPS.length - 1 ? 'invisible' : isDone ? 'bg-brand' : 'bg-slate-200')} />
             </div>
-            <p className={cx('mt-2 text-xs font-semibold', isCurrent ? 'text-slate-900' : isDone ? 'text-slate-700' : 'text-slate-400')}>{step.title}</p>
+            <p className={cx('mt-2 text-xs font-semibold', isCurrent ? 'text-slate-900' : isDone ? 'text-slate-700' : 'text-slate-400')}>{meta?.[i]?.title ?? step.title}</p>
+            {meta?.[i]?.sub && (
+              <p className={cx('mt-0.5 text-[11px] leading-tight', isCurrent ? 'font-medium text-brand' : isDone ? 'text-slate-500' : 'text-slate-400')}>{meta[i]!.sub}</p>
+            )}
           </li>
         );
       })}

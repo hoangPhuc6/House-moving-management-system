@@ -32,7 +32,7 @@ export const pickCapacity = (items: BookingItem[], requested: ServiceItem[]): nu
 export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[]): ReferenceQuote => {
   const requested = catalog.filter((s) => input.requestedServices.includes(s.name));
   const distanceKm = estimateDistanceKm(input.fromAddress, input.toAddress);
-  const capacity = pickCapacity(input.items, requested);
+  const capacity = input.vehicleTons && VEHICLE_PRICING[input.vehicleTons] ? input.vehicleTons : pickCapacity(input.items, requested);
   const vehicle = VEHICLE_PRICING[capacity] ?? VEHICLE_PRICING[2]!;
   const breakdown: ReferenceBreakdownItem[] = [];
   const line = (serviceName: string, quantity: number, unitPrice: number, note: string | null, autoApplied: boolean) =>
@@ -56,7 +56,7 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
       if (s.group === 'LABOR' && input.laborQuantity !== undefined) {
         qty = input.laborQuantity;
         unitPrice = vehicle.laborPerPerson;
-        note = `Số người bạn chọn, đơn giá theo ${vehicle.label}`;
+        note = input.vehicleTons ? 'Ước lượng theo quy mô nhà, chốt sau khảo sát' : `Số người bạn chọn, đơn giá theo ${vehicle.label}`;
       } else if (s.group === 'LABOR') {
         qty = Math.max(2, Math.ceil(totalItems / 4));
         unitPrice = vehicle.laborPerPerson;

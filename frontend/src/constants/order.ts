@@ -83,8 +83,6 @@ export const CUSTOMER_STATUS_COPY: Record<OrderStatus, { title: string; desc: st
   CANCELLED_EXPIRED: { title: 'Đơn đã hủy', desc: 'Đơn hàng không còn hiệu lực.' },
 };
 
-/** Lời nhắn cho khách khi Điều phối đã chuyển đơn sang khảo sát trực tiếp. */
-export const ONSITE_SURVEY_CUSTOMER_COPY = { title: 'Sắp xếp khảo sát trực tiếp', desc: 'Nhân viên vận chuyển sẽ liên hệ hẹn giờ đến khảo sát tại nhà bạn.' };
 
 export const SURVEY_METHOD_META: Record<SurveyMethod, { label: string; short: string }> = {
   PHOTO: { label: 'Khảo sát qua ảnh (Điều phối thực hiện)', short: 'Qua ảnh' },

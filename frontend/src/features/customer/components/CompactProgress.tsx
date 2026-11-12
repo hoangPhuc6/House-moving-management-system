@@ -1,5 +1,6 @@
 import { cx } from '@/components/ui';
 import { CUSTOMER_PROCESS_STEPS as PROCESS_STEPS } from '@/constants/order';
+import { customerStepMeta } from '@/features/customer/surveyStage';
 import { customerStepIndexOf as stepIndexOf } from '@/services/order';
 import type { Order } from '@/types';
 
@@ -30,7 +31,7 @@ export const CompactProgress = ({ order }: { order: Order }) => {
       {!cancelled && step && (
         <p className="mt-2 text-xs text-slate-500">
           Bước <b className="text-slate-900 tabular-nums">{idx + 1}/{PROCESS_STEPS.length}</b> ·{" "}
-          {step.title}
+          {customerStepMeta(order)[Math.max(0, idx)]?.title ?? step.title}
         </p>
       )}
     </div>

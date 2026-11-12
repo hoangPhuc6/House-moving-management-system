@@ -1,6 +1,5 @@
 import {
   CalendarClock,
-  Camera,
   CheckCircle2,
   Headphones,
   type LucideIcon,
@@ -10,17 +9,15 @@ import {
   Star,
   Truck,
 } from 'lucide-react';
-import { Alert, Badge, Button, Card, Divider, KeyValue } from '@/components/ui';
-import {
-  CUSTOMER_STATUS_COPY,
-  HOUSE_TYPE_META,
-  ONSITE_SURVEY_CUSTOMER_COPY,
-} from '@/constants/order';
+import { Alert, Button, Card, Divider, KeyValue } from '@/components/ui';
+import { CUSTOMER_STATUS_COPY, HOUSE_TYPE_META } from '@/constants/order';
 import { CompactProgress } from '@/features/customer/components/CompactProgress';
 import { FieldAdjustmentBanner } from '@/features/customer/components/FieldAdjustmentBanner';
 import { LiveProgressCard } from '@/features/customer/components/LiveProgressCard';
 import { ScheduleCard } from '@/features/customer/components/ScheduleCard';
+import { SurveyStageCard } from '@/features/customer/components/SurveyStageCard';
 import { WaitTimerCard } from '@/features/customer/components/WaitTimerCard';
+import { customerStepMeta, surveyHeroCopy } from '@/features/customer/surveyStage';
 import { scrollToSection } from '@/features/customer/utils';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
@@ -33,10 +30,8 @@ import type { Order } from '@/types';
 
 export const OrderOverview = ({ order }: { order: Order }) => {
   const { state } = useApp();
-  const copy =
-    order.status === "NEW_PENDING_SURVEY" && order.onSiteSurveyRequest
-      ? ONSITE_SURVEY_CUSTOMER_COPY
-      : CUSTOMER_STATUS_COPY[order.status];
+  const inSurveyStage = order.status === "NEW_PENDING_SURVEY";
+  const copy = inSurveyStage ? surveyHeroCopy(order) : CUSTOMER_STATUS_COPY[order.status];
   const vehicle = state.resources.vehicles.find(
     (v) => v.id === order.vehicleId,
   );
@@ -120,7 +115,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
         <div className="space-y-4 p-5 sm:p-6">
           <CompactProgress order={order} />
           <div className="hidden md:block">
-            <ProcessStepper status={order.status} />
+            <ProcessStepper status={order.status} meta={customerStepMeta(order)} />
           </div>
           <div className="grid gap-4 md:grid-cols-[1fr_auto]">
             <div className="relative space-y-3 pl-6">
@@ -163,6 +158,8 @@ export const OrderOverview = ({ order }: { order: Order }) => {
         </div>
       </Card>
 
+      {inSurveyStage && <SurveyStageCard order={order} />}
+
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         {executing && (
           <LiveProgressCard
@@ -195,22 +192,6 @@ export const OrderOverview = ({ order }: { order: Order }) => {
           </div>
           <Divider className="my-4" />
           <OrderRequestDetails order={order} />
-          <Divider className="my-4" />
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <Camera className="size-4 text-slate-500" /> Ảnh đồ đạc đã gửi (
-            {order.customerPhotos.length})
-          </p>
-          {order.customerPhotos.length === 0 ? (
-            <p className="text-sm text-slate-500">Bạn chưa gửi ảnh nào.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {order.customerPhotos.map((n, i) => (
-                <Badge key={`${n}-${i}`} tone="neutral">
-                  {n}
-                </Badge>
-              ))}
-            </div>
-          )}
         </Card>
         <Card className="flex items-center gap-4">
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-orange-50 text-brand">

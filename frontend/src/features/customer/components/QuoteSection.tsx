@@ -2,15 +2,13 @@ import { useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
-  FileText,
   History,
   Lock,
   MessageSquare,
   Phone,
   QrCode,
 } from 'lucide-react';
-import { Button, Card, cx, EmptyState, Field, KeyValue, Modal, QrMock } from '@/components/ui';
-import { SectionTitle } from '@/features/customer/components/SectionTitle';
+import { Button, Card, cx, Field, KeyValue, Modal, QrMock } from '@/components/ui';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { formatTime, formatVND } from '@/services/format';
@@ -34,21 +32,6 @@ export const QuoteSection = ({ order }: { order: Order }) => {
           l.action === "Cập nhật giảm giá toàn đơn"),
     );
   const canDeposit = order.status === "SURVEYED_PENDING_CONFIRM";
-
-  if (order.quoteItems.length === 0) {
-    return (
-      <section id="quote-section" className="scroll-mt-24">
-        <SectionTitle>Báo giá</SectionTitle>
-        <Card>
-          <EmptyState icon={FileText} title="Báo giá đang được chuẩn bị">
-            {order.onSiteSurveyRequest
-              ? "Nhân viên sẽ gửi báo giá chi tiết ngay sau buổi khảo sát trực tiếp tại nhà bạn."
-              : "Điều phối viên đang lập báo giá chi tiết dựa trên ảnh bạn cung cấp."}
-          </EmptyState>
-        </Card>
-      </section>
-    );
-  }
 
   return (
     <section

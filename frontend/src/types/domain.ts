@@ -278,6 +278,8 @@ export interface Order {
   createdAt: number;
   /** Chi tiết khách khai báo khi đặt đơn (đơn tạo qua wizard). */
   bookingDetails?: BookingDetails | null;
+  /** Epoch ms — lúc khách bấm gửi ảnh / video khảo sát cho chuyên viên (null khi chưa gửi). */
+  surveyMediaSubmittedAt?: number | null;
 }
 
 export type ClaimStatus = 'OPEN' | 'INVESTIGATING' | 'APPROVED' | 'REJECTED';
@@ -390,6 +392,9 @@ export type AppAction =
   | { type: 'REQUEST_ONSITE_SURVEY'; orderId: string; note: string; surveyorId: string }
   | { type: 'CANCEL_ONSITE_SURVEY'; orderId: string }
   | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[]; by: 'COORDINATOR' | 'STAFF' }
+  | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; names: string[] }
+  | { type: 'CUSTOMER_SUBMIT_SURVEY_MEDIA'; orderId: string }
+  | { type: 'CUSTOMER_UPDATE_SURVEY'; orderId: string; preference: SurveyPreference; date: string; slot: string }
   | { type: 'PAY_DEPOSIT'; orderId: string }
   | { type: 'REPORT_FIELD_DISCREPANCY'; orderId: string }
   | { type: 'CONFIRM_FIELD_ADJUSTMENT'; orderId: string }

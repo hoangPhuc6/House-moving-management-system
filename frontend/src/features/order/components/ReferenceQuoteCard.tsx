@@ -10,7 +10,6 @@ export const ReferenceQuoteCard = ({ quote }: { quote: ReferenceQuote }) => {
   const tiles = [
     { label: 'Vận chuyển', value: fees.transportFee },
     { label: 'Dịch vụ đã chọn', value: fees.serviceFee },
-    { label: 'Phụ phí', value: fees.surchargeFee },
   ];
 
   return (
@@ -28,7 +27,7 @@ export const ReferenceQuoteCard = ({ quote }: { quote: ReferenceQuote }) => {
         <p className="mt-1 text-xs text-white/50">Đặt cọc khi xác nhận báo giá chính thức: <span className="font-semibold tabular-nums text-white/80">{money(fin.depositRequired)}</span></p>
       </div>
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-3">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
             <p className="text-xs text-slate-500">{t.label}</p>
@@ -41,7 +40,7 @@ export const ReferenceQuoteCard = ({ quote }: { quote: ReferenceQuote }) => {
         <Route className="mt-0.5 size-4 shrink-0 text-blue-600" />
         <p>
           Quãng đường ước tính <b className="tabular-nums">{quote.distanceKm} km</b>. Giá xe đã gồm <b className="tabular-nums">{quote.includedKm} km</b>
-          {quote.chargeableExtraKm > 0 ? <>, phần vượt <b className="tabular-nums">{quote.chargeableExtraKm} km</b> (làm tròn lên) được tính phụ phí.</> : <>, chuyến của bạn không phát sinh phụ phí vượt km.</>}
+          {quote.chargeableExtraKm > 0 ? <>, phần vượt <b className="tabular-nums">{quote.chargeableExtraKm} km</b> (làm tròn lên) được tính cước km vượt.</> : <>, chuyến của bạn không phát sinh cước km vượt.</>}
         </p>
       </div>
 

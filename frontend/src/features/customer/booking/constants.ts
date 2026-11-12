@@ -18,8 +18,7 @@ import type { AddressDetail, HouseType, ServiceMode, SurveyPreference } from '@/
 
 export const WIZARD_STEPS: { title: string; subtitle: string }[] = [
   { title: 'Địa điểm & Thời gian', subtitle: 'Xuất phát, đích & giờ dọn' },
-  { title: 'Dịch vụ', subtitle: 'Đóng gói & bốc xếp' },
-  { title: 'Đồ đạc & Khảo sát', subtitle: 'Danh mục tài sản' },
+  { title: 'Dịch vụ', subtitle: 'Gói dịch vụ & khảo sát' },
   { title: 'Xác nhận & Gửi', subtitle: 'Kiểm tra & gửi đơn' },
 ];
 
@@ -78,15 +77,19 @@ export const SERVICE_MODES: Record<ServiceMode, { title: string; badge: string; 
   FULL_PACKAGE: {
     title: 'Chuyển nhà trọn gói',
     badge: 'Khuyên dùng',
-    desc: 'Đội ngũ bốc xếp, tháo dỡ nội thất cơ bản, bọc đồ chống xước và bố trí xe tải chuyên dụng theo lộ trình riêng.',
-    perks: ['Đội bốc xếp chuyên nghiệp 2 – 4 nhân sự', 'Hỗ trợ tháo lắp giường tủ, bàn ghế thông dụng', 'Cam kết bồi thường 100% tài sản theo biên bản'],
+    desc: 'MoveFlow lo trọn từ A đến Z: chuyên viên đến tận nơi khảo sát, tư vấn phương án chuyển dọn; đội ngũ đóng gói, tháo lắp, vận chuyển và sắp xếp lại đồ đạc tại nhà mới.',
+    perks: [
+      'Chuyên viên khảo sát tận nơi',
+      'Tư vấn phương án & lộ trình phù hợp',
+      'Cam kết bồi thường 100% tài sản theo biên bản',
+    ],
     icon: Package,
   },
   TRUCK_ONLY: {
     title: 'Chỉ thuê xe tải vận chuyển',
     badge: 'Tiết kiệm',
-    desc: 'Dành cho gia chủ đã tự đóng gói và có người khiêng vác. Xe tới đúng giờ, tài xế hỗ trợ chằng buộc thùng hàng an toàn.',
-    perks: ['Xe thùng kín, bửng nâng hạ tải trọng linh hoạt', 'Tài xế thông thạo lộ trình, tối ưu thời gian', 'Giám sát định vị xe di chuyển theo thời gian thực'],
+    desc: 'Dành cho gia chủ đã tự đóng gói. Xe tới đúng giờ, tài xế hỗ trợ chằng buộc thùng hàng an toàn — có thể thuê thêm nhân viên bốc vác nếu cần.',
+    perks: ['Xe thùng kín, bửng nâng hạ tải trọng linh hoạt', 'Tài xế thông thạo lộ trình, tối ưu thời gian', 'Tùy chọn thuê thêm nhân viên bốc vác khi cần hỗ trợ'],
     icon: Truck,
   },
 };
@@ -124,32 +127,33 @@ export const INVENTORY_PRESETS: InventoryPreset[] = [
 
 export const SURVEY_PREFERENCES: Record<SurveyPreference, { title: string; badge?: string; desc: string; meta: string[]; icon: LucideIcon }> = {
   VIDEO_CALL: {
-    title: 'Khảo sát nhanh qua Video Call',
-    badge: 'Khuyên dùng',
-    desc: 'Tiết kiệm thời gian, chỉ mất khoảng 10 phút qua Zalo / Messenger. Điều phối viên đánh giá trực tiếp khối lượng đồ đạc.',
-    meta: ['~10 phút', 'Zalo / Messenger', 'Báo giá nhanh'],
+    title: 'Video Call',
+    badge: 'Nhanh',
+    desc: 'Khoảng 10 phút qua Zalo / Messenger, chuyên viên xem trực tiếp đồ đạc và lối đi để đánh giá khối lượng.',
+    meta: ['~10 phút', 'Zalo / Messenger'],
     icon: Video,
   },
   ON_SITE: {
-    title: 'Khảo sát trực tiếp tận nơi',
-    badge: 'Chuyên sâu',
-    desc: 'Nhân viên đến đo đạc, kiểm tra lối vào, hẻm xe và khối lượng hàng hóa lớn/phức tạp trong khoảng 30 phút.',
+    title: 'Trực tiếp tận nơi',
+    badge: 'Chính xác nhất',
+    desc: 'Chuyên viên đến đo đạc, kiểm tra lối vào, hẻm xe và tư vấn phương án cho đồ lớn / phức tạp trong khoảng 30 phút.',
     meta: ['~30 phút', 'Tại nhà bạn'],
     icon: MapPinned,
   },
   PHOTOS_ONLY: {
-    title: 'Tôi đã cung cấp đủ ảnh & danh mục',
-    desc: 'Không cần khảo sát thêm. Điều phối viên lập báo giá dựa trên danh mục chi tiết và hình ảnh đính kèm của bạn.',
-    meta: ['Không cần hẹn lịch'],
+    title: 'Gửi ảnh / video',
+    desc: 'Không cần hẹn lịch. Sau khi tạo đơn, bạn tải ảnh / video đồ đạc và lối đi ở trang chi tiết đơn để chuyên viên lập báo giá.',
+    meta: ['Không cần hẹn', 'Tải lên sau khi tạo đơn'],
     icon: Camera,
   },
 };
 
-export const SURVEY_CONTACT_SLOTS = ['08:30 - 11:30 (Sáng)', '13:30 - 16:30 (Chiều)', '17:30 - 19:30 (Tối)', 'Bất kỳ lúc nào'];
+/** Video Call / tận nơi cần hẹn lịch; PHOTOS_ONLY tải ảnh / video sau khi tạo đơn. */
+export const needsSurveyAppointment = (p: SurveyPreference): boolean => p !== 'PHOTOS_ONLY';
 
-export const MAX_PHOTOS = 10;
+export const SURVEY_TIME_SLOTS = ['08:30 - 11:30 (Sáng)', '13:30 - 16:30 (Chiều)', '17:30 - 19:30 (Tối)'];
 
-export const DRAFT_STORAGE_KEY = 'moveflow.booking-draft.v1';
+export const DRAFT_STORAGE_KEY = 'moveflow.booking-draft.v2';
 
 export const HOTLINE = { display: '1900 6868', tel: 'tel:19006868' };
 

@@ -1,21 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { CUSTOMER } from '@/features/customer/constants';
+import { VEHICLE_PRICING } from '@/constants/pricing';
 import { TIME_SLOTS } from '@/constants/resources';
+import { parseCapacityTons } from '@/services/dispatch';
 import { buildReferenceQuote, estimateDistanceKm } from '@/services/referenceQuote';
 import { useCatalog } from '@/services/store/CatalogStore';
 import type { AddressDetail, BookingDetails, BookingItem, HouseType, NewOrderInput, ServiceMode, SurveyPreference } from '@/types';
 import {
   DRAFT_STORAGE_KEY,
   EMAIL_REGEX,
+  HOME_SCALES,
   INVENTORY_PRESETS,
   LABOR_SERVICE_KEYWORD,
-  MAX_PHOTOS,
   PHONE_REGEX,
-  SURVEY_CONTACT_SLOTS,
+  SURVEY_TIME_SLOTS,
   emptyAddress,
   formatAddress,
   houseTypeOf,
   isAddressComplete,
+  needsSurveyAppointment,
 } from './constants';
 
 export interface WizardDraft {
@@ -26,13 +29,16 @@ export interface WizardDraft {
   flexibleTime: boolean;
   scheduleNote: string;
   serviceMode: ServiceMode;
-  /** Tên dịch vụ xe tải khách chọn; rỗng = để hệ thống đề xuất theo khối lượng. */
+  /** Gói chỉ thuê xe: tên dịch vụ xe tải khách chọn (bắt buộc). Gói trọn gói do chuyên viên đề xuất sau khảo sát. */
   vehicleService: string;
+  /** Gói chỉ thuê xe: số nhân viên bốc vác thuê thêm (0 = tự khiêng vác). */
+  laborCount: number;
   addOns: string[];
+  /** Gói trọn gói: quy mô nhà — preset của quy mô được dùng làm danh mục ước lượng cho giá tham khảo. */
   homeScale: string;
-  quantities: Record<string, number>;
-  customItems: BookingItem[];
   surveyPreference: SurveyPreference;
+  /** Ngày hẹn khảo sát (Video Call / tận nơi). */
+  surveyDate: string;
   surveyContactSlot: string;
   customerName: string;
   phone: string;
@@ -41,17 +47,14 @@ export interface WizardDraft {
   agreed: boolean;
 }
 
-export interface WizardPhoto {
-  name: string;
-  url: string;
-}
-
 export type StepErrors = Partial<Record<string, string>>;
 
 const toISODate = (d: Date): string => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
+
+export const todayISO = (): string => toISODate(new Date());
 
 export const minMoveDate = (): string => {
   const d = new Date();
@@ -71,12 +74,12 @@ const defaultDraft = (): WizardDraft => {
     scheduleNote: '',
     serviceMode: 'FULL_PACKAGE',
     vehicleService: '',
+    laborCount: 0,
     addOns: [],
     homeScale: '',
-    quantities: {},
-    customItems: [],
     surveyPreference: 'VIDEO_CALL',
-    surveyContactSlot: SURVEY_CONTACT_SLOTS[1]!,
+    surveyDate: minMoveDate(),
+    surveyContactSlot: SURVEY_TIME_SLOTS[1]!,
     customerName: CUSTOMER.name,
     phone: CUSTOMER.phone,
     email: '',
@@ -98,7 +101,7 @@ const readDraft = (): WizardDraft | null => {
 /** Phụ phí tính theo đầu khó khăn hơn trong hai đầu bốc / dỡ. */
 const HOUSE_SEVERITY: HouseType[] = ['GROUND_FLOOR', 'APARTMENT', 'DEEP_ALLEY'];
 
-export const validateStep = (draft: WizardDraft, step: number, itemCount: number): StepErrors => {
+export const validateStep = (draft: WizardDraft, step: number): StepErrors => {
   const e: StepErrors = {};
   if (step === 0) {
     (['from', 'to'] as const).forEach((side) => {
@@ -113,8 +116,17 @@ export const validateStep = (draft: WizardDraft, step: number, itemCount: number
     if (!draft.scheduledDate) e.scheduledDate = 'Chọn ngày chuyển nhà';
     else if (draft.scheduledDate < minMoveDate()) e.scheduledDate = 'Ngày chuyển phải từ ngày mai trở đi';
   }
-  if (step === 2 && itemCount === 0) e.items = 'Thêm ít nhất một món đồ hoặc chọn quy mô nhà để gợi ý danh mục';
-  if (step === 3) {
+  if (step === 1 && draft.serviceMode === 'TRUCK_ONLY' && !draft.vehicleService) e.vehicleService = 'Chọn loại xe cần thuê';
+  if (step === 1 && draft.serviceMode === 'FULL_PACKAGE') {
+    if (!HOME_SCALES.some((s) => s.label === draft.homeScale)) e.homeScale = 'Chọn quy mô nhà để ước lượng khối lượng';
+    if (needsSurveyAppointment(draft.surveyPreference)) {
+      if (!draft.surveyDate) e.surveyDate = 'Chọn ngày khảo sát';
+      else if (draft.surveyDate < todayISO()) e.surveyDate = 'Ngày khảo sát không được ở quá khứ';
+      else if (draft.scheduledDate && draft.surveyDate >= draft.scheduledDate) e.surveyDate = 'Ngày khảo sát phải trước ngày chuyển nhà';
+      if (!SURVEY_TIME_SLOTS.includes(draft.surveyContactSlot)) e.surveyContactSlot = 'Chọn khung giờ khảo sát';
+    }
+  }
+  if (step === 2) {
     if (!draft.customerName.trim()) e.customerName = 'Vui lòng nhập họ tên';
     if (!PHONE_REGEX.test(draft.phone.trim())) e.phone = 'Số điện thoại không hợp lệ';
     if (draft.email.trim() && !EMAIL_REGEX.test(draft.email.trim())) e.email = 'Email không hợp lệ';
@@ -127,19 +139,6 @@ export const useBookingWizard = () => {
   const { catalog } = useCatalog();
   const [draft, setDraft] = useState<WizardDraft>(() => readDraft() ?? defaultDraft());
   const [restored] = useState(() => readDraft() !== null);
-  const [photos, setPhotos] = useState<WizardPhoto[]>([]);
-
-  const photosRef = useRef(photos);
-  photosRef.current = photos;
-  // Chỉ thu hồi object URL khi rời trang; ảnh bị xóa lẻ được thu hồi trong removePhoto.
-  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
-
-  const addPhotos = (files: File[]) =>
-    setPhotos((arr) => [...arr, ...files.slice(0, Math.max(0, MAX_PHOTOS - arr.length)).map((f) => ({ name: f.name, url: URL.createObjectURL(f) }))]);
-  const removePhoto = (url: string) => {
-    URL.revokeObjectURL(url);
-    setPhotos((arr) => arr.filter((p) => p.url !== url));
-  };
 
   const update = useCallback(<K extends keyof WizardDraft>(key: K, value: WizardDraft[K]) => setDraft((d) => ({ ...d, [key]: value })), []);
   const updateAddress = useCallback(
@@ -149,19 +148,19 @@ export const useBookingWizard = () => {
 
   const activeServices = useMemo(() => catalog.services.filter((s) => s.active), [catalog.services]);
 
-  const items = useMemo<BookingItem[]>(
-    () => [
-      ...INVENTORY_PRESETS.filter((p) => (draft.quantities[p.name] ?? 0) > 0).map((p) => ({
-        id: `preset-${p.name}`,
-        name: p.name,
-        quantity: draft.quantities[p.name]!,
-        volumeM3: p.volumeM3,
-        fragile: p.fragile,
-      })),
-      ...draft.customItems,
-    ],
-    [draft.quantities, draft.customItems],
-  );
+  /** Danh mục ước lượng theo quy mô nhà; danh mục chính thức do nhân viên chốt khi khảo sát. */
+  const items = useMemo<BookingItem[]>(() => {
+    if (draft.serviceMode !== 'FULL_PACKAGE') return [];
+    const preset = HOME_SCALES.find((s) => s.label === draft.homeScale)?.preset ?? {};
+    return INVENTORY_PRESETS.filter((p) => (preset[p.name] ?? 0) > 0).map((p) => ({
+      id: `preset-${p.name}`,
+      name: p.name,
+      quantity: preset[p.name]!,
+      volumeM3: p.volumeM3,
+      fragile: p.fragile,
+    }));
+  }, [draft.serviceMode, draft.homeScale]);
+  const volumeM3 = items.reduce((s, i) => s + (i.volumeM3 ?? 0) * i.quantity, 0);
 
   const houseType = useMemo<HouseType>(() => {
     const a = HOUSE_SEVERITY.indexOf(houseTypeOf(draft.from.propertyType));
@@ -169,16 +168,32 @@ export const useBookingWizard = () => {
     return HOUSE_SEVERITY[Math.max(a, b)]!;
   }, [draft.from.propertyType, draft.to.propertyType]);
 
+  const laborService = useMemo(
+    () => activeServices.find((s) => s.group === 'LABOR' && s.name.toLowerCase().includes(LABOR_SERVICE_KEYWORD)) ?? null,
+    [activeServices],
+  );
+
   const requestedServices = useMemo(() => {
     const names: string[] = [];
-    if (draft.vehicleService) names.push(draft.vehicleService);
-    if (draft.serviceMode === 'FULL_PACKAGE') {
-      const labor = activeServices.find((s) => s.group === 'LABOR' && s.name.toLowerCase().includes(LABOR_SERVICE_KEYWORD));
-      if (labor) names.push(labor.name);
-    }
+    const truckOnly = draft.serviceMode === 'TRUCK_ONLY';
+    if (truckOnly && draft.vehicleService) names.push(draft.vehicleService);
+    if (laborService && (!truckOnly || draft.laborCount > 0)) names.push(laborService.name);
     draft.addOns.filter((n) => activeServices.some((s) => s.name === n)).forEach((n) => names.push(n));
     return names;
-  }, [draft.vehicleService, draft.serviceMode, draft.addOns, activeServices]);
+  }, [draft.vehicleService, draft.serviceMode, draft.laborCount, draft.addOns, activeServices, laborService]);
+
+  /** Bảng giá của xe khách chọn (gói chỉ thuê xe) — quyết định đơn giá & số bốc vác tối đa. */
+  const vehiclePricing = useMemo(() => {
+    if (draft.serviceMode !== 'TRUCK_ONLY' || !draft.vehicleService) return null;
+    const cap = parseCapacityTons(draft.vehicleService);
+    return cap !== null ? (VEHICLE_PRICING[cap] ?? null) : null;
+  }, [draft.serviceMode, draft.vehicleService]);
+
+  const selectVehicle = (name: string) => {
+    const cap = parseCapacityTons(name);
+    const max = cap !== null ? (VEHICLE_PRICING[cap]?.maxLabor ?? 0) : 0;
+    setDraft((d) => ({ ...d, vehicleService: name, laborCount: Math.min(d.laborCount, max) }));
+  };
 
   const fromAddress = formatAddress(draft.from);
   const toAddress = formatAddress(draft.to);
@@ -186,8 +201,12 @@ export const useBookingWizard = () => {
   const distanceKm = routeReady ? estimateDistanceKm(fromAddress, toAddress) : null;
 
   const referenceQuote = useMemo(
-    () => buildReferenceQuote({ fromAddress, toAddress, houseType, items, requestedServices }, catalog.services),
-    [fromAddress, toAddress, houseType, items, requestedServices, catalog.services],
+    () =>
+      buildReferenceQuote(
+        { fromAddress, toAddress, houseType, items, requestedServices, laborQuantity: draft.serviceMode === 'TRUCK_ONLY' ? draft.laborCount : undefined },
+        catalog.services,
+      ),
+    [fromAddress, toAddress, houseType, items, requestedServices, draft.serviceMode, draft.laborCount, catalog.services],
   );
 
   const saveDraft = (): boolean => {
@@ -210,18 +229,20 @@ export const useBookingWizard = () => {
   const resetDraft = () => {
     clearDraft();
     setDraft(defaultDraft());
-    photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
-    setPhotos([]);
   };
 
   const buildOrderInput = (): NewOrderInput => {
+    const fullPackage = draft.serviceMode === 'FULL_PACKAGE';
+    const appointment = fullPackage && needsSurveyAppointment(draft.surveyPreference);
     const details: BookingDetails = {
       from: draft.from,
       to: draft.to,
       serviceMode: draft.serviceMode,
-      homeScale: draft.homeScale,
-      surveyPreference: draft.surveyPreference,
-      surveyContactSlot: draft.surveyPreference === 'PHOTOS_ONLY' ? '' : draft.surveyContactSlot,
+      homeScale: fullPackage ? draft.homeScale : '',
+      surveyPreference: fullPackage ? draft.surveyPreference : null,
+      laborCount: fullPackage ? 0 : draft.laborCount,
+      surveyDate: appointment ? draft.surveyDate : '',
+      surveyContactSlot: appointment ? draft.surveyContactSlot : '',
       flexibleTime: draft.flexibleTime,
       scheduleNote: draft.scheduleNote.trim(),
       email: draft.email.trim(),
@@ -235,7 +256,7 @@ export const useBookingWizard = () => {
       houseType,
       scheduledDate: draft.scheduledDate,
       timeSlot: draft.timeSlot,
-      photoNames: photos.map((p) => p.name),
+      photoNames: [],
       items,
       requestedServices,
       referenceQuote,
@@ -248,12 +269,13 @@ export const useBookingWizard = () => {
     update,
     updateAddress,
     setDraft,
-    photos,
-    addPhotos,
-    removePhoto,
     restored,
     activeServices,
+    laborService,
+    vehiclePricing,
+    selectVehicle,
     items,
+    volumeM3,
     houseType,
     requestedServices,
     fromAddress,

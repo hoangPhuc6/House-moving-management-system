@@ -52,7 +52,7 @@ export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; 
   const { draft, fromAddress, toAddress, routeReady, distanceKm, items, referenceQuote, requestedServices } = wizard;
   const { step } = nav;
   const hasRoute = Boolean(draft.from.street.trim() || draft.to.street.trim());
-  const showEstimate = step >= 2 && routeReady && items.length > 0;
+  const showEstimate = step >= 1 && routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? items.length > 0 : Boolean(draft.vehicleService));
 
   return (
     <div className="space-y-4">
@@ -124,7 +124,6 @@ export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; 
           </p>
           <KeyValue label="Vận chuyển" value={formatVND(referenceQuote.categoryFees.transportFee)} />
           <KeyValue label="Dịch vụ" value={formatVND(referenceQuote.categoryFees.serviceFee)} />
-          <KeyValue label="Phụ phí" value={formatVND(referenceQuote.categoryFees.surchargeFee)} />
           <div className="flex items-center justify-between gap-3 rounded-xl bg-orange-50 px-3 py-2.5">
             <span className="text-sm font-semibold text-slate-900">Tạm tính</span>
             <span className="text-lg font-bold text-brand tabular-nums">{formatVND(referenceQuote.financialSummary.totalEstimated)}</span>

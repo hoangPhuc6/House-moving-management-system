@@ -4,7 +4,6 @@ import { ArrowLeft, ArrowRight, Bookmark, RotateCcw, Save, Send } from 'lucide-r
 import { Alert, Badge, Button, cx } from '@/components/ui';
 import { WIZARD_STEPS } from '@/features/customer/booking/constants';
 import { WizardStepper } from '@/features/customer/booking/parts';
-import { StepInventory } from '@/features/customer/booking/StepInventory';
 import { StepLocation } from '@/features/customer/booking/StepLocation';
 import { StepReview } from '@/features/customer/booking/StepReview';
 import { StepServices } from '@/features/customer/booking/StepServices';
@@ -16,14 +15,13 @@ import { useApp } from '@/services/store/AppStore';
 
 const STEP_HEADINGS = [
   { eyebrow: 'Quy trình tiếp nhận yêu cầu tiêu chuẩn', title: 'Tạo yêu cầu chuyển nhà', subtitle: 'Điền thông tin để chúng tôi tư vấn khảo sát tận nơi và gửi báo giá minh bạch, trọn gói phù hợp nhất với nhu cầu của bạn.' },
-  { eyebrow: 'Bước 2 • Tùy biến giải pháp chuyển dọn', title: 'Chọn dịch vụ hỗ trợ', subtitle: 'Lựa chọn các gói dịch vụ và tiện ích đi kèm phù hợp với khối lượng tài sản. Báo giá minh bạch được lập sau bước thống kê đồ đạc.' },
-  { eyebrow: 'Bước 3 • Thống kê tài sản', title: 'Đồ đạc & Yêu cầu khảo sát', subtitle: 'Cung cấp danh mục đồ đạc hoặc chọn hình thức khảo sát miễn phí để MoveFlow lập báo giá chính xác nhất.' },
-  { eyebrow: 'Bước 4 • Xác nhận', title: 'Kiểm tra thông tin & Gửi yêu cầu', subtitle: 'Vui lòng rà soát lại lộ trình, gói dịch vụ và danh mục đồ đạc trước khi chuyển tới bộ phận điều phối.' },
+  { eyebrow: 'Bước 2 • Tùy biến giải pháp chuyển dọn', title: 'Chọn dịch vụ', subtitle: 'Trọn gói: chuyên viên khảo sát và đề xuất xe, nhân sự. Chỉ thuê xe: chọn ngay loại xe và số nhân viên bốc vác.' },
+  { eyebrow: 'Bước 3 • Xác nhận', title: 'Kiểm tra thông tin & Gửi yêu cầu', subtitle: 'Vui lòng rà soát lại lộ trình, gói dịch vụ và hình thức khảo sát trước khi chuyển tới bộ phận điều phối.' },
 ];
 
 const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-/** Wizard đặt lịch chuyển nhà 4 bước: Địa điểm → Dịch vụ → Đồ đạc & Khảo sát → Xác nhận. */
+/** Wizard đặt lịch chuyển nhà 3 bước: Địa điểm → Dịch vụ & Khảo sát → Xác nhận. Danh mục đồ & ảnh được chốt ở giai đoạn khảo sát. */
 export const CreateRequest = () => {
   const { dispatch } = useApp();
   const navigate = useNavigate();
@@ -33,7 +31,7 @@ export const CreateRequest = () => {
   const [attempted, setAttempted] = useState<Set<number>>(() => new Set());
   const [showRestored, setShowRestored] = useState(wizard.restored);
 
-  const errorsFor = (s: number) => validateStep(wizard.draft, s, wizard.items.length);
+  const errorsFor = (s: number) => validateStep(wizard.draft, s);
   const errors = attempted.has(step) ? errorsFor(step) : {};
   const last = step === WIZARD_STEPS.length - 1;
   const heading = STEP_HEADINGS[step]!;
@@ -71,7 +69,7 @@ export const CreateRequest = () => {
   const saveDraft = () =>
     dispatch(
       wizard.saveDraft()
-        ? { type: 'PUSH_TOAST', tone: 'success', message: 'Đã lưu nháp. Bạn có thể quay lại hoàn tất bất cứ lúc nào (ảnh cần tải lại).' }
+        ? { type: 'PUSH_TOAST', tone: 'success', message: 'Đã lưu nháp. Bạn có thể quay lại hoàn tất bất cứ lúc nào' }
         : { type: 'PUSH_TOAST', tone: 'warning', message: 'Trình duyệt không cho phép lưu nháp.' },
     );
 
@@ -133,9 +131,8 @@ export const CreateRequest = () => {
       >
         <div key={step} className="anim-enter min-w-0">
           {step === 0 && <StepLocation wizard={wizard} errors={errors} />}
-          {step === 1 && <StepServices wizard={wizard} />}
-          {step === 2 && <StepInventory wizard={wizard} errors={errors} />}
-          {step === 3 && <StepReview wizard={wizard} errors={errors} onEdit={goTo} />}
+          {step === 1 && <StepServices wizard={wizard} errors={errors} />}
+          {step === 2 && <StepReview wizard={wizard} errors={errors} onEdit={goTo} />}
 
           <div className="mt-4 hidden items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 md:flex">
             <p className="text-xs text-slate-500">

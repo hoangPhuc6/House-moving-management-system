@@ -38,9 +38,11 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
   const line = (serviceName: string, quantity: number, unitPrice: number, note: string | null, autoApplied: boolean) =>
     breakdown.push({ serviceName, quantity, unitPrice, totalPrice: unitPrice * quantity, note, autoApplied });
 
-  // Vận chuyển: giá xe đã gồm INCLUDED_KM đầu tiên.
+  // Vận chuyển: giá xe đã gồm INCLUDED_KM đầu tiên, phần vượt tính theo cước km của xe.
   line(vehicle.label, 1, vehicle.perTrip, `Đã gồm ${INCLUDED_KM} km đầu tiên`, false);
-  const transportFee = vehicle.perTrip;
+  const chargeableExtraKm = Math.max(0, Math.ceil(distanceKm - INCLUDED_KM));
+  if (chargeableExtraKm > 0) line('Cước km vượt', chargeableExtraKm, vehicle.perKm, `Quãng đường ước tính ${distanceKm} km, vượt ${chargeableExtraKm} km so với ${INCLUDED_KM} km đã gồm`, true);
+  const transportFee = vehicle.perTrip + chargeableExtraKm * vehicle.perKm;
 
   // Dịch vụ khách chọn (trừ xe — đã tính ở trên).
   const totalItems = input.items.reduce((s, i) => s + i.quantity, 0);
@@ -49,31 +51,28 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
     .filter((s) => s.group !== 'TRANSPORT')
     .forEach((s) => {
       let qty = 1;
+      let unitPrice = s.basePrice;
       let note: string | null = null;
-      if (s.group === 'LABOR') {
+      if (s.group === 'LABOR' && input.laborQuantity !== undefined) {
+        qty = input.laborQuantity;
+        unitPrice = vehicle.laborPerPerson;
+        note = `Số người bạn chọn, đơn giá theo ${vehicle.label}`;
+      } else if (s.group === 'LABOR') {
         qty = Math.max(2, Math.ceil(totalItems / 4));
+        unitPrice = vehicle.laborPerPerson;
         note = 'Số lượng ước tính theo khối lượng khai báo';
       } else if (/carton/i.test(s.name)) {
         qty = Math.max(1, input.items.filter((i) => /carton|thùng/i.test(i.name)).reduce((sum, i) => sum + i.quantity, 0) || 10);
         note = 'Số lượng theo đồ đạc đã khai báo';
       }
-      line(s.name, qty, s.basePrice, note, false);
-      serviceFee += s.basePrice * qty;
+      line(s.name, qty, unitPrice, note, false);
+      serviceFee += unitPrice * qty;
     });
 
-  // Phụ phí hệ thống tự cộng.
-  let surchargeFee = 0;
-  const auto = (name: string, qty: number, unit: number, note: string) => {
-    line(name, qty, unit, note, true);
-    surchargeFee += unit * qty;
-  };
-  const priceOf = (keyword: string, fallback: number): number => catalog.find((s) => s.group === 'SURCHARGE' && s.name.toLowerCase().includes(keyword))?.basePrice ?? fallback;
-  const chargeableExtraKm = Math.max(0, Math.ceil(distanceKm - INCLUDED_KM));
-  if (chargeableExtraKm > 0) auto('Phụ phí vượt km', chargeableExtraKm, vehicle.perKm, `Quãng đường ước tính ${distanceKm} km, vượt ${chargeableExtraKm} km so với ${INCLUDED_KM} km đã gồm`);
-  if (input.houseType === 'APARTMENT') auto('Phụ phí lầu (thang bộ)', 2, priceOf('lầu', 100_000), 'Tạm tính 2 lầu cho căn hộ, điều chỉnh sau khảo sát');
-  if (input.houseType === 'DEEP_ALLEY') auto('Phụ phí hẻm sâu (trung chuyển)', 2, priceOf('hẻm', 80_000), 'Tạm tính 100 m hẻm, điều chỉnh sau khảo sát');
+  // Phụ phí (lầu, hẻm…) phụ thuộc thực địa — chỉ tính trong báo giá chính thức sau khảo sát.
+  const surchargeFee = 0;
 
-  const subtotal = transportFee + serviceFee + surchargeFee;
+  const subtotal = transportFee + serviceFee;
   const discountAmount = 0;
   return {
     currency: 'VND',

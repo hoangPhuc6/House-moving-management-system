@@ -32,6 +32,8 @@ export interface ReferenceInput {
   houseType: HouseType;
   items: BookingItem[];
   requestedServices: string[];
+  /** Số nhân viên bốc vác khách tự chọn (gói chỉ thuê xe); bỏ trống = ước lượng theo khối lượng. */
+  laborQuantity?: number;
 }
 
 export interface AppContextValue {
@@ -191,7 +193,7 @@ export interface BookingItem {
 /** Hình thức chuyển nhà khách chọn ở Bước 2. */
 export type ServiceMode = 'FULL_PACKAGE' | 'TRUCK_ONLY';
 
-/** Hình thức khảo sát khách mong muốn ở Bước 3 (Điều phối vẫn quyết định phương thức cuối cùng). */
+/** Hình thức khảo sát khách mong muốn ở Bước 2 của wizard (Điều phối vẫn quyết định phương thức cuối cùng). */
 export type SurveyPreference = 'VIDEO_CALL' | 'ON_SITE' | 'PHOTOS_ONLY';
 
 export interface AddressDetail {
@@ -210,10 +212,15 @@ export interface BookingDetails {
   from: AddressDetail;
   to: AddressDetail;
   serviceMode: ServiceMode;
-  /** Quy mô nhà ở (VD: "2 phòng ngủ"). */
+  /** Quy mô nhà ở (VD: "2 phòng ngủ") — chỉ thu thập với gói trọn gói. */
   homeScale: string;
-  surveyPreference: SurveyPreference;
-  /** Khung giờ khách muốn được liên hệ khảo sát. */
+  /** null với gói chỉ thuê xe — không khảo sát. */
+  surveyPreference: SurveyPreference | null;
+  /** Gói chỉ thuê xe: số nhân viên bốc vác khách thuê thêm (0 = không thuê). */
+  laborCount: number;
+  /** Ngày hẹn khảo sát (ISO) — rỗng khi khách chọn gửi ảnh / video. */
+  surveyDate: string;
+  /** Khung giờ hẹn khảo sát — rỗng khi khách chọn gửi ảnh / video. */
   surveyContactSlot: string;
   /** Khách chưa cố định giờ, cần tư vấn thêm. */
   flexibleTime: boolean;

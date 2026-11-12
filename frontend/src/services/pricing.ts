@@ -54,7 +54,7 @@ export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
   const v = VEHICLE_PRICING[s.vehicleCapacity] ?? VEHICLE_PRICING[2]!;
   const items: QuoteItem[] = [
     { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: v.perTrip + v.perKm * s.distanceKm, quantity: s.vehicleQty },
-    { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: 350_000, quantity: s.workers },
+    { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: v.laborPerPerson, quantity: s.workers },
     { id: uid('qi'), name: 'Thùng carton 60x40x40', category: 'MATERIAL', unit: 'thùng', unitPrice: 25_000, quantity: s.cartons },
     { id: uid('qi'), name: 'Băng keo đóng gói', category: 'MATERIAL', unit: 'cuộn', unitPrice: 15_000, quantity: s.tapeRolls },
     { id: uid('qi'), name: 'Màng PE bọc đồ', category: 'MATERIAL', unit: 'cuộn', unitPrice: 120_000, quantity: s.peFilmRolls },

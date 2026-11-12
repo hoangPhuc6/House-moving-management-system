@@ -46,7 +46,7 @@ export const OrderRequestDetails = ({ order }: { order: Order }) => {
           {volume > 0 && <span className="ml-auto text-xs font-medium text-slate-500">≈ {volume.toFixed(1)} m³</span>}
         </p>
         {order.items.length === 0 ? (
-          <p className="text-slate-500">Khách chưa khai báo đồ đạc.</p>
+          <p className="text-slate-500">Danh mục đồ đạc sẽ được chốt khi khảo sát.</p>
         ) : (
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             {order.items.map((i) => (

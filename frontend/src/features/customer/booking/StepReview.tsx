@@ -13,7 +13,6 @@ import { Badge, Card, Field, Input, cx } from "@/components/ui";
 import { formatDateVN } from "@/services/format";
 import type { AddressDetail } from "@/types";
 import {
-  HOME_SCALES,
   SERVICE_MODES,
   SURVEY_PREFERENCES,
   needsSurveyAppointment,
@@ -85,8 +84,7 @@ export const StepReview = ({
   const {
     draft,
     update,
-    items,
-    volumeM3,
+    homeScale,
     requestedServices,
     fromAddress,
     toAddress,
@@ -97,7 +95,6 @@ export const StepReview = ({
   const mode = SERVICE_MODES[draft.serviceMode];
   const survey = SURVEY_PREFERENCES[draft.surveyPreference];
 
-  const scale = HOME_SCALES.find((s) => s.label === draft.homeScale);
 
   return (
     <div className="space-y-4">
@@ -205,9 +202,12 @@ export const StepReview = ({
             {[
               {
                 k: "Quy mô",
-                v: scale ? `${scale.label} (${scale.hint})` : "Chưa chọn",
+                v: homeScale ? `${homeScale.label} (${homeScale.hint})` : "Chưa chọn",
               },
-              { k: "Khối lượng ước tính", v: `≈ ${volumeM3.toFixed(1)} m³` },
+              {
+                k: "Ước lượng ban đầu",
+                v: homeScale ? `Xe ${homeScale.vehicleTons} tấn · ${homeScale.labor} người` : "—",
+              },
             ].map((x) => (
               <div
                 key={x.k}
@@ -220,12 +220,6 @@ export const StepReview = ({
               </div>
             ))}
           </div>
-          {items.length > 0 && (
-            <p className="text-xs text-slate-500">
-              Ước lượng gồm:{" "}
-              {items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}.
-            </p>
-          )}
           <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-slate-700 ring-1 ring-slate-200">
               <survey.icon className="size-[18px]" />

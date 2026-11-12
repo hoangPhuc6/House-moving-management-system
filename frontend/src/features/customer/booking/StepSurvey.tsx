@@ -22,7 +22,7 @@ export const HomeScaleSection = ({
   wizard: BookingWizard;
   errors: StepErrors;
 }) => {
-  const { draft, update, volumeM3 } = wizard;
+  const { draft, update, homeScale } = wizard;
   return (
     <SectionCard
       id="home-scale"
@@ -31,8 +31,10 @@ export const HomeScaleSection = ({
       title="Quy mô nhà hiện tại"
       subtitle="Chọn mức gần đúng nhất — danh mục đồ chi tiết sẽ được chốt khi khảo sát"
       action={
-        volumeM3 > 0 ? (
-          <Badge tone="brand">≈ {volumeM3.toFixed(1)} m³</Badge>
+        homeScale ? (
+          <Badge tone="brand">
+            Ước lượng: xe {homeScale.vehicleTons} tấn · {homeScale.labor} người
+          </Badge>
         ) : (
           <Badge tone="neutral">Bắt buộc</Badge>
         )

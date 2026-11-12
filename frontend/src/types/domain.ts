@@ -32,8 +32,10 @@ export interface ReferenceInput {
   houseType: HouseType;
   items: BookingItem[];
   requestedServices: string[];
-  /** Số nhân viên bốc vác khách tự chọn (gói chỉ thuê xe); bỏ trống = ước lượng theo khối lượng. */
+  /** Số nhân viên bốc vác (khách chọn hoặc ước lượng theo quy mô nhà); bỏ trống = ước lượng theo khối lượng. */
   laborQuantity?: number;
+  /** Tải trọng xe ước lượng theo quy mô nhà (gói trọn gói); bỏ trống = theo xe khách chọn / khối lượng. */
+  vehicleTons?: number;
 }
 
 export interface AppContextValue {

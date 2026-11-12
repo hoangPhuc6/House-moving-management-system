@@ -10,7 +10,6 @@ import {
   DRAFT_STORAGE_KEY,
   EMAIL_REGEX,
   HOME_SCALES,
-  INVENTORY_PRESETS,
   LABOR_SERVICE_KEYWORD,
   PHONE_REGEX,
   SURVEY_TIME_SLOTS,
@@ -148,19 +147,10 @@ export const useBookingWizard = () => {
 
   const activeServices = useMemo(() => catalog.services.filter((s) => s.active), [catalog.services]);
 
-  /** Danh mục ước lượng theo quy mô nhà; danh mục chính thức do nhân viên chốt khi khảo sát. */
-  const items = useMemo<BookingItem[]>(() => {
-    if (draft.serviceMode !== 'FULL_PACKAGE') return [];
-    const preset = HOME_SCALES.find((s) => s.label === draft.homeScale)?.preset ?? {};
-    return INVENTORY_PRESETS.filter((p) => (preset[p.name] ?? 0) > 0).map((p) => ({
-      id: `preset-${p.name}`,
-      name: p.name,
-      quantity: preset[p.name]!,
-      volumeM3: p.volumeM3,
-      fragile: p.fragile,
-    }));
-  }, [draft.serviceMode, draft.homeScale]);
-  const volumeM3 = items.reduce((s, i) => s + (i.volumeM3 ?? 0) * i.quantity, 0);
+  /** Danh mục đồ không thu thập trong wizard — chuyên viên chốt khi khảo sát. */
+  const items = useMemo<BookingItem[]>(() => [], []);
+  /** Gói trọn gói: xe & số bốc xếp ước lượng theo quy mô nhà. */
+  const homeScale = draft.serviceMode === 'FULL_PACKAGE' ? (HOME_SCALES.find((s) => s.label === draft.homeScale) ?? null) : null;
 
   const houseType = useMemo<HouseType>(() => {
     const a = HOUSE_SEVERITY.indexOf(houseTypeOf(draft.from.propertyType));
@@ -203,10 +193,18 @@ export const useBookingWizard = () => {
   const referenceQuote = useMemo(
     () =>
       buildReferenceQuote(
-        { fromAddress, toAddress, houseType, items, requestedServices, laborQuantity: draft.serviceMode === 'TRUCK_ONLY' ? draft.laborCount : undefined },
+        {
+          fromAddress,
+          toAddress,
+          houseType,
+          items,
+          requestedServices,
+          laborQuantity: draft.serviceMode === 'TRUCK_ONLY' ? draft.laborCount : homeScale?.labor,
+          vehicleTons: homeScale?.vehicleTons,
+        },
         catalog.services,
       ),
-    [fromAddress, toAddress, houseType, items, requestedServices, draft.serviceMode, draft.laborCount, catalog.services],
+    [fromAddress, toAddress, houseType, items, requestedServices, draft.serviceMode, draft.laborCount, homeScale, catalog.services],
   );
 
   const saveDraft = (): boolean => {
@@ -275,7 +273,7 @@ export const useBookingWizard = () => {
     vehiclePricing,
     selectVehicle,
     items,
-    volumeM3,
+    homeScale,
     houseType,
     requestedServices,
     fromAddress,

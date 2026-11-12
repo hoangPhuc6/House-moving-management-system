@@ -68,6 +68,8 @@ export interface QuoteItem {
   unit: string;
   unitPrice: number;
   quantity: number;
+  /** Diễn giải cách ra đơn giá / số lượng (VD: "Giá chuyến 900.000 đ (gồm 10 km) + 8 km vượt × 15.000 đ"). */
+  note?: string;
 }
 
 export type ActorRole = Exclude<RoleType, 'LANDING' | 'AUTH'> | 'SYSTEM';
@@ -134,10 +136,12 @@ export interface EquipmentItem {
 }
 
 /**
- * PHOTO   — Điều phối viên tự lập báo giá dựa trên ảnh khách cung cấp (mặc định).
- * ON_SITE — Nhân viên vận chuyển khảo sát trực tiếp, CHỈ khi Điều phối yêu cầu.
+ * PHOTO         — Điều phối viên lập báo giá dựa trên ảnh / video khách gửi (mặc định).
+ * VIDEO_CALL    — Điều phối viên khảo sát qua cuộc gọi video theo lịch khách hẹn.
+ * TRUCK_CONFIRM — Gói chỉ thuê xe: Điều phối gọi xác nhận xe & bốc vác, không khảo sát.
+ * ON_SITE       — Nhân viên vận chuyển khảo sát trực tiếp, CHỈ khi Điều phối yêu cầu.
  */
-export type SurveyMethod = 'PHOTO' | 'ON_SITE';
+export type SurveyMethod = 'PHOTO' | 'VIDEO_CALL' | 'TRUCK_CONFIRM' | 'ON_SITE';
 
 export interface OnSiteSurveyRequest {
   requestedAt: number;

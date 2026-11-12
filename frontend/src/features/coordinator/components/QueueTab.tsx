@@ -1,10 +1,10 @@
 import { Clock, KanbanSquare, PhoneCall, PlayCircle, Siren, Truck } from 'lucide-react';
 import { Badge, Button, cx, PageHeader, Stat, StatusBadge } from '@/components/ui';
-import { SURVEY_METHOD_META } from '@/constants/order';
 import { AUTO_CANCEL_MS, TELESALES_THRESHOLD_MS } from '@/constants/pricing';
 import { COLUMNS } from '@/features/coordinator/constants';
 import type { CoordTab } from '@/features/coordinator/types';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
+import { coordinatorSurveyBadge } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp, useNow } from '@/services/store/AppStore';
@@ -156,19 +156,10 @@ export const QueueTab = ({
                           ) : (
                             <StatusBadge status={o.status} />
                           )}
-                          {o.status === "NEW_PENDING_SURVEY" && (
-                            <Badge
-                              tone={
-                                o.onSiteSurveyRequest ? "warning" : "neutral"
-                              }
-                            >
-                              {
-                                SURVEY_METHOD_META[
-                                  o.onSiteSurveyRequest ? "ON_SITE" : "PHOTO"
-                                ].short
-                              }
-                            </Badge>
-                          )}
+                          {o.status === "NEW_PENDING_SURVEY" && (() => {
+                            const b = coordinatorSurveyBadge(o);
+                            return <Badge tone={b.tone}>{b.label}</Badge>;
+                          })()}
                           {needsCall && (
                             <span className="flex w-full items-start gap-1.5 rounded-lg bg-orange-50 px-2 py-1.5 text-[11px] leading-snug font-semibold text-brand ring-1 ring-brand/15 ring-inset">
                               <PhoneCall className="mt-px size-3 shrink-0" />{" "}

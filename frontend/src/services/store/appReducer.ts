@@ -17,6 +17,7 @@ import {
   withLog,
 } from '@/services/store/helpers';
 import { createInitialState } from '@/services/store/initialState';
+import { appointmentLabel, isMediaSubmitted, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
 import type {
   AppAction,
   AppState,
@@ -25,8 +26,17 @@ import type {
   FieldStage,
   Order,
   OrderStatus,
+  SurveyMethod,
   Vehicle,
 } from '@/types';
+
+/** Phương thức ghi nhận vào báo giá theo hình thức khảo sát của đơn. */
+const SURVEY_METHOD_OF: Record<SurveyStageKind, SurveyMethod> = {
+  TRUCK_CONFIRM: 'TRUCK_CONFIRM',
+  VIDEO_CALL: 'VIDEO_CALL',
+  ON_SITE: 'ON_SITE',
+  PHOTOS: 'PHOTO',
+};
 
 export const appReducer = (state: AppState, action: AppAction): AppState => {
   switch (action.type) {
@@ -135,6 +145,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Chỉ yêu cầu khảo sát trực tiếp cho đơn đang chờ khảo sát.');
       if (o.onSiteSurveyRequest) return toast(state, 'info', `${o.id} đã có yêu cầu khảo sát trực tiếp.`);
+      if (o.bookingDetails?.serviceMode === 'TRUCK_ONLY') return toast(state, 'warning', 'Gói chỉ thuê xe không cần khảo sát — gọi khách xác nhận xe rồi gửi báo giá.');
+      const appointment = appointmentLabel(o);
       const surveyor = state.resources.staff.find((s) => s.id === action.surveyorId);
       if (!surveyor) return toast(state, 'warning', 'Cần chọn nhân viên khảo sát trước khi gửi yêu cầu.');
       if (!surveyor.isAvailable) return toast(state, 'warning', `${surveyor.name} đang nghỉ ca, hãy chọn nhân viên khác.`);
@@ -142,7 +154,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
           { ...ord, onSiteSurveyRequest: { requestedAt: Date.now(), note, surveyorId: surveyor.id } },
-          audit('COORDINATOR', 'Yêu cầu khảo sát trực tiếp', `Cử ${surveyor.name} (${surveyor.code}) khảo sát. ${note ? `Lý do: ${note}.` : 'Chuyển đơn sang khảo sát trực tiếp tại nhà khách.'}`),
+          audit('COORDINATOR', 'Yêu cầu khảo sát trực tiếp', `Cử ${surveyor.name} (${surveyor.code}) khảo sát${appointment ? ` theo lịch khách hẹn ${appointment}` : ''}. ${note ? `Lý do: ${note}.` : 'Chuyển đơn sang khảo sát trực tiếp tại nhà khách.'}`),
         ),
       );
       return toast(next, 'success', `Đã cử ${surveyor.name} khảo sát trực tiếp ${o.id}.`);
@@ -201,15 +213,23 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
     case 'SUBMIT_SURVEY': {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
-      // Qua ảnh: Điều phối tự lập báo giá. Trực tiếp: chỉ nhân viên vận chuyển được cử đi khảo sát mới gửi.
-      const method = o.onSiteSurveyRequest ? 'ON_SITE' : 'PHOTO';
-      if (method === 'PHOTO' && action.by !== 'COORDINATOR') return toast(state, 'warning', 'Đơn khảo sát qua ảnh do Điều phối lập báo giá.');
+      // Ảnh / video call / thuê xe: Điều phối lập báo giá. Trực tiếp: chỉ nhân viên vận chuyển được cử đi khảo sát mới gửi.
+      const kind = surveyStageOf(o);
+      if (kind === 'ON_SITE' && !o.onSiteSurveyRequest) return toast(state, 'warning', 'Khách chọn khảo sát tận nơi — hãy cử nhân viên đi khảo sát trước.');
+      if (kind === 'PHOTOS' && !isMediaSubmitted(o)) return toast(state, 'warning', 'Khách chưa gửi ảnh / video khảo sát.');
+      const method = SURVEY_METHOD_OF[kind];
+      if (method !== 'ON_SITE' && action.by !== 'COORDINATOR') return toast(state, 'warning', 'Đơn này do Điều phối lập báo giá.');
       if (method === 'ON_SITE' && action.by !== 'STAFF') return toast(state, 'warning', 'Đơn này đang chờ nhân viên vận chuyển khảo sát trực tiếp.');
-      const methodLabel = method === 'ON_SITE' ? 'Khảo sát trực tiếp' : `Khảo sát qua ${o.customerPhotos.length} ảnh khách gửi`;
+      const methodLabel: Record<SurveyMethod, string> = {
+        ON_SITE: 'Khảo sát trực tiếp',
+        VIDEO_CALL: 'Khảo sát qua video call',
+        TRUCK_CONFIRM: 'Xác nhận xe qua điện thoại (chỉ thuê xe)',
+        PHOTO: `Khảo sát qua ${o.customerPhotos.length} ảnh / video khách gửi`,
+      };
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
           { ...ord, quoteItems: action.items, surveyMethod: method, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
-          audit(action.by, 'Tạo báo giá khảo sát', `${methodLabel} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}.`),
+          audit(action.by, 'Tạo báo giá khảo sát', `${methodLabel[method]} —${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}.`),
         ),
       );
       return toast(next, 'success', `Đã gửi báo giá khảo sát cho ${action.orderId}. Bộ đếm tự hủy 24h bắt đầu chạy.`);

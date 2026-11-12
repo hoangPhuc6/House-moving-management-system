@@ -3,6 +3,7 @@ import { Card, CardHeader, KeyValue, StatusBadge } from '@/components/ui';
 import { HOUSE_TYPE_META, SURVEY_METHOD_META } from '@/constants/order';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
+import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, surveyStageOf } from '@/features/order/surveyStage';
 import { formatTime, formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
@@ -53,14 +54,15 @@ export const OrderInfoCard = ({ order }: { order: Order }) => {
         value={
           order.surveyMethod
             ? SURVEY_METHOD_META[order.surveyMethod].short
-            : order.onSiteSurveyRequest
-              ? SURVEY_METHOD_META.ON_SITE.short
-              : "Chưa khảo sát"
+            : `${SURVEY_STAGE_META[surveyStageOf(order)].short} · chưa báo giá`
         }
       />
+      {appointmentLabel(order) && (
+        <KeyValue label="Lịch khảo sát khách hẹn" value={appointmentLabel(order)} />
+      )}
       <KeyValue
-        label="Ảnh khách gửi"
-        value={`${order.customerPhotos.length} ảnh`}
+        label="Ảnh / video khách gửi"
+        value={`${order.customerPhotos.length} tệp${order.customerPhotos.length > 0 && !isMediaSubmitted(order) ? ' (chưa bấm gửi)' : ''}`}
       />
       <KeyValue label="Xe" value={vehicle?.plateNumber ?? "Chưa gán"} />
       <KeyValue

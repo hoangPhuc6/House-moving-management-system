@@ -134,10 +134,12 @@ export interface EquipmentItem {
 }
 
 /**
- * PHOTO   — Điều phối viên tự lập báo giá dựa trên ảnh khách cung cấp (mặc định).
- * ON_SITE — Nhân viên vận chuyển khảo sát trực tiếp, CHỈ khi Điều phối yêu cầu.
+ * PHOTO         — Điều phối viên lập báo giá dựa trên ảnh / video khách gửi (mặc định).
+ * VIDEO_CALL    — Điều phối viên khảo sát qua cuộc gọi video theo lịch khách hẹn.
+ * TRUCK_CONFIRM — Gói chỉ thuê xe: Điều phối gọi xác nhận xe & bốc vác, không khảo sát.
+ * ON_SITE       — Nhân viên vận chuyển khảo sát trực tiếp, CHỈ khi Điều phối yêu cầu.
  */
-export type SurveyMethod = 'PHOTO' | 'ON_SITE';
+export type SurveyMethod = 'PHOTO' | 'VIDEO_CALL' | 'TRUCK_CONFIRM' | 'ON_SITE';
 
 export interface OnSiteSurveyRequest {
   requestedAt: number;

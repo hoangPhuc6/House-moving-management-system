@@ -86,5 +86,7 @@ export const CUSTOMER_STATUS_COPY: Record<OrderStatus, { title: string; desc: st
 
 export const SURVEY_METHOD_META: Record<SurveyMethod, { label: string; short: string }> = {
   PHOTO: { label: 'Khảo sát qua ảnh (Điều phối thực hiện)', short: 'Qua ảnh' },
+  VIDEO_CALL: { label: 'Khảo sát qua video call (Điều phối thực hiện)', short: 'Video call' },
+  TRUCK_CONFIRM: { label: 'Xác nhận xe qua điện thoại (gói chỉ thuê xe)', short: 'Xác nhận xe' },
   ON_SITE: { label: 'Khảo sát trực tiếp (nhân viên vận chuyển)', short: 'Trực tiếp' },
 };

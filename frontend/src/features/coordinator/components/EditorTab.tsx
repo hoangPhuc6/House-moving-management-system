@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { History, ReceiptText, Save, Undo2 } from 'lucide-react';
+import { History, Lock, ReceiptText, Save, Undo2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -56,7 +56,9 @@ export const EditorTab = ({
       const o = order.quoteItems[i];
       return !!o && (o.quantity !== m.quantity || o.unitPrice !== m.unitPrice);
     });
-  const draftSubtotal = merged.reduce((s, i) => s + lineTotal(i), 0);
+  // Giá chỉ được sửa khi báo giá đang chờ khách xác nhận; các trạng thái khác chỉ xem.
+  const editable = order.status === "SURVEYED_PENDING_CONFIRM";
+  const draftSubtotal =merged.reduce((s, i) => s + lineTotal(i), 0);
   const draftDiscount = Math.round((draftSubtotal * discountPct) / 100);
   const draftTotal = draftSubtotal - draftDiscount;
   const patch = (id: string, k: keyof Omit<QuoteItemPatch, "id">, v: number) =>
@@ -65,7 +67,7 @@ export const EditorTab = ({
     );
 
   const cellInput =
-    "h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none";
+    "h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
 
   return (
     <>
@@ -87,6 +89,12 @@ export const EditorTab = ({
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {!editable && (
+                <div className="mx-6 mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <Lock className="size-4 shrink-0" />
+                  Báo giá đã khóa — chỉ chỉnh sửa được khi đơn đang chờ khách xác nhận báo giá.
+                </div>
+              )}
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
@@ -109,6 +117,7 @@ export const EditorTab = ({
                       <td className="px-2 py-2.5">
                         <input
                           type="number"
+                          disabled={!editable}
                           className={cellInput}
                           value={it.quantity}
                           onChange={(e) =>
@@ -120,6 +129,7 @@ export const EditorTab = ({
                         <input
                           type="number"
                           step={10_000}
+                          disabled={!editable}
                           className={cellInput}
                           value={it.unitPrice}
                           onChange={(e) =>
@@ -146,6 +156,7 @@ export const EditorTab = ({
                 type="number"
                 min={0}
                 max={100}
+                disabled={!editable}
                 className={cellInput}
                 value={discountPct}
                 onChange={(e) =>
@@ -181,6 +192,7 @@ export const EditorTab = ({
           <div className="flex flex-col gap-3 border-t border-slate-100 p-6 sm:flex-row sm:items-end">
             <Field label="Lý do chỉnh sửa (ghi vào nhật ký)" className="flex-1">
               <Input
+                disabled={!editable}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="VD: Khách thân thiết, áp dụng chiết khấu"
@@ -200,7 +212,7 @@ export const EditorTab = ({
               </Button>
               <Button
                 icon={Save}
-                disabled={!dirty}
+                disabled={!dirty || !editable}
                 onClick={() => {
                   dispatch({
                     type: "UPDATE_QUOTE_ITEMS",

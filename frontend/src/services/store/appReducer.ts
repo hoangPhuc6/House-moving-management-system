@@ -378,6 +378,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
     case 'UPDATE_QUOTE_ITEMS': {
       const o = findOrder(state, action.orderId);
       if (!o) return state;
+      // Chỉ cho sửa giá khi báo giá đang chờ khách xác nhận — sau khi cọc/vận chuyển/kết thúc thì giá đã chốt.
+      if (o.status !== 'SURVEYED_PENDING_CONFIRM') return toast(state, 'warning', 'Chỉ chỉnh sửa báo giá khi đơn đang chờ khách xác nhận.');
       const entries: AuditLogEntry[] = [];
       const items = o.quoteItems.map((it) => {
         const p = action.patches.find((x) => x.id === it.id);

@@ -202,9 +202,9 @@ export type ServiceMode = 'FULL_PACKAGE' | 'TRUCK_ONLY';
 /** Hình thức khảo sát khách mong muốn ở Bước 2 của wizard (Điều phối vẫn quyết định phương thức cuối cùng). */
 export type SurveyPreference = 'VIDEO_CALL' | 'ON_SITE' | 'PHOTOS_ONLY';
 
+/** Địa chỉ theo mô hình hành chính 2 cấp (từ 01/07/2025): Tỉnh / Thành phố → Phường / Xã / Đặc khu. */
 export interface AddressDetail {
   province: string;
-  district: string;
   ward: string;
   street: string;
   /** Loại bất động sản & lối đi (nhãn hiển thị). */

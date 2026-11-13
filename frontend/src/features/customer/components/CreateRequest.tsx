@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Bookmark, RotateCcw, Save, Send } from 'lucide-react';
-import { Alert, Badge, Button, cx } from '@/components/ui';
+import { ArrowLeft, ArrowRight, Bookmark, RotateCcw, Send } from 'lucide-react';
+import { Alert, Button, cx } from '@/components/ui';
 import { WIZARD_STEPS } from '@/features/customer/booking/constants';
 import { WizardStepper } from '@/features/customer/booking/parts';
 import { StepLocation } from '@/features/customer/booking/StepLocation';
@@ -10,11 +10,13 @@ import { StepServices } from '@/features/customer/booking/StepServices';
 import { useBookingWizard, validateStep } from '@/features/customer/booking/useBookingWizard';
 import { WizardSidebar } from '@/features/customer/booking/WizardSidebar';
 import { StickyActionBar } from '@/layouts/MobileShell';
+import type { OrdersPageNavState } from '@/pages/customer/CustomerOrdersPage';
 import { ROUTES } from '@/routes/paths';
+import { formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
 
 const STEP_HEADINGS = [
-  { eyebrow: 'Quy trình tiếp nhận yêu cầu tiêu chuẩn', title: 'Tạo yêu cầu chuyển nhà', subtitle: 'Điền thông tin để chúng tôi tư vấn khảo sát tận nơi và gửi báo giá minh bạch, trọn gói phù hợp nhất với nhu cầu của bạn.' },
+  { eyebrow: 'Bước 1 • Lộ trình & lịch chuyển', title: 'Tạo yêu cầu chuyển nhà', subtitle: 'Cho chúng tôi biết bạn chuyển từ đâu, đến đâu và vào ngày nào. Bước sau bạn chọn gói dịch vụ và cách khảo sát phù hợp.' },
   { eyebrow: 'Bước 2 • Tùy biến giải pháp chuyển dọn', title: 'Chọn dịch vụ', subtitle: 'Trọn gói: chuyên viên khảo sát và đề xuất xe, nhân sự. Chỉ thuê xe: chọn ngay loại xe và số nhân viên bốc vác.' },
   { eyebrow: 'Bước 3 • Xác nhận', title: 'Kiểm tra thông tin & Gửi yêu cầu', subtitle: 'Vui lòng rà soát lại lộ trình, gói dịch vụ và hình thức khảo sát trước khi chuyển tới bộ phận điều phối.' },
 ];
@@ -35,6 +37,7 @@ export const CreateRequest = () => {
   const errors = attempted.has(step) ? errorsFor(step) : {};
   const last = step === WIZARD_STEPS.length - 1;
   const heading = STEP_HEADINGS[step]!;
+  const showEstimate = step >= 1 && wizard.estimateReady;
 
   const goTo = (s: number) => {
     setStep(s);
@@ -61,7 +64,8 @@ export const CreateRequest = () => {
     }
     dispatch({ type: 'CREATE_ORDER', input: wizard.buildOrderInput() });
     wizard.clearDraft();
-    navigate(ROUTES.customer.orders);
+    // Id đơn do store gán (activeOrderId) — trang Đơn hàng sẽ mở thẳng chi tiết đơn vừa tạo.
+    navigate(ROUTES.customer.orders, { state: { focusActive: true } satisfies OrdersPageNavState });
   };
 
   const back = () => step > 0 && goTo(step - 1);
@@ -73,7 +77,7 @@ export const CreateRequest = () => {
         : { type: 'PUSH_TOAST', tone: 'warning', message: 'Trình duyệt không cho phép lưu nháp.' },
     );
 
-  const nav = { step, onNext: next, onBack: back, onSaveDraft: saveDraft };
+  const nav = { step, onNext: next, onBack: back };
 
   return (
     <div className="pb-24 md:pb-4">
@@ -83,12 +87,9 @@ export const CreateRequest = () => {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">{heading.title}</h1>
           <p className="mt-1 text-sm text-slate-500">{heading.subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral" icon={Save}>Có thể lưu nháp</Badge>
-          <Button variant="secondary" size="sm" icon={Bookmark} onClick={saveDraft}>
-            Lưu nháp đơn
-          </Button>
-        </div>
+        <Button variant="secondary" size="sm" icon={Bookmark} onClick={saveDraft}>
+          Lưu nháp
+        </Button>
       </div>
 
       {showRestored && (
@@ -134,7 +135,8 @@ export const CreateRequest = () => {
           {step === 1 && <StepServices wizard={wizard} errors={errors} />}
           {step === 2 && <StepReview wizard={wizard} errors={errors} onEdit={goTo} />}
 
-          <div className="mt-4 hidden items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 md:flex">
+          {/* Tablet (md → lg): điều hướng cuối form. Desktop dùng nút trong sidebar, mobile dùng thanh dính đáy. */}
+          <div className="mt-4 hidden items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 md:flex lg:hidden">
             <p className="text-xs text-slate-500">
               {last ? 'Bước cuối cùng: miễn phí hủy lịch trước 24 giờ so với thời điểm vận chuyển.' : `Bước ${step + 1}/${WIZARD_STEPS.length} — thông tin được giữ lại khi chuyển bước.`}
             </p>
@@ -163,11 +165,17 @@ export const CreateRequest = () => {
               Bước {step + 1}/{WIZARD_STEPS.length}
               <span className="font-medium text-slate-500"> · {WIZARD_STEPS[step]!.title}</span>
             </span>
-            <span className="flex gap-1" aria-hidden>
-              {WIZARD_STEPS.map((s, i) => (
-                <span key={s.title} className={cx('h-1.5 rounded-full transition-all', i === step ? 'w-5 bg-brand' : i < step ? 'w-1.5 bg-brand' : 'w-1.5 bg-slate-200')} />
-              ))}
-            </span>
+            {showEstimate ? (
+              <span className="shrink-0 text-slate-500">
+                Tạm tính <b className="text-sm text-brand tabular-nums">{formatVND(wizard.referenceQuote.financialSummary.totalEstimated)}</b>
+              </span>
+            ) : (
+              <span className="flex gap-1" aria-hidden>
+                {WIZARD_STEPS.map((s, i) => (
+                  <span key={s.title} className={cx('h-1.5 rounded-full transition-all', i === step ? 'w-5 bg-brand' : i < step ? 'w-1.5 bg-brand' : 'w-1.5 bg-slate-200')} />
+                ))}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {step > 0 && (

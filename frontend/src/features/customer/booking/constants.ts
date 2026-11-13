@@ -7,27 +7,72 @@ export const WIZARD_STEPS: { title: string; subtitle: string }[] = [
   { title: 'Xác nhận & Gửi', subtitle: 'Kiểm tra & gửi đơn' },
 ];
 
-/** Địa giới hành chính rút gọn cho bản demo — thay bằng API địa chỉ khi có backend. */
-export const ADMIN_AREAS: Record<string, Record<string, string[]>> = {
-  'TP. Hồ Chí Minh': {
-    'Quận 1': ['Phường Bến Nghé', 'Phường Bến Thành', 'Phường Đa Kao', 'Phường Tân Định'],
-    'Quận 3': ['Phường Võ Thị Sáu', 'Phường 9', 'Phường 12'],
-    'Quận 7': ['Phường Tân Phong', 'Phường Tân Phú', 'Phường Tân Hưng'],
-    'Quận Bình Thạnh': ['Phường 22', 'Phường 25', 'Phường 26', 'Phường 27'],
-    'Quận Gò Vấp': ['Phường 5', 'Phường 10', 'Phường 17'],
-    'TP. Thủ Đức': ['Phường Thảo Điền', 'Phường An Phú', 'Phường Long Thạnh Mỹ', 'Phường Linh Trung'],
-  },
-  'Hà Nội': {
-    'Quận Cầu Giấy': ['Phường Dịch Vọng', 'Phường Mai Dịch', 'Phường Nghĩa Đô', 'Phường Trung Hòa'],
-    'Quận Đống Đa': ['Phường Láng Hạ', 'Phường Kim Liên', 'Phường Ô Chợ Dừa'],
-    'Quận Hoàn Kiếm': ['Phường Hàng Bạc', 'Phường Tràng Tiền', 'Phường Lý Thái Tổ'],
-    'Quận Hà Đông': ['Phường Mộ Lao', 'Phường Văn Quán', 'Phường La Khê'],
-  },
-  'Đà Nẵng': {
-    'Quận Hải Châu': ['Phường Thạch Thang', 'Phường Hòa Cường Bắc', 'Phường Bình Hiên'],
-    'Quận Sơn Trà': ['Phường An Hải Bắc', 'Phường Phước Mỹ', 'Phường Mân Thái'],
-  },
+/**
+ * Địa giới hành chính 2 cấp (Tỉnh / Thành phố → Phường / Xã) theo sắp xếp từ 01/07/2025.
+ * Danh sách rút gọn cho bản demo — thay bằng API địa chỉ khi có backend.
+ */
+export const ADMIN_AREAS: Record<string, string[]> = {
+  'TP. Hồ Chí Minh': [
+    'Phường Sài Gòn',
+    'Phường Bến Thành',
+    'Phường Tân Định',
+    'Phường Cầu Ông Lãnh',
+    'Phường Bàn Cờ',
+    'Phường Xuân Hòa',
+    'Phường Nhiêu Lộc',
+    'Phường Tân Thuận',
+    'Phường Tân Hưng',
+    'Phường Tân Mỹ',
+    'Phường Phú Thuận',
+    'Phường Bình Thạnh',
+    'Phường Gia Định',
+    'Phường Thạnh Mỹ Tây',
+    'Phường Bình Quới',
+    'Phường Gò Vấp',
+    'Phường Hạnh Thông',
+    'Phường An Nhơn',
+    'Phường An Khánh',
+    'Phường Thủ Đức',
+    'Phường Linh Xuân',
+    'Phường Long Bình',
+    'Phường Thủ Dầu Một',
+    'Phường Vũng Tàu',
+  ],
+  'Hà Nội': [
+    'Phường Hoàn Kiếm',
+    'Phường Cửa Nam',
+    'Phường Cầu Giấy',
+    'Phường Nghĩa Đô',
+    'Phường Yên Hòa',
+    'Phường Đống Đa',
+    'Phường Láng',
+    'Phường Kim Liên',
+    'Phường Ô Chợ Dừa',
+    'Phường Hà Đông',
+    'Phường Dương Nội',
+  ],
+  'Đà Nẵng': [
+    'Phường Hải Châu',
+    'Phường Hòa Cường',
+    'Phường Thanh Khê',
+    'Phường Sơn Trà',
+    'Phường An Hải',
+    'Phường Ngũ Hành Sơn',
+    'Phường Hội An',
+  ],
 };
+
+/** Địa chỉ khách đã lưu trong tài khoản (bản demo) — chọn nhanh khi điền điểm đi / điểm đến. */
+export const SAVED_ADDRESSES: { label: string; address: Pick<AddressDetail, 'province' | 'ward' | 'street' | 'propertyType' | 'floor'> }[] = [
+  {
+    label: 'Nhà hiện tại',
+    address: { province: 'TP. Hồ Chí Minh', ward: 'Phường Thạnh Mỹ Tây', street: '128/4 Ung Văn Khiêm', propertyType: 'Nhà trong ngõ/hẻm (xe tải vào được)', floor: 'Tầng 2 (thang bộ)' },
+  },
+  {
+    label: 'Căn hộ mới',
+    address: { province: 'TP. Hồ Chí Minh', ward: 'Phường Long Bình', street: 'Căn hộ 14.08, Toà S2.03, Vinhomes Grand Park', propertyType: 'Chung cư có thang máy', floor: 'Tầng cao (thang máy)' },
+  },
+];
 
 /** Loại bất động sản & lối đi — mỗi lựa chọn quy về một HouseType để tính phụ phí. */
 export const PROPERTY_TYPES: { label: string; houseType: HouseType }[] = [
@@ -46,7 +91,6 @@ export const houseTypeOf = (propertyType: string): HouseType =>
 
 export const emptyAddress = (): AddressDetail => ({
   province: 'TP. Hồ Chí Minh',
-  district: '',
   ward: '',
   street: '',
   propertyType: PROPERTY_TYPES[0]!.label,
@@ -54,9 +98,9 @@ export const emptyAddress = (): AddressDetail => ({
   note: '',
 });
 
-export const isAddressComplete = (a: AddressDetail): boolean => Boolean(a.province && a.district && a.ward && a.street.trim());
+export const isAddressComplete = (a: AddressDetail): boolean => Boolean(a.province && a.ward && a.street.trim());
 
-export const formatAddress = (a: AddressDetail): string => [a.street.trim(), a.ward, a.district, a.province].filter(Boolean).join(', ');
+export const formatAddress = (a: AddressDetail): string => [a.street.trim(), a.ward, a.province].filter(Boolean).join(', ');
 
 export const SERVICE_MODES: Record<ServiceMode, { title: string; badge: string; desc: string; perks: string[]; icon: LucideIcon }> = {
   FULL_PACKAGE: {
@@ -119,7 +163,8 @@ export const needsSurveyAppointment = (p: SurveyPreference): boolean => p !== 'P
 
 export const SURVEY_TIME_SLOTS = ['08:30 - 11:30 (Sáng)', '13:30 - 16:30 (Chiều)', '17:30 - 19:30 (Tối)'];
 
-export const DRAFT_STORAGE_KEY = 'moveflow.booking-draft.v2';
+/** v3: địa chỉ 2 cấp (bỏ quận / huyện) — nháp v2 có phường cũ nên không khôi phục. */
+export const DRAFT_STORAGE_KEY = 'moveflow.booking-draft.v3';
 
 export const HOTLINE = { display: '1900 6868', tel: 'tel:19006868' };
 

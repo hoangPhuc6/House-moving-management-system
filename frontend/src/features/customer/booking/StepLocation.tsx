@@ -1,11 +1,27 @@
-import { ArrowDown, CalendarDays, CheckCircle2, CircleDot, Home, LocateFixed, MapPin, Route } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import { ArrowDown, Bookmark, CalendarDays, CheckCircle2, CircleDot, Home, LocateFixed, MapPin, Plus, Route } from 'lucide-react';
 import { Badge, Field, Input, Select, cx } from '@/components/ui';
 import { TIME_SLOTS } from '@/constants/resources';
 import { formatDateVN } from '@/services/format';
 import type { AddressDetail } from '@/types';
-import { ADMIN_AREAS, FLOOR_OPTIONS, PROPERTY_TYPES } from './constants';
+import { ADMIN_AREAS, FLOOR_OPTIONS, PROPERTY_TYPES, SAVED_ADDRESSES } from './constants';
 import { SectionCard } from './parts';
 import { type BookingWizard, type StepErrors, minMoveDate } from './useBookingWizard';
+
+/** Ghi chú tùy chọn — gập sau một nút "+ Thêm ghi chú", tự mở nếu đã có nội dung (VD: nháp khôi phục). */
+const OptionalNote = ({ label, filled, children }: { label: string; filled: boolean; children: ReactNode }) => {
+  const [open, setOpen] = useState(filled);
+  if (open) return <>{children}</>;
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="inline-flex items-center gap-1.5 rounded-lg px-1 py-1 text-sm font-semibold text-slate-600 hover:text-brand"
+    >
+      <Plus className="size-4" /> {label}
+    </button>
+  );
+};
 
 const AddressSection = ({
   side,
@@ -19,9 +35,9 @@ const AddressSection = ({
   onChange: (patch: Partial<AddressDetail>) => void;
 }) => {
   const isFrom = side === 'from';
-  const districts = Object.keys(ADMIN_AREAS[value.province] ?? {});
-  const wards = ADMIN_AREAS[value.province]?.[value.district] ?? [];
+  const wards = ADMIN_AREAS[value.province] ?? [];
   const err = (k: string) => errors[`${side}.${k}`] ?? null;
+  const isSaved = (a: (typeof SAVED_ADDRESSES)[number]['address']) => a.street === value.street && a.ward === value.ward && a.province === value.province;
 
   return (
     <SectionCard
@@ -33,35 +49,51 @@ const AddressSection = ({
         isFrom ? (
           <button
             type="button"
-            onClick={() => onChange({ province: 'TP. Hồ Chí Minh', district: 'Quận Bình Thạnh', ward: 'Phường 25', street: value.street || '128/4 Ung Văn Khiêm' })}
+            onClick={() => onChange({ province: 'TP. Hồ Chí Minh', ward: 'Phường Thạnh Mỹ Tây', street: value.street || '128/4 Ung Văn Khiêm' })}
             className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-brand hover:text-brand"
           >
             <LocateFixed className="size-3.5" /> Dùng vị trí hiện tại
           </button>
-        ) : value.district ? (
-          <Badge tone="neutral">{value.district}</Badge>
+        ) : value.ward ? (
+          <Badge tone="neutral">{value.ward}</Badge>
         ) : null
       }
     >
-      <div className="grid gap-3 sm:grid-cols-3">
+      {SAVED_ADDRESSES.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <Bookmark className="size-3.5" /> Địa chỉ đã lưu:
+          </span>
+          {SAVED_ADDRESSES.map((s) => {
+            const sel = isSaved(s.address);
+            return (
+              <button
+                key={s.label}
+                type="button"
+                aria-pressed={sel}
+                onClick={() => onChange(s.address)}
+                className={cx(
+                  'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                  sel ? 'border-brand bg-orange-50 text-brand' : 'border-slate-200 text-slate-600 hover:border-slate-300',
+                )}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Tỉnh / Thành phố *">
-          <Select value={value.province} onChange={(e) => onChange({ province: e.target.value, district: '', ward: '' })}>
+          <Select value={value.province} onChange={(e) => onChange({ province: e.target.value, ward: '' })}>
             {Object.keys(ADMIN_AREAS).map((p) => (
               <option key={p}>{p}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Quận / Huyện *" error={err('district')}>
-          <Select value={value.district} onChange={(e) => onChange({ district: e.target.value, ward: '' })} className={cx(err('district') && 'border-rose-400')}>
-            <option value="">Chọn quận / huyện</option>
-            {districts.map((d) => (
-              <option key={d}>{d}</option>
-            ))}
-          </Select>
-        </Field>
         <Field label="Phường / Xã *" error={err('ward')}>
-          <Select value={value.ward} disabled={!value.district} onChange={(e) => onChange({ ward: e.target.value })} className={cx(err('ward') && 'border-rose-400')}>
-            <option value="">{value.district ? 'Chọn phường / xã' : 'Chọn quận trước'}</option>
+          <Select value={value.ward} onChange={(e) => onChange({ ward: e.target.value })} className={cx(err('ward') && 'border-rose-400')}>
+            <option value="">Chọn phường / xã</option>
             {wards.map((w) => (
               <option key={w}>{w}</option>
             ))}
@@ -97,14 +129,17 @@ const AddressSection = ({
           </Select>
         </Field>
       </div>
-      <Field label={isFrom ? 'Ghi chú vận chuyển điểm đi' : 'Ghi chú ban quản lý & hầm đỗ'}>
-        <Input
-          value={value.note}
-          onChange={(e) => onChange({ note: e.target.value })}
-          placeholder={isFrom ? 'VD: Hẻm 4m xe 1.5 tấn vào được thoải mái, không cấm giờ' : 'VD: Có thang máy hàng 1000kg, cần đăng ký trước với BQL'}
-          className="text-base sm:text-sm"
-        />
-      </Field>
+      <OptionalNote label={isFrom ? 'Thêm ghi chú về hẻm, lối xe vào' : 'Thêm ghi chú ban quản lý & hầm đỗ'} filled={Boolean(value.note)}>
+        <Field label={isFrom ? 'Ghi chú vận chuyển điểm đi' : 'Ghi chú ban quản lý & hầm đỗ'}>
+          <Input
+            autoFocus={!value.note}
+            value={value.note}
+            onChange={(e) => onChange({ note: e.target.value })}
+            placeholder={isFrom ? 'VD: Hẻm 4m xe 1.5 tấn vào được thoải mái, không cấm giờ' : 'VD: Có thang máy hàng 1000kg, cần đăng ký trước với BQL'}
+            className="text-base sm:text-sm"
+          />
+        </Field>
+      </OptionalNote>
     </SectionCard>
   );
 };
@@ -189,14 +224,17 @@ export const StepLocation = ({ wizard, errors }: { wizard: BookingWizard; errors
           <input type="checkbox" checked={draft.flexibleTime} onChange={(e) => update('flexibleTime', e.target.checked)} className="mt-0.5 size-4 rounded accent-[#FF5A1F]" />
           Tôi chưa cố định giờ chính xác, cần tư vấn thêm
         </label>
-        <Field label="Ghi chú thêm về thời gian & điều phối">
-          <Input
-            value={draft.scheduleNote}
-            onChange={(e) => update('scheduleNote', e.target.value)}
-            placeholder="VD: Ưu tiên xe đến đúng 08:30 sáng để kịp giờ vào nhà mới"
-            className="text-base sm:text-sm"
-          />
-        </Field>
+        <OptionalNote label="Thêm ghi chú về thời gian & điều phối" filled={Boolean(draft.scheduleNote)}>
+          <Field label="Ghi chú thêm về thời gian & điều phối">
+            <Input
+              autoFocus={!draft.scheduleNote}
+              value={draft.scheduleNote}
+              onChange={(e) => update('scheduleNote', e.target.value)}
+              placeholder="VD: Ưu tiên xe đến đúng 08:30 sáng để kịp giờ vào nhà mới"
+              className="text-base sm:text-sm"
+            />
+          </Field>
+        </OptionalNote>
       </SectionCard>
     </div>
   );

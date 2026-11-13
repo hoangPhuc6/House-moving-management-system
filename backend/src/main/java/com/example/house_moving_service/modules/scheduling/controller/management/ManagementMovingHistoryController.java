@@ -28,7 +28,8 @@ public class ManagementMovingHistoryController {
     @GetMapping("/{bookingId}/moving-history")
     @Operation(
             summary = "Lịch sử vận chuyển đầy đủ của đơn",
-            description = "Mọi chuyến (kể cả đã hủy), nhật ký gốc (note) và đã tách, toàn bộ nhân viên và xe được phân công."
+            description = "Mọi chuyến (kể cả đã hủy), nhật ký gốc (note) và đã tách, toàn bộ nhân viên và xe được phân công; "
+                    + "sự cố của đơn ở mọi trạng thái, kèm người báo / người xử lý."
     )
     public ResponseEntity<ApiResponse<ManagementMovingHistoryResponse>> getHistory(
             @Parameter(description = "ID đơn hàng", required = true) @PathVariable Integer bookingId) {

@@ -13,15 +13,20 @@ import com.example.house_moving_service.modules.scheduling.dto.response.Customer
 import com.example.house_moving_service.modules.scheduling.dto.response.ManagementMovingHistoryResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.MovingTimelineEntry;
 import com.example.house_moving_service.modules.scheduling.dto.response.SupervisorContact;
+import com.example.house_moving_service.modules.scheduling.entity.Incident;
 import com.example.house_moving_service.modules.scheduling.entity.MovingSchedule;
 import com.example.house_moving_service.modules.scheduling.entity.ScheduleStaffAssignment;
 import com.example.house_moving_service.modules.scheduling.entity.ScheduleVehicleAssignment;
 import com.example.house_moving_service.modules.scheduling.entity.Vehicle;
 import com.example.house_moving_service.modules.scheduling.enums.AssignmentStatus;
+import com.example.house_moving_service.modules.scheduling.enums.IncidentStatus;
+import com.example.house_moving_service.modules.scheduling.enums.IncidentType;
 import com.example.house_moving_service.modules.scheduling.enums.MovingScheduleStatus;
 import com.example.house_moving_service.modules.scheduling.enums.StaffAssignmentRole;
 import com.example.house_moving_service.modules.scheduling.enums.VehicleStatus;
+import com.example.house_moving_service.modules.scheduling.mapper.IncidentMapper;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.repository.IncidentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleVehicleAssignmentRepository;
@@ -55,13 +60,15 @@ class MovingHistoryServiceTest {
     private ScheduleVehicleAssignmentRepository vehicleAssignmentRepository;
     @Mock
     private BookingWorkflowService bookingWorkflowService;
+    @Mock
+    private IncidentRepository incidentRepository;
 
     private MovingHistoryServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new MovingHistoryServiceImpl(movingScheduleRepository, staffAssignmentRepository, vehicleAssignmentRepository,
-                bookingWorkflowService, new MovingScheduleMapper());
+                bookingWorkflowService, new MovingScheduleMapper(), incidentRepository, new IncidentMapper());
     }
 
     private static MovingSchedule schedule(int id, MovingScheduleStatus status) {
@@ -80,6 +87,12 @@ class MovingHistoryServiceTest {
         return ScheduleVehicleAssignment.builder().id(vehicleId).movingSchedule(s).status(status)
                 .vehicle(Vehicle.builder().id(vehicleId).licensePlate("51C-" + vehicleId).status(VehicleStatus.IN_USE).build())
                 .build();
+    }
+
+    private static Incident incident(int id, IncidentStatus status) {
+        return Incident.builder().id(id).booking(Booking.builder().id(BOOKING_ID).bookingCode("BK-0007").build())
+                .incidentType(IncidentType.ITEM_DAMAGED).description("Vỡ bình").status(status)
+                .reportedBy(User.builder().id(8L).build()).reportedAt(T0).build();
     }
 
     private void givenBookingOwnedBy(Long ownerId) {
@@ -139,6 +152,8 @@ class MovingHistoryServiceTest {
                 staff(trip, 9L, StaffAssignmentRole.MOVER, AssignmentStatus.CONFIRMED)));
         when(vehicleAssignmentRepository.findAllWithVehicleByScheduleIds(List.of(1))).thenReturn(List.of(
                 vehicle(trip, 1, AssignmentStatus.CONFIRMED), vehicle(trip, 2, AssignmentStatus.CANCELLED)));
+        when(incidentRepository.findAllByBookingIdOrderByReportedAtDescIdDesc(BOOKING_ID))
+                .thenReturn(List.of(incident(1, IncidentStatus.REPORTED), incident(2, IncidentStatus.REJECTED)));
 
         CustomerMovingHistoryResponse history = service.getCustomerHistory(BOOKING_ID, CUSTOMER_ID);
 
@@ -150,6 +165,8 @@ class MovingHistoryServiceTest {
                 new MovingTimelineEntry("ARRIVED_PICKUP", T0.plusMinutes(40)));
         assertThat(t.licensePlates()).containsExactly("51C-1");
         assertThat(t.supervisor()).isEqualTo(new SupervisorContact("NV 8", "0908"));
+        // Sự cố REJECTED bị ẩn với khách
+        assertThat(history.incidents()).extracting("id").containsExactly(1);
     }
 
     @Test
@@ -166,6 +183,8 @@ class MovingHistoryServiceTest {
                 staff(cancelled, 8L, StaffAssignmentRole.SUPERVISOR, AssignmentStatus.CANCELLED),
                 staff(active, 9L, StaffAssignmentRole.SUPERVISOR, AssignmentStatus.ASSIGNED)));
         when(vehicleAssignmentRepository.findAllWithVehicleByScheduleIds(List.of(1, 2))).thenReturn(List.of());
+        when(incidentRepository.findAllByBookingIdOrderByReportedAtDescIdDesc(BOOKING_ID))
+                .thenReturn(List.of(incident(1, IncidentStatus.REPORTED), incident(2, IncidentStatus.REJECTED)));
 
         ManagementMovingHistoryResponse history = service.getManagementHistory(BOOKING_ID);
 
@@ -174,5 +193,8 @@ class MovingHistoryServiceTest {
         assertThat(history.trips().get(0).staff()).extracting("userId").containsExactly(8L);
         assertThat(history.trips().get(1).staff()).extracting("userId").containsExactly(9L);
         assertThat(history.trips().get(1).vehicles()).isEmpty();
+        // Điều phối thấy mọi sự cố, kèm người báo
+        assertThat(history.incidents()).extracting("id").containsExactly(1, 2);
+        assertThat(history.incidents().getFirst().reportedBy()).isEqualTo(8L);
     }
 }

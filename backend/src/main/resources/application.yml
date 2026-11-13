@@ -59,6 +59,8 @@ app:
     max-video-attachments: 5
   moving:
     early-start-minutes: 60
+    incident-report-window-hours: 24
+    customer-incident-report-window-days: 7
   storage:
     # Để trống = chưa cấu hình lưu trữ: app vẫn chạy, API upload báo ERR_FILE_STORAGE. Dùng MinIO: STORAGE_PROVIDER=MINIO
     provider: ${STORAGE_PROVIDER:}

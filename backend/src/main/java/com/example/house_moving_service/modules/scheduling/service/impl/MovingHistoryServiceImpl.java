@@ -11,8 +11,11 @@ import com.example.house_moving_service.modules.scheduling.dto.response.Manageme
 import com.example.house_moving_service.modules.scheduling.entity.MovingSchedule;
 import com.example.house_moving_service.modules.scheduling.entity.ScheduleStaffAssignment;
 import com.example.house_moving_service.modules.scheduling.entity.ScheduleVehicleAssignment;
+import com.example.house_moving_service.modules.scheduling.enums.IncidentStatus;
 import com.example.house_moving_service.modules.scheduling.enums.MovingScheduleStatus;
+import com.example.house_moving_service.modules.scheduling.mapper.IncidentMapper;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.repository.IncidentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleVehicleAssignmentRepository;
@@ -34,6 +37,8 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
     private final ScheduleVehicleAssignmentRepository vehicleAssignmentRepository;
     private final BookingWorkflowService bookingWorkflowService;
     private final MovingScheduleMapper movingScheduleMapper;
+    private final IncidentRepository incidentRepository;
+    private final IncidentMapper incidentMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -67,12 +72,16 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
         List<CustomerMovingTripResponse> trips = schedules.stream()
                 .map(s -> movingScheduleMapper.toCustomerTrip(s, assignments.staffOf(s), assignments.vehiclesOf(s)))
                 .toList();
-        // TODO Task 2 / Task 3: bổ sung sự cố và phụ phí của đơn
+        // TODO Task 3: bổ sung phụ phí của đơn
         return CustomerMovingHistoryResponse.builder()
                 .bookingId(booking.id())
                 .bookingCode(booking.bookingCode())
                 .bookingStatus(booking.status())
                 .trips(trips)
+                .incidents(incidentRepository.findAllByBookingIdOrderByReportedAtDescIdDesc(bookingId).stream()
+                        .filter(i -> i.getStatus() != IncidentStatus.REJECTED)
+                        .map(incidentMapper::toCustomerResponse)
+                        .toList())
                 .build();
     }
 
@@ -88,6 +97,9 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
                 .bookingStatus(booking.status())
                 .trips(schedules.stream()
                         .map(s -> movingScheduleMapper.toManagementTrip(s, assignments.staffOf(s), assignments.vehiclesOf(s)))
+                        .toList())
+                .incidents(incidentRepository.findAllByBookingIdOrderByReportedAtDescIdDesc(bookingId).stream()
+                        .map(incidentMapper::toResponse)
                         .toList())
                 .build();
     }

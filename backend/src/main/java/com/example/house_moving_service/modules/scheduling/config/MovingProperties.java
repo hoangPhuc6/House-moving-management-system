@@ -16,4 +16,13 @@ public class MovingProperties {
      * 0 = chỉ được bắt đầu từ đúng giờ. Bắt đầu muộn không bị chặn (chỉ cần đúng ngày của giờ hẹn).
      */
     private int earlyStartMinutes = 60;
+
+    /** Nhân viên còn báo được sự cố của chuyến đã COMPLETED trong bao nhiêu giờ sau actual_end_at. Mặc định 24. */
+    private int incidentReportWindowHours = 24;
+
+    /**
+     * Khách còn tự báo được sự cố của đơn đã COMPLETED trong bao nhiêu ngày sau khi chuyến cuối kết thúc
+     * (actual_end_at muộn nhất). Mặc định 7.
+     */
+    private int customerIncidentReportWindowDays = 7;
 }

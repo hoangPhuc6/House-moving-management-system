@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, Bookmark, Clock, Phone, Route, Send, ShieldCheck, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Clock, Phone, Route, Send, ShieldCheck, Wallet } from 'lucide-react';
 import { Button, Card, KeyValue, cx } from '@/components/ui';
 import { formatDateVN, formatVND } from '@/services/format';
 import { HOTLINE, WIZARD_STEPS } from './constants';
@@ -9,13 +9,12 @@ export interface WizardNavProps {
   step: number;
   onNext: () => void;
   onBack: () => void;
-  onSaveDraft: () => void;
 }
 
 const isLast = (step: number) => step === WIZARD_STEPS.length - 1;
 
-/** Các nút điều hướng wizard — dùng cho sidebar desktop. */
-const NavButtons = ({ step, onNext, onBack, onSaveDraft }: WizardNavProps) => {
+/** Các nút điều hướng wizard — chỉ dùng cho sidebar desktop (lưu nháp nằm ở đầu trang). */
+const NavButtons = ({ step, onNext, onBack }: WizardNavProps) => {
   const last = isLast(step);
   const NextIcon = last ? Send : ArrowRight;
   return (
@@ -34,25 +33,24 @@ const NavButtons = ({ step, onNext, onBack, onSaveDraft }: WizardNavProps) => {
           <NextIcon className="size-4" strokeWidth={2.25} />
         </span>
       </button>
-      <div className={cx('grid gap-2', step > 0 && 'grid-cols-2')}>
-        {step > 0 && (
-          <Button variant="secondary" icon={ArrowLeft} onClick={onBack}>
-            Quay lại
-          </Button>
-        )}
-        <Button variant="secondary" icon={Bookmark} onClick={onSaveDraft}>
-          Lưu nháp
+      {step > 0 && (
+        <Button variant="secondary" block icon={ArrowLeft} onClick={onBack}>
+          Quay lại Bước {step}
         </Button>
-      </div>
+      )}
+      <p className="text-center text-[11px] text-slate-500">
+        {last ? 'Miễn phí hủy lịch trước 24 giờ so với giờ vận chuyển.' : 'Thông tin được giữ lại khi chuyển bước.'}
+      </p>
     </div>
   );
 };
 
 export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; nav: WizardNavProps; onEdit: (s: number) => void }) => {
-  const { draft, fromAddress, toAddress, routeReady, distanceKm, homeScale, referenceQuote, requestedServices } = wizard;
+  const { draft, fromAddress, toAddress, distanceKm, estimateReady, referenceQuote, requestedServices } = wizard;
   const { step } = nav;
   const hasRoute = Boolean(draft.from.street.trim() || draft.to.street.trim());
-  const showEstimate = step >= 1 && routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? Boolean(homeScale) : Boolean(draft.vehicleService));
+  const showEstimate = step >= 1 && estimateReady;
+  const truckOnly = draft.serviceMode === 'TRUCK_ONLY';
 
   return (
     <div className="space-y-4">
@@ -134,12 +132,13 @@ export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; 
 
       <div className="rounded-2xl bg-slate-900 p-5 text-white">
         <p className="flex items-center gap-2 text-sm font-semibold">
-          <ShieldCheck className="size-4 text-brand" /> Lưu ý về cam kết chi phí
+          <ShieldCheck className="size-4 text-brand" /> Giá tạm tính &amp; giá chốt
         </p>
         <p className="mt-2 text-[13px] leading-relaxed text-white/70">
-          MoveFlow cam kết <span className="font-semibold text-white">không báo giá ước chừng</span> gây chênh lệch ngoài thực địa. Sau khi khảo sát, chuyên viên lập báo giá chi tiết từng hạng mục minh bạch.
+          Số tạm tính chỉ để bạn hình dung chi phí. <span className="font-semibold text-white">Giá chốt</span> nằm trong báo giá chi tiết từng hạng mục, gửi cho bạn{' '}
+          {truckOnly ? 'sau khi điều phối viên xác nhận xe' : 'sau khi khảo sát'} và chỉ áp dụng khi bạn đồng ý.
         </p>
-        <p className="mt-3 text-xs font-semibold text-brand">Không phát sinh phụ phí vô lý trong ngày vận chuyển</p>
+        <p className="mt-3 text-xs font-semibold text-brand">Phát sinh tại hiện trường (nếu có) luôn cần bạn xác nhận trước khi tính</p>
       </div>
 
       <Card className="flex items-center gap-3">

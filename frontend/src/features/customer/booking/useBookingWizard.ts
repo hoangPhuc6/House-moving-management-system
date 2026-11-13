@@ -105,7 +105,6 @@ export const validateStep = (draft: WizardDraft, step: number): StepErrors => {
   if (step === 0) {
     (['from', 'to'] as const).forEach((side) => {
       const a = draft[side];
-      if (!a.district) e[`${side}.district`] = 'Chọn quận / huyện';
       if (!a.ward) e[`${side}.ward`] = 'Chọn phường / xã';
       if (!a.street.trim()) e[`${side}.street`] = 'Nhập số nhà & tên đường';
     });
@@ -189,6 +188,8 @@ export const useBookingWizard = () => {
   const toAddress = formatAddress(draft.to);
   const routeReady = isAddressComplete(draft.from) && isAddressComplete(draft.to);
   const distanceKm = routeReady ? estimateDistanceKm(fromAddress, toAddress) : null;
+  /** Đủ dữ liệu để hiện giá tạm tính: có lộ trình + (trọn gói: quy mô nhà | chỉ thuê xe: loại xe). */
+  const estimateReady = routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? Boolean(homeScale) : Boolean(draft.vehicleService));
 
   const referenceQuote = useMemo(
     () =>
@@ -280,6 +281,7 @@ export const useBookingWizard = () => {
     toAddress,
     routeReady,
     distanceKm,
+    estimateReady,
     referenceQuote,
     saveDraft,
     clearDraft,

@@ -54,6 +54,12 @@ public enum ErrorCode {
     ERR_PAYMENT_NOT_FOUND(7001, HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch thanh toán với ID: %s"),
     ERR_PAYMENT_INVALID_STATUS(7002, HttpStatus.BAD_REQUEST, "Trạng thái giao dịch không cho phép thực hiện thao tác này: %s"),
     ERR_PAYMENT_ALREADY_PROCESSED(7003, HttpStatus.BAD_REQUEST, "Giao dịch thanh toán đã được xử lý trước đó"),
+    ERR_MOVING_SCHEDULE_NOT_FOUND(8001, HttpStatus.NOT_FOUND, "Không tìm thấy lịch vận chuyển với ID: %s"),
+    ERR_MOVING_INVALID_STATUS(8002, HttpStatus.BAD_REQUEST, "Trạng thái lịch vận chuyển hiện tại không cho phép thực hiện thao tác này"),
+    ERR_MOVING_FORBIDDEN(8003, HttpStatus.FORBIDDEN, "Bạn không được phân công cho lịch vận chuyển này"),
+    ERR_MOVING_NOT_SUPERVISOR(8004, HttpStatus.FORBIDDEN, "Chỉ giám sát viên của chuyến mới được thực hiện thao tác này"),
+    ERR_MOVING_INVALID_TIME(8005, HttpStatus.BAD_REQUEST, "Thời điểm thao tác không hợp lệ: %s"),
+    ERR_MOVING_BOOKING_INVALID_STATUS(8006, HttpStatus.BAD_REQUEST, "Trạng thái đơn hàng không cho phép vận chuyển"),
     ERR_INTERNAL_SERVER(9999, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống ngoài dự tính");
 
     private final int code;

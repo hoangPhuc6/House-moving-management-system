@@ -57,6 +57,8 @@ app:
     early-start-minutes: 60
     max-attachments: 50
     max-video-attachments: 5
+  moving:
+    early-start-minutes: 60
   storage:
     # Để trống = chưa cấu hình lưu trữ: app vẫn chạy, API upload báo ERR_FILE_STORAGE. Dùng MinIO: STORAGE_PROVIDER=MINIO
     provider: ${STORAGE_PROVIDER:}

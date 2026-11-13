@@ -61,7 +61,7 @@ public class CustomerMovingScheduleController {
     @Operation(
             summary = "Lịch sử vận chuyển của đơn",
             description = "Các chuyến chưa hủy: trạng thái, giờ hẹn / thực tế, delayMinutes, dòng thời gian [{ milestone, at }] "
-                    + "(START → các mốc → COMPLETE), biển số xe, họ tên và số điện thoại giám sát viên. "
+                    + "(START → các mốc → COMPLETE), biển số xe, họ tên và số điện thoại giám sát viên; sự cố của đơn (trừ sự cố đã bác bỏ). "
                     + "Khi có chuyến IN_PROGRESS, frontend gọi lại mỗi 30–60 giây."
     )
     public ResponseEntity<ApiResponse<CustomerMovingHistoryResponse>> getHistory(

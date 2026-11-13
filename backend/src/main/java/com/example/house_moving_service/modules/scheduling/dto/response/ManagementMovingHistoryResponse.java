@@ -6,14 +6,15 @@ import lombok.Builder;
 import java.util.List;
 
 /**
- * Lịch sử vận chuyển của đơn, phía điều phối (mọi trạng thái). Hiện có phần các chuyến (Task 1);
- * phần sự cố (Task 2) và phụ phí (Task 3) bổ sung sau.
+ * Lịch sử vận chuyển của đơn, phía điều phối (mọi trạng thái): các chuyến (Task 1) và sự cố (Task 2);
+ * phần phụ phí (Task 3) bổ sung sau.
  */
 @Builder
 public record ManagementMovingHistoryResponse(
         Integer bookingId,
         String bookingCode,
         BookingStatus bookingStatus,
-        List<ManagementMovingTripResponse> trips
+        List<ManagementMovingTripResponse> trips,
+        List<IncidentResponse> incidents
 ) {
 }

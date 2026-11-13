@@ -2,11 +2,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Headphones,
-  type LucideIcon,
   Phone,
-  QrCode,
-  ReceiptText,
-  Star,
   Truck,
 } from 'lucide-react';
 import { Alert, Button, Card, Divider, KeyValue } from '@/components/ui';
@@ -18,13 +14,12 @@ import { ScheduleCard } from '@/features/customer/components/ScheduleCard';
 import { SurveyStageCard } from '@/features/customer/components/SurveyStageCard';
 import { WaitTimerCard } from '@/features/customer/components/WaitTimerCard';
 import { customerStepMeta, surveyHeroCopy } from '@/features/customer/surveyStage';
-import { scrollToSection } from '@/features/customer/utils';
+import { customerActionOf, scrollToSection } from '@/features/customer/utils';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
 import { ProcessStepper } from '@/features/order/components/ProcessStepper';
 import { ReferenceQuoteCard } from '@/features/order/components/ReferenceQuoteCard';
-import { formatDateVN, formatVND } from '@/services/format';
-import { computeTotals } from '@/services/pricing';
+import { formatDateVN } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
@@ -38,7 +33,6 @@ export const OrderOverview = ({ order }: { order: Order }) => {
   const crew = state.resources.staff.filter((s) =>
     order.crewIds.includes(s.id),
   );
-  const totals = computeTotals(order);
   const executing = [
     "ASSIGNED",
     "IN_TRANSIT",
@@ -46,26 +40,9 @@ export const OrderOverview = ({ order }: { order: Order }) => {
     "PENDING_PAYMENT_OR_CLAIM",
   ].includes(order.status);
 
-  const cta: { label: string; section: string; icon: LucideIcon } | null =
-    order.status === "SURVEYED_PENDING_CONFIRM"
-      ? {
-          label: "Xem báo giá & đặt cọc",
-          section: "quote-section",
-          icon: ReceiptText,
-        }
-      : order.status === "PENDING_PAYMENT_OR_CLAIM" && totals.remaining > 0
-        ? {
-            label: `Thanh toán ${formatVND(totals.remaining)}`,
-            section: "payment-section",
-            icon: QrCode,
-          }
-        : order.status === "COMPLETED"
-          ? {
-              label: "Đánh giá & hỗ trợ sau chuyển",
-              section: "payment-section",
-              icon: Star,
-            }
-          : null;
+  // Hành động có khối đích trên trang mới thành CTA; phát sinh hiện trường đã có banner riêng ở đầu trang.
+  const action = customerActionOf(order);
+  const cta = action?.section ? { ...action, section: action.section } : null;
 
   return (
     <div className="space-y-4">

@@ -23,6 +23,8 @@ export interface MobileShellProps {
   /** Khối nội dung phụ dưới thanh tiêu đề (VD: chọn đơn hàng). */
   headerExtra?: ReactNode;
   notificationOrderIds?: string[];
+  /** Đường dẫn khi bấm một thông báo (theo mã đơn); bỏ trống thì thông báo chỉ để đọc. */
+  notificationHref?: (orderId: string) => string;
   /** Thay các mục mặc định trong menu avatar (VD: tài khoản khách hàng). */
   userMenuItems?: UserMenuItem[];
   /** Độ rộng vùng nội dung. */
@@ -37,7 +39,7 @@ export interface MobileShellProps {
  * Shell mobile-first cho Khách hàng & Nhân viên vận chuyển:
  * thanh tiêu đề dính trên, bottom tab bar trên mobile, tab ngang trên desktop.
  */
-export const MobileShell = ({ nav, user, tone = 'light', headerExtra, notificationOrderIds, userMenuItems, maxWidth = 'max-w-3xl', headerWidth = 'max-w-6xl', children }: MobileShellProps) => {
+export const MobileShell = ({ nav, user, tone = 'light', headerExtra, notificationOrderIds, notificationHref, userMenuItems, maxWidth = 'max-w-3xl', headerWidth = 'max-w-6xl', children }: MobileShellProps) => {
   const dark = tone === 'dark';
   const { pathname } = useLocation();
 
@@ -67,7 +69,7 @@ export const MobileShell = ({ nav, user, tone = 'light', headerExtra, notificati
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-1.5 md:ml-0">
-            <NotificationBell orderIds={notificationOrderIds} dark={dark} />
+            <NotificationBell orderIds={notificationOrderIds} orderHref={notificationHref} dark={dark} />
             <UserMenu user={user} dark={dark} items={userMenuItems} />
           </div>
         </div>

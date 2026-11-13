@@ -20,6 +20,7 @@ import { CoordinatorIncidentPage } from '@/pages/coordinator/CoordinatorIncident
 import { CoordinatorQueuePage } from '@/pages/coordinator/CoordinatorQueuePage';
 import { CustomerCreatePage } from '@/pages/customer/CustomerCreatePage';
 import { CustomerHistoryPage } from '@/pages/customer/CustomerHistoryPage';
+import { CustomerOrderDetailPage } from '@/pages/customer/CustomerOrderDetailPage';
 import { CustomerOrdersPage } from '@/pages/customer/CustomerOrdersPage';
 import { LandingPage } from '@/pages/LandingPage';
 import { StaffJobDetailPage } from '@/pages/staff/StaffJobDetailPage';
@@ -36,8 +37,10 @@ export const AppRoutes = () => (
       <Route path="customer" element={<CustomerLayout />}>
         <Route index element={<Navigate to="orders" replace />} />
         <Route path="orders" element={<CustomerOrdersPage />} />
+        <Route path="orders/:orderId" element={<CustomerOrderDetailPage />} />
         <Route path="create" element={<CustomerCreatePage />} />
         <Route path="history" element={<CustomerHistoryPage />} />
+        <Route path="history/:orderId" element={<CustomerOrderDetailPage />} />
       </Route>
 
       <Route path="staff" element={<StaffLayout />}>

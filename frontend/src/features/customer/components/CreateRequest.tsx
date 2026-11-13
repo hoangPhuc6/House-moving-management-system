@@ -10,6 +10,7 @@ import { StepServices } from '@/features/customer/booking/StepServices';
 import { useBookingWizard, validateStep } from '@/features/customer/booking/useBookingWizard';
 import { WizardSidebar } from '@/features/customer/booking/WizardSidebar';
 import { StickyActionBar } from '@/layouts/MobileShell';
+import type { OrdersPageNavState } from '@/pages/customer/CustomerOrdersPage';
 import { ROUTES } from '@/routes/paths';
 import { formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
@@ -63,7 +64,8 @@ export const CreateRequest = () => {
     }
     dispatch({ type: 'CREATE_ORDER', input: wizard.buildOrderInput() });
     wizard.clearDraft();
-    navigate(ROUTES.customer.orders);
+    // Id đơn do store gán (activeOrderId) — trang Đơn hàng sẽ mở thẳng chi tiết đơn vừa tạo.
+    navigate(ROUTES.customer.orders, { state: { focusActive: true } satisfies OrdersPageNavState });
   };
 
   const back = () => step > 0 && goTo(step - 1);

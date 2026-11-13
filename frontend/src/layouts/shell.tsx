@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
@@ -44,7 +44,7 @@ export const ROLE_DOT: Record<AuditLogEntry['actorRole'], string> = {
   SYSTEM: 'bg-slate-400',
 };
 
-export const NotificationBell = ({ orderIds, dark = false }: { orderIds?: string[]; dark?: boolean }) => {
+export const NotificationBell = ({ orderIds, orderHref, dark = false }: { orderIds?: string[]; orderHref?: (orderId: string) => string; dark?: boolean }) => {
   const { state } = useApp();
   const [open, setOpen] = useState(false);
   const [lastSeen, setLastSeen] = useState(0);
@@ -88,16 +88,29 @@ export const NotificationBell = ({ orderIds, dark = false }: { orderIds?: string
             <span className="text-xs text-slate-400">{items.length} hoạt động gần đây</span>
           </div>
           <ul className="max-h-[60vh] divide-y divide-slate-50 overflow-y-auto">
-            {items.map((n) => (
-              <li key={n.id} className="flex gap-3 px-4 py-3 hover:bg-slate-50">
-                <span className={cx('mt-1.5 size-2 shrink-0 rounded-full', ROLE_DOT[n.actorRole])} />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{n.action}</p>
-                  <p className="line-clamp-2 text-xs text-slate-500">{n.detail}</p>
-                  <p className="mt-1 text-[11px] text-slate-400 tabular-nums">#{n.orderId} · {formatTime(n.timestamp)}</p>
-                </div>
-              </li>
-            ))}
+            {items.map((n) => {
+              const body = (
+                <>
+                  <span className={cx('mt-1.5 size-2 shrink-0 rounded-full', ROLE_DOT[n.actorRole])} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{n.action}</p>
+                    <p className="line-clamp-2 text-xs text-slate-500">{n.detail}</p>
+                    <p className="mt-1 text-[11px] text-slate-400 tabular-nums">#{n.orderId} · {formatTime(n.timestamp)}</p>
+                  </div>
+                </>
+              );
+              return (
+                <li key={n.id}>
+                  {orderHref ? (
+                    <Link to={orderHref(n.orderId)} onClick={() => setOpen(false)} className="flex gap-3 px-4 py-3 hover:bg-slate-50">
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="flex gap-3 px-4 py-3 hover:bg-slate-50">{body}</div>
+                  )}
+                </li>
+              );
+            })}
             {items.length === 0 && <li className="px-4 py-8 text-center text-sm text-slate-400">Chưa có thông báo.</li>}
           </ul>
         </div>

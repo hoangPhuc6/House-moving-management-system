@@ -7,8 +7,10 @@ export const ROUTES = {
   customer: {
     root: '/customer',
     orders: '/customer/orders',
+    order: (orderId: string) => `/customer/orders/${orderId}`,
     create: '/customer/create',
     history: '/customer/history',
+    historyOrder: (orderId: string) => `/customer/history/${orderId}`,
   },
   staff: {
     root: '/staff',

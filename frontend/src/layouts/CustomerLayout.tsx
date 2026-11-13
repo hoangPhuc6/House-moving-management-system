@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CircleHelp, CreditCard, History, Home, LogOut, MapPin, Plus, ShieldCheck } from 'lucide-react';
 import { CUSTOMER } from '@/features/customer/constants';
 import { isOpenOrder, needsAction, selectMyOrders } from '@/features/customer/utils';
@@ -28,8 +28,23 @@ export const CustomerLayout = () => {
     { label: 'Đăng xuất', icon: LogOut, danger: true, onClick: () => navigate(ROUTES.login) },
   ];
 
+  // Trang tạo đơn và chi tiết đơn (có thể kèm cột danh sách bên trái) cần vùng nội dung rộng hơn.
+  const wide = pathname === ROUTES.customer.create || matchPath('/customer/orders/:orderId', pathname) !== null;
+  /** Thông báo dẫn tới chi tiết đơn: đơn đang mở → tab Đơn hàng, đơn đã đóng → Lịch sử. */
+  const orderHref = (orderId: string) => {
+    const o = myOrders.find((x) => x.id === orderId);
+    return o && !isOpenOrder(o) ? ROUTES.customer.historyOrder(orderId) : ROUTES.customer.order(orderId);
+  };
+
   return (
-    <MobileShell nav={nav} user={CUSTOMER} userMenuItems={accountMenu} notificationOrderIds={myOrders.map((o) => o.id)} maxWidth={pathname === ROUTES.customer.create ? 'max-w-6xl' : 'max-w-5xl'}>
+    <MobileShell
+      nav={nav}
+      user={CUSTOMER}
+      userMenuItems={accountMenu}
+      notificationOrderIds={myOrders.map((o) => o.id)}
+      notificationHref={orderHref}
+      maxWidth={wide ? 'max-w-6xl' : 'max-w-5xl'}
+    >
       <Outlet />
     </MobileShell>
   );

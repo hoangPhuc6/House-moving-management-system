@@ -60,12 +60,20 @@ public enum ErrorCode {
     ERR_MOVING_NOT_SUPERVISOR(8004, HttpStatus.FORBIDDEN, "Chỉ giám sát viên của chuyến mới được thực hiện thao tác này"),
     ERR_MOVING_INVALID_TIME(8005, HttpStatus.BAD_REQUEST, "Thời điểm thao tác không hợp lệ: %s"),
     ERR_MOVING_BOOKING_INVALID_STATUS(8006, HttpStatus.BAD_REQUEST, "Trạng thái đơn hàng không cho phép vận chuyển"),
+    ERR_MOVING_PENDING_ADJUSTMENT(8007, HttpStatus.CONFLICT, "Đơn còn báo giá điều chỉnh chưa được khách xác nhận, chưa thể bắt đầu vận chuyển"),
     ERR_INCIDENT_NOT_FOUND(8101, HttpStatus.NOT_FOUND, "Không tìm thấy sự cố với ID: %s"),
     ERR_INCIDENT_INVALID_STATUS(8102, HttpStatus.BAD_REQUEST, "Trạng thái sự cố hiện tại không cho phép thực hiện thao tác này"),
     ERR_INCIDENT_FORBIDDEN(8103, HttpStatus.FORBIDDEN, "Bạn không có quyền truy cập sự cố này"),
     ERR_INCIDENT_SCHEDULE_INVALID(8104, HttpStatus.BAD_REQUEST, "Lịch vận chuyển không hợp lệ để ghi nhận sự cố: %s"),
     ERR_INCIDENT_BOOKING_INVALID_STATUS(8105, HttpStatus.BAD_REQUEST, "Đơn hàng đã hủy, không thể ghi nhận sự cố"),
     ERR_INCIDENT_CUSTOMER_REPORT_NOT_ALLOWED(8106, HttpStatus.BAD_REQUEST, "Không thể báo sự cố: %s"),
+    ERR_SURCHARGE_NOT_FOUND(8201, HttpStatus.NOT_FOUND, "Không tìm thấy phụ phí với ID: %s"),
+    ERR_SURCHARGE_INVALID_STATUS(8202, HttpStatus.BAD_REQUEST, "Trạng thái phụ phí hiện tại không cho phép thực hiện thao tác này"),
+    ERR_SURCHARGE_FORBIDDEN(8203, HttpStatus.FORBIDDEN, "Bạn không có quyền thao tác phụ phí này"),
+    ERR_SURCHARGE_SCHEDULE_INVALID(8204, HttpStatus.BAD_REQUEST, "Lịch vận chuyển không hợp lệ để tạo phụ phí: %s"),
+    ERR_SURCHARGE_INVALID_AMOUNT(8205, HttpStatus.BAD_REQUEST, "Số tiền phụ phí không hợp lệ: %s"),
+    ERR_SURCHARGE_REFERENCE_INVALID(8206, HttpStatus.BAD_REQUEST, "Tham chiếu không hợp lệ: %s"),
+    ERR_SURCHARGE_BOOKING_INVALID_STATUS(8207, HttpStatus.BAD_REQUEST, "Trạng thái đơn hàng không cho phép tạo phụ phí"),
     ERR_INTERNAL_SERVER(9999, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống ngoài dự tính");
 
     private final int code;

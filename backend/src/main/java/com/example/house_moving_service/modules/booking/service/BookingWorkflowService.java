@@ -8,6 +8,7 @@ import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.booking.entity.BookingItem;
 import com.example.house_moving_service.modules.booking.enums.BookingStatus;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
@@ -41,4 +42,16 @@ public interface BookingWorkflowService {
      * đã ở trạng thái đích thì không làm gì (không ghi lịch sử).
      */
     void changeStatus(Integer bookingId, Set<BookingStatus> allowedFrom, BookingStatus to, Long actorUserId, String note);
+
+    /**
+     * Khóa dòng đơn (SELECT ... FOR UPDATE) đến hết transaction của người gọi rồi trả snapshot, để người gọi kiểm tra
+     * trạng thái trước khi ghi (ví dụ addToTotalAmount). Phải gọi trong một transaction đang mở.
+     */
+    BookingSnapshot lockForUpdate(Integer bookingId);
+
+    /**
+     * Cộng amount vào bookings.total_amount (khóa dòng đơn), trả tổng tiền mới. Dùng khi khách xác nhận phụ phí phát sinh.
+     * Không kiểm tra trạng thái đơn: người gọi tự kiểm tra qua lockForUpdate trong cùng transaction.
+     */
+    BigDecimal addToTotalAmount(Integer bookingId, BigDecimal amount);
 }

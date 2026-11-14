@@ -17,9 +17,12 @@ import com.example.house_moving_service.modules.scheduling.enums.AssignmentStatu
 import com.example.house_moving_service.modules.scheduling.enums.MovingScheduleStatus;
 import com.example.house_moving_service.modules.scheduling.enums.ProgressMilestone;
 import com.example.house_moving_service.modules.scheduling.enums.StaffAssignmentRole;
+import com.example.house_moving_service.modules.scheduling.enums.SurchargeStatus;
 import com.example.house_moving_service.modules.scheduling.enums.VehicleStatus;
 import com.example.house_moving_service.modules.scheduling.helper.MovingLogParser;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.mapper.SurchargeMapper;
+import com.example.house_moving_service.modules.scheduling.repository.BookingSurchargeRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleVehicleAssignmentRepository;
@@ -33,6 +36,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -48,6 +52,7 @@ public class FieldMovingScheduleServiceImpl implements FieldMovingScheduleServic
     private final ScheduleStaffAssignmentRepository staffAssignmentRepository;
     private final ScheduleVehicleAssignmentRepository vehicleAssignmentRepository;
     private final BookingWorkflowService bookingWorkflowService;
+    private final BookingSurchargeRepository surchargeRepository;
     private final MovingScheduleMapper movingScheduleMapper;
     private final MovingProperties movingProperties;
     private final Clock clock;
@@ -76,6 +81,7 @@ public class FieldMovingScheduleServiceImpl implements FieldMovingScheduleServic
         }
         LocalDateTime now = LocalDateTime.now(clock);
         ensureCanStartAt(schedule, now);
+        ensureNoPendingAdjustment(bookingId);
 
         schedule.setStatus(MovingScheduleStatus.IN_PROGRESS);
         schedule.setActualStartAt(now);
@@ -188,6 +194,14 @@ public class FieldMovingScheduleServiceImpl implements FieldMovingScheduleServic
         }
     }
 
+    // Khóa luồng: còn báo giá điều chỉnh chưa được khách xác nhận thì chưa được bắt đầu; trả kèm id các khoản đang chặn
+    private void ensureNoPendingAdjustment(Integer bookingId) {
+        List<Integer> blockingIds = surchargeRepository.findIdsByBookingIdAndStatusIn(bookingId, SurchargeStatus.BLOCKING_START);
+        if (!blockingIds.isEmpty()) {
+            throw AppException.withDetails(ErrorCode.ERR_MOVING_PENDING_ADJUSTMENT, Map.of("blockingSurchargeIds", blockingIds));
+        }
+    }
+
     private List<ScheduleStaffAssignment> activeStaffAssignments(Integer scheduleId) {
         return staffAssignmentRepository.findAllWithStaffByScheduleIds(List.of(scheduleId)).stream()
                 .filter(a -> a.getStatus() != AssignmentStatus.CANCELLED)
@@ -207,7 +221,8 @@ public class FieldMovingScheduleServiceImpl implements FieldMovingScheduleServic
                 bookingWorkflowService.getRoute(bookingId),
                 myRole,
                 activeStaffAssignments(schedule.getId()),
-                activeVehicleAssignments(schedule.getId()));
+                activeVehicleAssignments(schedule.getId()),
+                SurchargeMapper.uncollectedTotal(surchargeRepository.findAllByBookingIdOrderByRequestedAtAscIdAsc(bookingId)));
     }
 
     private static String noteOrDefault(MovingNoteRequest request, String defaultContent) {

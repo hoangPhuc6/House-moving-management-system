@@ -7,6 +7,7 @@ import com.example.house_moving_service.modules.scheduling.enums.StaffAssignment
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -30,6 +31,8 @@ public record FieldMovingScheduleResponse(
         BookingRouteResponse route,
         List<MovingStaffResponse> staff,
         List<MovingVehicleResponse> vehicles,
-        List<MovingLogEntry> logs
+        List<MovingLogEntry> logs,
+        // Phụ phí của đơn khách đã xác nhận nhưng người vận chuyển chưa thu tiền
+        BigDecimal uncollectedTotal
 ) {
 }

@@ -25,4 +25,7 @@ public class MovingProperties {
      * (actual_end_at muộn nhất). Mặc định 7.
      */
     private int customerIncidentReportWindowDays = 7;
+
+    /** Một chuyến dài tối đa bao nhiêu giờ (scheduled_end_at - scheduled_start_at). Chuyển nhiều ngày thì tách nhiều chuyến. Mặc định 24. */
+    private int maxScheduleHours = 24;
 }

@@ -7,6 +7,7 @@ import com.example.house_moving_service.modules.scheduling.dto.response.Customer
 import com.example.house_moving_service.modules.scheduling.dto.response.CustomerMovingTripResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.FieldMovingScheduleResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.ManagementMovingTripResponse;
+import com.example.house_moving_service.modules.scheduling.dto.response.MovingScheduleSummaryResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.MovingStaffResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.MovingVehicleResponse;
 import com.example.house_moving_service.modules.scheduling.dto.response.SupervisorContact;
@@ -141,6 +142,36 @@ public class MovingScheduleMapper {
                 .createdBy(schedule.getCreatedBy() != null ? schedule.getCreatedBy().getId() : null)
                 .createdAt(schedule.getCreatedAt())
                 .updatedAt(schedule.getUpdatedAt())
+                .build();
+    }
+
+    /** Dòng danh sách chuyến cho điều phối; chỉ tính phân công chưa hủy. booking của chuyến phải đã được fetch. */
+    public MovingScheduleSummaryResponse toSummary(MovingSchedule schedule,
+                                                   List<ScheduleStaffAssignment> staff,
+                                                   List<ScheduleVehicleAssignment> vehicles) {
+        List<ScheduleStaffAssignment> activeStaff = staff.stream()
+                .filter(a -> a.getStatus() != AssignmentStatus.CANCELLED)
+                .toList();
+        String supervisorName = activeStaff.stream()
+                .filter(a -> a.getRole() == StaffAssignmentRole.SUPERVISOR)
+                .findFirst()
+                .map(a -> a.getStaff().getFullName())
+                .orElse(null);
+        return MovingScheduleSummaryResponse.builder()
+                .id(schedule.getId())
+                .bookingId(schedule.getBooking().getId())
+                .bookingCode(schedule.getBooking().getBookingCode())
+                .status(schedule.getStatus())
+                .scheduledStartAt(schedule.getScheduledStartAt())
+                .scheduledEndAt(schedule.getScheduledEndAt())
+                .actualStartAt(schedule.getActualStartAt())
+                .actualEndAt(schedule.getActualEndAt())
+                .supervisorName(supervisorName)
+                .staffCount(activeStaff.size())
+                .licensePlates(vehicles.stream()
+                        .filter(a -> a.getStatus() != AssignmentStatus.CANCELLED)
+                        .map(a -> a.getVehicle().getLicensePlate())
+                        .toList())
                 .build();
     }
 }

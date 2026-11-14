@@ -61,6 +61,10 @@ app:
     early-start-minutes: 60
     incident-report-window-hours: 24
     customer-incident-report-window-days: 7
+  surcharge:
+    # Giới hạn của một khoản phụ phí phát sinh (quantity là phần chênh lệch so với lúc khách khai)
+    max-quantity: 100
+    max-unit-price: 50000000
   storage:
     # Để trống = chưa cấu hình lưu trữ: app vẫn chạy, API upload báo ERR_FILE_STORAGE. Dùng MinIO: STORAGE_PROVIDER=MINIO
     provider: ${STORAGE_PROVIDER:}

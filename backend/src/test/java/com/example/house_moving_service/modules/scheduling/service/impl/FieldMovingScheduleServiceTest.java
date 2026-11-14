@@ -19,8 +19,10 @@ import com.example.house_moving_service.modules.scheduling.enums.AssignmentStatu
 import com.example.house_moving_service.modules.scheduling.enums.MovingScheduleStatus;
 import com.example.house_moving_service.modules.scheduling.enums.ProgressMilestone;
 import com.example.house_moving_service.modules.scheduling.enums.StaffAssignmentRole;
+import com.example.house_moving_service.modules.scheduling.enums.SurchargeStatus;
 import com.example.house_moving_service.modules.scheduling.enums.VehicleStatus;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.repository.BookingSurchargeRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleVehicleAssignmentRepository;
@@ -38,6 +40,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,13 +75,16 @@ class FieldMovingScheduleServiceTest {
     private ScheduleVehicleAssignmentRepository vehicleAssignmentRepository;
     @Mock
     private BookingWorkflowService bookingWorkflowService;
+    @Mock
+    private BookingSurchargeRepository surchargeRepository;
 
     private FieldMovingScheduleServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new FieldMovingScheduleServiceImpl(movingScheduleRepository, staffAssignmentRepository,
-                vehicleAssignmentRepository, bookingWorkflowService, new MovingScheduleMapper(), new MovingProperties(), CLOCK);
+                vehicleAssignmentRepository, bookingWorkflowService, surchargeRepository, new MovingScheduleMapper(),
+                new MovingProperties(), CLOCK);
     }
 
     // ---------- fixtures ----------
@@ -197,6 +203,25 @@ class FieldMovingScheduleServiceTest {
         when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(booking(BookingStatus.CANCELLED));
 
         assertError(() -> service.start(SCHEDULE_ID, null, SUPERVISOR_ID), ErrorCode.ERR_MOVING_BOOKING_INVALID_STATUS);
+    }
+
+    @Test
+    @DisplayName("start: đơn còn phụ phí PROPOSED / WAITING_CUSTOMER / REJECTED_BY_CUSTOMER → 8007 kèm id khoản đang chặn; không đổi gì")
+    void testStart_PendingAdjustment() {
+        MovingSchedule schedule = schedule(MovingScheduleStatus.CONFIRMED);
+        givenLocked(schedule);
+        givenSupervisor();
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(booking(BookingStatus.CONFIRMED));
+        when(surchargeRepository.findIdsByBookingIdAndStatusIn(BOOKING_ID, SurchargeStatus.BLOCKING_START))
+                .thenReturn(List.of(3, 5));
+
+        assertThatThrownBy(() -> service.start(SCHEDULE_ID, null, SUPERVISOR_ID))
+                .isInstanceOf(AppException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ERR_MOVING_PENDING_ADJUSTMENT)
+                .hasFieldOrPropertyWithValue("details", Map.of("blockingSurchargeIds", List.of(3, 5)));
+        assertThat(schedule.getStatus()).isEqualTo(MovingScheduleStatus.CONFIRMED);
+        assertThat(schedule.getActualStartAt()).isNull();
+        verify(bookingWorkflowService, never()).changeStatus(any(), any(), any(), any(), any());
     }
 
     @Test

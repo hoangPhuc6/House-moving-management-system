@@ -15,6 +15,8 @@ import com.example.house_moving_service.modules.scheduling.enums.IncidentStatus;
 import com.example.house_moving_service.modules.scheduling.enums.MovingScheduleStatus;
 import com.example.house_moving_service.modules.scheduling.mapper.IncidentMapper;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.mapper.SurchargeMapper;
+import com.example.house_moving_service.modules.scheduling.repository.BookingSurchargeRepository;
 import com.example.house_moving_service.modules.scheduling.repository.IncidentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
@@ -39,6 +41,8 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
     private final MovingScheduleMapper movingScheduleMapper;
     private final IncidentRepository incidentRepository;
     private final IncidentMapper incidentMapper;
+    private final BookingSurchargeRepository surchargeRepository;
+    private final SurchargeMapper surchargeMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -72,7 +76,6 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
         List<CustomerMovingTripResponse> trips = schedules.stream()
                 .map(s -> movingScheduleMapper.toCustomerTrip(s, assignments.staffOf(s), assignments.vehiclesOf(s)))
                 .toList();
-        // TODO Task 3: bổ sung phụ phí của đơn
         return CustomerMovingHistoryResponse.builder()
                 .bookingId(booking.id())
                 .bookingCode(booking.bookingCode())
@@ -82,6 +85,8 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
                         .filter(i -> i.getStatus() != IncidentStatus.REJECTED)
                         .map(incidentMapper::toCustomerResponse)
                         .toList())
+                .surcharges(surchargeMapper.toCustomerSummary(
+                        surchargeRepository.findAllByBookingIdOrderByRequestedAtAscIdAsc(bookingId)))
                 .build();
     }
 
@@ -101,6 +106,8 @@ public class MovingHistoryServiceImpl implements MovingHistoryService {
                 .incidents(incidentRepository.findAllByBookingIdOrderByReportedAtDescIdDesc(bookingId).stream()
                         .map(incidentMapper::toResponse)
                         .toList())
+                .surcharges(surchargeMapper.toBookingSummary(booking,
+                        surchargeRepository.findAllByBookingIdOrderByRequestedAtAscIdAsc(bookingId)))
                 .build();
     }
 

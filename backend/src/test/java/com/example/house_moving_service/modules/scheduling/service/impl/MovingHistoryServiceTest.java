@@ -26,6 +26,8 @@ import com.example.house_moving_service.modules.scheduling.enums.StaffAssignment
 import com.example.house_moving_service.modules.scheduling.enums.VehicleStatus;
 import com.example.house_moving_service.modules.scheduling.mapper.IncidentMapper;
 import com.example.house_moving_service.modules.scheduling.mapper.MovingScheduleMapper;
+import com.example.house_moving_service.modules.scheduling.mapper.SurchargeMapper;
+import com.example.house_moving_service.modules.scheduling.repository.BookingSurchargeRepository;
 import com.example.house_moving_service.modules.scheduling.repository.IncidentRepository;
 import com.example.house_moving_service.modules.scheduling.repository.MovingScheduleRepository;
 import com.example.house_moving_service.modules.scheduling.repository.ScheduleStaffAssignmentRepository;
@@ -62,13 +64,16 @@ class MovingHistoryServiceTest {
     private BookingWorkflowService bookingWorkflowService;
     @Mock
     private IncidentRepository incidentRepository;
+    @Mock
+    private BookingSurchargeRepository surchargeRepository;
 
     private MovingHistoryServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new MovingHistoryServiceImpl(movingScheduleRepository, staffAssignmentRepository, vehicleAssignmentRepository,
-                bookingWorkflowService, new MovingScheduleMapper(), incidentRepository, new IncidentMapper());
+                bookingWorkflowService, new MovingScheduleMapper(), incidentRepository, new IncidentMapper(),
+                surchargeRepository, new SurchargeMapper());
     }
 
     private static MovingSchedule schedule(int id, MovingScheduleStatus status) {

@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
@@ -50,8 +51,28 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     @Override
     @Transactional(readOnly = true)
     public BookingSnapshot getSnapshot(Integer bookingId) {
-        Booking booking = findBooking(bookingId);
+        return toSnapshot(findBooking(bookingId));
+    }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BookingSnapshot lockForUpdate(Integer bookingId) {
+        return toSnapshot(findBookingForUpdate(bookingId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BigDecimal addToTotalAmount(Integer bookingId, BigDecimal amount) {
+        Booking booking = findBookingForUpdate(bookingId);
+        BigDecimal current = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
+        booking.setTotalAmount(current.add(amount));
+        bookingRepository.save(booking);
+
+        log.info("Booking id: {} total amount {} -> {} (+{})", bookingId, current, booking.getTotalAmount(), amount);
+        return booking.getTotalAmount();
+    }
+
+    private BookingSnapshot toSnapshot(Booking booking) {
         Long customerUserId = null;
         String customerName = null;
         if (booking.getCustomer() != null) {
@@ -145,6 +166,11 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         bookingStatusHistoryRepository.save(history);
 
         log.info("Booking id: {} changed status {} -> {} by user: {}", bookingId, oldStatus, to, actorUserId);
+    }
+
+    private Booking findBookingForUpdate(Integer bookingId) {
+        return bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new AppException(ErrorCode.ERR_BOOKING_NOT_FOUND, bookingId));
     }
 
     private Booking findBooking(Integer bookingId) {

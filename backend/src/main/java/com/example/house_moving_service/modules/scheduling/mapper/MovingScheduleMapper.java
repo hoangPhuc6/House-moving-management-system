@@ -19,6 +19,7 @@ import com.example.house_moving_service.modules.scheduling.enums.StaffAssignment
 import com.example.house_moving_service.modules.scheduling.helper.MovingLogParser;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Component
@@ -54,7 +55,8 @@ public class MovingScheduleMapper {
     public FieldMovingScheduleResponse toFieldResponse(MovingSchedule schedule, BookingSnapshot booking, BookingRouteResponse route,
                                                        StaffAssignmentRole myRole,
                                                        List<ScheduleStaffAssignment> staff,
-                                                       List<ScheduleVehicleAssignment> vehicles) {
+                                                       List<ScheduleVehicleAssignment> vehicles,
+                                                       BigDecimal uncollectedSurchargeTotal) {
         return FieldMovingScheduleResponse.builder()
                 .id(schedule.getId())
                 .bookingId(booking.id())
@@ -73,6 +75,7 @@ public class MovingScheduleMapper {
                 .staff(staff.stream().map(this::toStaffResponse).toList())
                 .vehicles(vehicles.stream().map(this::toVehicleResponse).toList())
                 .logs(MovingLogParser.parse(schedule.getNote()))
+                .uncollectedTotal(uncollectedSurchargeTotal)
                 .build();
     }
 

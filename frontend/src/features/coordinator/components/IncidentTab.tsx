@@ -18,6 +18,7 @@ import {
 import { FIELD_STAGE_LABEL } from '@/constants/order';
 import { PLATE_REGEX } from '@/constants/resources';
 import { OrderPicker } from '@/features/coordinator/components/OrderPicker';
+import { hasSkill, isActiveStaff } from '@/services/staff';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
@@ -41,8 +42,9 @@ export const IncidentTab = ({
     "IN_TRANSIT",
     "PAUSED_WAITING_CUSTOMER",
   ].includes(order.status);
+  // Tài xế thay thế: có kỹ năng lái, đang làm, bằng còn hạn vào ngày chuyển (hạng bằng kiểm khi xác nhận theo xe thay thế).
   const drivers = state.resources.staff.filter(
-    (s) => (s.role === "DRIVER" || s.role === "TEAM_LEADER") && s.isAvailable,
+    (s) => hasSkill(s, "DRIVE") && isActiveStaff(s) && !!s.license && s.license.expiresAt >= order.scheduledDate,
   );
   const plateNorm = plate.trim().toUpperCase();
   const plateError = !plateNorm
@@ -249,7 +251,7 @@ export const IncidentTab = ({
               <option value="">— Chọn tài xế —</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.name}>
-                  {d.name} ({d.code})
+                  {d.name} ({d.code}) · bằng {d.license?.licenseClass}
                 </option>
               ))}
             </Select>

@@ -1,4 +1,5 @@
 import { type Dispatch } from 'react';
+import type { MaterialKind } from './catalog';
 
 export interface OrderTotals {
   baseQuote: number;
@@ -24,6 +25,8 @@ export interface AssignmentRequirement {
   vehicles: VehicleRequirement[];
   vehicleTotal: number;
   workers: number;
+  /** Đơn có dịch vụ tháo lắp → đội phải có ít nhất một người có kỹ năng tháo lắp. */
+  needsAssembly: boolean;
 }
 
 export interface ReferenceInput {
@@ -94,14 +97,46 @@ export interface Vehicle {
   busyOrderId: string | null;
 }
 
-export type StaffRole = 'TEAM_LEADER' | 'DRIVER' | 'MOVER' | 'TECHNICIAN';
+/**
+ * Kỹ năng của nhân viên (một người có thể có nhiều): lái xe, bốc xếp, tháo lắp.
+ * Kỹ năng thuộc hồ sơ; vai trò trong từng chuyến do Điều phối chọn khi gán đội ({@link CrewAssignment}).
+ * Trưởng nhóm không phải kỹ năng: tài xế của chuyến mặc định là trưởng nhóm.
+ */
+export type StaffSkill = 'DRIVE' | 'LOAD' | 'ASSEMBLY';
+
+/** Hạng GPLX: B2 lái xe tải ≤ 3,5 tấn; C lái mọi xe tải. */
+export type LicenseClass = 'B2' | 'C';
+
+export interface DriverLicense {
+  licenseClass: LicenseClass;
+  /** Ngày hết hạn (ISO yyyy-mm-dd). */
+  expiresAt: string;
+}
+
+/** ACTIVE: đang làm; ON_LEAVE: nghỉ phép (tạm không gán); RESIGNED: nghỉ việc. */
+export type StaffWorkStatus = 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED';
+
+/** Vai trò của một người trong MỘT chuyến. */
+export type TripRole = 'DRIVER' | 'LOADER';
+
+export interface CrewAssignment {
+  staffId: string;
+  role: TripRole;
+  /** Xe người này lái (chỉ với DRIVER). */
+  vehicleId: string | null;
+}
 
 export interface StaffMember {
   id: string;
   code: string;
   name: string;
-  role: StaffRole;
-  isAvailable: boolean;
+  phone: string;
+  /** Tài khoản đăng nhập gắn với hồ sơ (CatalogState.users). */
+  userId: string | null;
+  skills: StaffSkill[];
+  /** null = không có bằng lái xe tải. */
+  license: DriverLicense | null;
+  status: StaffWorkStatus;
 }
 
 export interface ResourceAllocation {
@@ -120,20 +155,58 @@ export interface ExceptionFlags {
   hoursUntilDeparture: number;
 }
 
-/** Step 7 Hard-Lock: chỉ được COMPLETED khi remainingBalance === 0 && isWarehouseReturned === true. */
+/** Step 7 Hard-Lock: chỉ được COMPLETED khi remainingBalance === 0 && materialsSettled === true. */
 export interface SettlementLockState {
   remainingBalance: number;
-  isWarehouseReturned: boolean;
+  /** Phiếu vật tư đã quyết toán (hoặc đơn không dùng vật tư). */
+  materialsSettled: boolean;
 }
 
 export type FieldStage = 'NOT_STARTED' | 'MATERIALS_PICKED' | 'WORKING' | 'MOVING' | 'ARRIVED' | 'HANDED_OVER';
 
-export interface EquipmentItem {
+/**
+ * Vòng đời phiếu vật tư của một đơn:
+ * NONE → (gán đội) DRAFT → (kho xuất) ISSUED → (đội nhận) RECEIVED → (đội khai đã dùng) USAGE_REPORTED → (kho kiểm nhận trả) RETURNED.
+ * Đơn bị hủy khi đã xuất kho: kho kiểm nhận trả thẳng từ ISSUED / RECEIVED.
+ */
+export type MaterialSlipStatus = 'NONE' | 'DRAFT' | 'ISSUED' | 'RECEIVED' | 'USAGE_REPORTED' | 'RETURNED';
+
+/** Một dòng trên phiếu vật tư. Số lượng null = bước đó chưa diễn ra. */
+export interface MaterialLine {
   id: string;
+  inventoryItemId: string;
   name: string;
-  quantity: number;
-  checked: boolean;
+  unit: string;
+  kind: MaterialKind;
+  /** Theo báo giá (vật tư tiêu hao) hoặc bộ dụng cụ chuẩn theo số xe. */
+  planned: number;
+  /** Kho thực xuất — 0 khi chưa xuất. */
+  issued: number;
+  /** Đội xe xác nhận thực nhận. */
+  received: number | null;
+  /** Đội xe khai đã dùng — chỉ vật tư tiêu hao; dụng cụ luôn 0. */
+  used: number | null;
+  /** Kho kiểm nhận trả lại. */
+  returned: number | null;
+  /** Chênh lệch đã xử lý khi quyết toán (mất / hỏng / hao hụt) = issued − used − returned. */
+  lost: number;
 }
+
+export interface MaterialSlip {
+  status: MaterialSlipStatus;
+  lines: MaterialLine[];
+  issuedAt: number | null;
+  receivedAt: number | null;
+  usageReportedAt: number | null;
+  returnedAt: number | null;
+  /** Ghi chú khi đội xe nhận thiếu so với phiếu xuất. */
+  receiveNote: string;
+  /** Biên bản xử lý chênh lệch khi quyết toán (lý do, người chịu trách nhiệm). */
+  resolutionNote: string;
+}
+
+/** Số lượng nhập theo từng dòng phiếu: lineId → số lượng. */
+export type MaterialQuantities = Record<string, number>;
 
 /**
  * PHOTO         — Điều phối viên lập báo giá dựa trên ảnh / video khách gửi (mặc định).
@@ -264,7 +337,8 @@ export interface Order {
   depositRequired: number;
   depositPaid: number;
   balancePaid: number;
-  isWarehouseReturned: boolean;
+  /** Phiếu vật tư & dụng cụ: xuất kho → đội nhận → khai đã dùng → kiểm nhận trả. */
+  materials: MaterialSlip;
   /** Bất biến sau khi COMPLETED — khiếu nại KHÔNG được ghi đè giá trị này. */
   finalRevenue: number | null;
   flags: ExceptionFlags;
@@ -273,8 +347,15 @@ export interface Order {
   vehicleId: string | null;
   /** Tất cả xe đã gán cho đơn (đúng loại & số lượng theo báo giá). */
   vehicleIds: string[];
+  /** Toàn bộ nhân sự của đơn (suy ra từ crew) — dùng để tra lệnh việc của nhân viên. */
   crewIds: string[];
-  equipment: EquipmentItem[];
+  /** Phân vai theo chuyến: ai lái xe nào, ai bốc xếp. */
+  crew: CrewAssignment[];
+  /**
+   * Trưởng nhóm chuyến — mặc định là tài xế (nhiều xe: tài xế xe lớn nhất).
+   * Người nhận vật tư, chịu trách nhiệm bàn giao.
+   */
+  leaderId: string | null;
   auditLog: AuditLogEntry[];
   /** Epoch ms — hạn tự động hủy 24h (Mã 1.1.3). */
   autoCancelDeadline: number | null;
@@ -403,19 +484,25 @@ export type AppAction =
   | { type: 'REPORT_FIELD_DISCREPANCY'; orderId: string }
   | { type: 'CONFIRM_FIELD_ADJUSTMENT'; orderId: string }
   | { type: 'ADVANCE_FIELD_STAGE'; orderId: string; stage: FieldStage }
-  | { type: 'TOGGLE_EQUIPMENT'; orderId: string; itemId: string }
+  /** addedLines: dòng thủ kho thêm tay lúc xuất (đồ ngoài kế hoạch) — kế hoạch 0, vẫn phải quyết toán như dòng khác. */
+  | { type: 'ISSUE_MATERIALS'; orderId: string; issued: MaterialQuantities; addedLines: MaterialLine[] }
+  | { type: 'CONFIRM_MATERIALS_RECEIVED'; orderId: string; received: MaterialQuantities; note: string }
+  | { type: 'REPORT_MATERIAL_USAGE'; orderId: string; used: MaterialQuantities }
+  | { type: 'RETURN_MATERIALS'; orderId: string; returned: MaterialQuantities; note: string }
   | { type: 'START_WAIT_TIMER'; orderId: string }
   | { type: 'STOP_WAIT_TIMER'; orderId: string }
   | { type: 'TICK_WAIT_TIMERS' }
   | { type: 'REPORT_VEHICLE_INCIDENT'; orderId: string }
   | { type: 'TRANSFER_VEHICLE'; orderId: string; plateNumber: string; driverName: string }
   | { type: 'UPDATE_QUOTE_ITEMS'; orderId: string; patches: QuoteItemPatch[]; discountPercent: number; note: string }
-  | { type: 'ASSIGN_RESOURCES'; orderId: string; vehicleIds: string[]; crewIds: string[] }
+  /** Trưởng nhóm suy ra từ crew (tài xế đầu tiên) — không truyền riêng. */
+  | { type: 'ASSIGN_RESOURCES'; orderId: string; vehicleIds: string[]; crew: CrewAssignment[]; materialPlan: MaterialLine[] }
+  /** Admin tạo / sửa hồ sơ nhân viên (kỹ năng, bằng lái, tình trạng). */
+  | { type: 'UPSERT_STAFF'; staff: StaffMember }
   | { type: 'RESCHEDULE'; orderId: string; newDate: string; newSlot: string }
   | { type: 'CANCEL_ORDER'; orderId: string; mode: CancelMode; reason: string }
   | { type: 'RUN_AUTO_CANCEL_CRON' }
   | { type: 'PAY_BALANCE'; orderId: string }
-  | { type: 'CONFIRM_WAREHOUSE_RETURN'; orderId: string }
   | { type: 'CLOSE_ORDER'; orderId: string }
   | { type: 'CREATE_CLAIM'; orderId: string; title: string; description: string; requestedAmount: number }
   | { type: 'SET_CLAIM_STATUS'; claimId: string; status: ClaimStatus; approvedAmount: number | null }

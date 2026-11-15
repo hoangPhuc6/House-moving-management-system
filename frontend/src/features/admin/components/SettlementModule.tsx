@@ -1,5 +1,9 @@
+import { Fragment, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
+  ArrowRight,
   CheckCircle2,
+  ChevronDown,
   CircleDollarSign,
   Lock,
   LockOpen,
@@ -14,19 +18,25 @@ import {
   Button,
   Card,
   CardHeader,
+  cx,
   EmptyState,
   PageHeader,
   Stat,
   StatusBadge,
   Tooltip,
 } from '@/components/ui';
+import { MaterialLinesTable, MaterialSlipActions, MaterialStatusBadge, ReturnMaterialsModal } from '@/features/admin/components/MaterialSlip';
 import { matches } from '@/features/admin/utils';
+import { ROUTES } from '@/routes/paths';
 import { formatVND } from '@/services/format';
 import { canCloseOrder, computeTotals, selectSettlement } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 
 export const SettlementModule = ({ query }: { query: string }) => {
   const { state, dispatch } = useApp();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [returning, setReturning] = useState<string | null>(null);
+  const returningOrder = state.orders.find((o) => o.id === returning);
   const pending = state.orders.filter(
     (o) =>
       o.status === "PENDING_PAYMENT_OR_CLAIM" &&
@@ -44,7 +54,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Quyết toán"
         title="Kiểm soát vật tư & đóng hồ sơ"
-        subtitle="Hồ sơ chỉ được đóng khi công nợ khách hàng = 0đ và đã thu hồi đủ dụng cụ."
+        subtitle="Hồ sơ tự đóng ngay khi công nợ khách hàng = 0đ và phiếu vật tư đã quyết toán (đối chiếu xuất – dùng – trả). Khách đã trả đủ thì thấy đơn Hoàn tất, không phải chờ bước nội bộ này."
       />
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat
@@ -68,11 +78,11 @@ export const SettlementModule = ({ query }: { query: string }) => {
           hint={`${completed.length} đơn hoàn tất`}
         />
         <Stat
-          label="Dụng cụ chưa nhập kho"
-          value={pending.filter((o) => !o.isWarehouseReturned).length}
+          label="Vật tư chưa quyết toán"
+          value={pending.filter((o) => !selectSettlement(o).materialsSettled).length}
           icon={Warehouse}
           tone="info"
-          hint="Bộ dụng cụ đang ngoài hiện trường"
+          hint="Đơn còn vật tư / dụng cụ chưa kiểm nhận trả"
         />
       </div>
 
@@ -81,7 +91,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
           <CardHeader
             title="Hồ sơ chờ đóng"
             icon={Scale}
-            subtitle="Cần đủ 2 điều kiện: công nợ = 0đ và đã nhập kho dụng cụ"
+            subtitle="Cần đủ 2 điều kiện: công nợ = 0đ và đã quyết toán phiếu vật tư"
           />
         </div>
         {pending.length === 0 ? (
@@ -100,7 +110,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
                     Tổng giá trị
                   </th>
                   <th className="px-3 py-3">Công nợ khách hàng</th>
-                  <th className="px-3 py-3">Thu hồi dụng cụ</th>
+                  <th className="px-3 py-3">Vật tư & dụng cụ</th>
                   <th className="px-6 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
@@ -108,8 +118,11 @@ export const SettlementModule = ({ query }: { query: string }) => {
                 {pending.map((o) => {
                   const s = selectSettlement(o);
                   const ok = canCloseOrder(s);
+                  const hasLines = o.materials.lines.length > 0;
+                  const open = expanded === o.id;
                   return (
-                    <tr key={o.id} className="align-middle">
+                    <Fragment key={o.id}>
+                    <tr className="align-middle">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="font-semibold tabular-nums">#{o.id}</p>
                         <p className="text-xs text-slate-500">
@@ -133,39 +146,41 @@ export const SettlementModule = ({ query }: { query: string }) => {
                         </Badge>
                       </td>
                       <td className="px-3 py-4">
-                        {s.isWarehouseReturned ? (
-                          <Badge tone="success" icon={CheckCircle2}>
-                            Đã thu hồi & nhập kho
-                          </Badge>
+                        {hasLines ? (
+                          <div className="flex flex-col items-start gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <MaterialStatusBadge slip={o.materials} />
+                              <button
+                                type="button"
+                                onClick={() => setExpanded(open ? null : o.id)}
+                                className="inline-flex items-center gap-0.5 text-xs font-semibold text-slate-500 hover:text-slate-800"
+                                aria-expanded={open}
+                              >
+                                Đối chiếu
+                                <ChevronDown className={cx("size-3.5 transition-transform", open && "rotate-180")} />
+                              </button>
+                            </div>
+                            <MaterialSlipActions order={o} onIssue={() => undefined} onReturn={() => setReturning(o.id)} />
+                          </div>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            icon={PackageCheck}
-                            onClick={() =>
-                              dispatch({
-                                type: "CONFIRM_WAREHOUSE_RETURN",
-                                orderId: o.id,
-                              })
-                            }
-                            className="!h-auto max-w-[230px] py-1.5 text-left !whitespace-normal"
-                          >
-                            Xác nhận đã thu hồi đủ dụng cụ & nhập kho vật tư dư
-                          </Button>
+                          <Badge tone="neutral" icon={PackageCheck}>
+                            Không dùng vật tư
+                          </Badge>
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Tooltip
                           enabled={!ok}
-                          content={`Hard-Lock: ${s.remainingBalance > 0 ? "khách còn nợ " + formatVND(s.remainingBalance) : ""}${s.remainingBalance > 0 && !s.isWarehouseReturned ? " · " : ""}${!s.isWarehouseReturned ? "chưa xác nhận nhập kho dụng cụ" : ""}.`}
+                          content={`Hard-Lock: ${[
+                            s.remainingBalance > 0 ? "khách còn nợ " + formatVND(s.remainingBalance) : "",
+                            !s.materialsSettled ? "phiếu vật tư chưa quyết toán" : "",
+                          ].filter(Boolean).join(" · ")}.`}
                         >
                           <Button
                             size="sm"
                             variant={ok ? "success" : "secondary"}
                             icon={ok ? LockOpen : Lock}
-                            disabled={
-                              s.remainingBalance > 0 || !s.isWarehouseReturned
-                            }
+                            disabled={!ok}
                             onClick={() =>
                               dispatch({ type: "CLOSE_ORDER", orderId: o.id })
                             }
@@ -175,6 +190,19 @@ export const SettlementModule = ({ query }: { query: string }) => {
                         </Tooltip>
                       </td>
                     </tr>
+                    {open && hasLines && (
+                      <tr>
+                        <td colSpan={5} className="bg-slate-50/60 px-6 py-4">
+                          <MaterialLinesTable slip={o.materials} />
+                          {o.materials.resolutionNote && o.materials.lines.some((l) => l.lost > 0) && (
+                            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                              Biên bản chênh lệch: {o.materials.resolutionNote}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -189,6 +217,14 @@ export const SettlementModule = ({ query }: { query: string }) => {
             title="Hồ sơ đã đóng gần đây"
             icon={Lock}
             subtitle="Doanh thu đã khóa — không thể chỉnh sửa"
+            action={
+              <Link
+                to={`${ROUTES.admin.orders}?status=COMPLETED`}
+                className="inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline"
+              >
+                Xem tất cả <ArrowRight className="size-4" />
+              </Link>
+            }
           />
         </div>
         <div className="overflow-x-auto">
@@ -217,6 +253,8 @@ export const SettlementModule = ({ query }: { query: string }) => {
           </table>
         </div>
       </Card>
+
+      {returningOrder && <ReturnMaterialsModal order={returningOrder} onClose={() => setReturning(null)} />}
     </>
   );
 };

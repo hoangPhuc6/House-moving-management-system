@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertOctagon,
@@ -10,17 +11,18 @@ import {
   StopCircle,
   Timer,
   UserRound,
-  Wrench,
 } from 'lucide-react';
-import { Button, cx, StatusBadge } from '@/components/ui';
+import { Badge, Button, cx, StatusBadge } from '@/components/ui';
 import { FIELD_STAGE_LABEL, FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
-import { STAFF_ROLE_LABEL } from '@/constants/resources';
 import { Block } from '@/features/staff/components/Block';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
+import { MaterialsBlock, useMaterialReceipt } from '@/features/staff/components/MaterialsBlock';
 import { RUNNING, STAGE_ICONS } from '@/features/staff/constants';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { ROUTES } from '@/routes/paths';
 import { formatDateVN, formatVND } from '@/services/format';
+import { VEHICLE_STANDARD_EQUIPMENT } from '@/services/materials';
+import { TRIP_ROLE_LABEL } from '@/services/staff';
 import { waitFee } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 import type { FieldStage, Order } from '@/types';
@@ -42,11 +44,25 @@ export const JobDetail = ({ order }: { order: Order }) => {
     !!next && (next.stage === "WORKING" || next.stage === "MOVING") && locked;
   const incidentBlock =
     !!next && next.stage === "MOVING" && order.flags.isVehicleIncident;
-  const blocked = nextLocked || incidentBlock;
+  // Bước "Nhận vật tư tại kho": nút chính xác nhận luôn phiếu vật tư (kiểm từng dòng + tick đã kiểm tra).
+  const receipt = useMaterialReceipt(order);
+  const materialsRef = useRef<HTMLDivElement>(null);
+  const receivingStep =
+    !!next && next.stage === "MATERIALS_PICKED" && order.materials.lines.length > 0;
+  // Chỉ khóa khi kho chưa xuất phiếu; phiếu đã xuất thì nút luôn bấm được, thiếu điều kiện sẽ báo đỏ ở phiếu.
+  const materialBlock = receivingStep && !receipt.active;
+  const blocked = nextLocked || incidentBlock || materialBlock;
+  const advance = () => {
+    if (!next) return;
+    if (receivingStep) {
+      if (!receipt.submit()) materialsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    dispatch({ type: "ADVANCE_FIELD_STAGE", orderId: order.id, stage: next.stage });
+  };
   const NextIcon = next
     ? STAGE_ICONS[next.stage as Exclude<FieldStage, "NOT_STARTED">]
     : CheckCircle2;
-  const checked = order.equipment.filter((e) => e.checked).length;
   // Trước khi xác nhận bước 2 (Bắt đầu làm): chỉ đường tới nơi đi để bốc hàng; sau đó: tới nơi đến.
   const headingToDestination = stageIdx >= FIELD_STAGE_ORDER.indexOf("WORKING");
   const navTarget = headingToDestination ? order.toAddress : order.fromAddress;
@@ -84,6 +100,12 @@ export const JobDetail = ({ order }: { order: Order }) => {
                 </p>
               </div>
             </div>
+          )}
+          {vehicle && (
+            <p className="-mt-2 mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">Trang bị theo xe</span> (kiểm khi nhận xe, không qua kho):{" "}
+              {VEHICLE_STANDARD_EQUIPMENT.map((e) => `${e.name} ×${e.quantity}`).join(", ")}
+            </p>
           )}
           <div className="relative space-y-3 pl-6">
             <span className="absolute top-2 bottom-2 left-[7px] w-px border-l border-dashed border-slate-300" />
@@ -212,6 +234,10 @@ export const JobDetail = ({ order }: { order: Order }) => {
         )}
       </Block>
 
+      <div ref={materialsRef} className="scroll-mt-4">
+        <MaterialsBlock key={`${order.id}-${order.materials.status}`} order={order} receipt={receipt} />
+      </div>
+
       {/* Exceptions */}
       {active && order.fieldStage !== "HANDED_OVER" && (
         <Block title="Xử lý phát sinh">
@@ -287,75 +313,37 @@ export const JobDetail = ({ order }: { order: Order }) => {
 
       <Block title={`Đội ngũ (${crew.length})`} icon={UserRound}>
         <ul className="space-y-2.5">
-          {crew.map((c) => (
+          {crew.map((c) => {
+            const a = order.crew.find((x) => x.staffId === c.id);
+            const plate = state.resources.vehicles.find((v) => v.id === a?.vehicleId)?.plateNumber;
+            return (
             <li key={c.id} className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
                 {c.name.split(" ").slice(-1)[0]?.[0]}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{c.name}</p>
+                <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                  {c.name}
+                  {order.leaderId === c.id && <Badge tone="brand">Trưởng nhóm</Badge>}
+                </p>
                 <p className="text-xs text-slate-500">
-                  <span className="tabular-nums">{c.code}</span> ·{" "}
-                  {STAFF_ROLE_LABEL[c.role]}
+                  <span className="tabular-nums">{c.code}</span>
+                  {a && ` · ${TRIP_ROLE_LABEL[a.role]}`}
+                  {plate && <span className="tabular-nums"> · {plate}</span>}
                 </p>
               </div>
               <a
-                href="tel:0909000000"
+                href={`tel:${c.phone.replace(/\s/g, "")}`}
                 className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-slate-100"
                 aria-label={`Gọi ${c.name}`}
               >
                 <Phone className="size-4" />
               </a>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </Block>
-
-      {order.equipment.length > 0 && (
-        <Block
-          title="Dụng cụ xuất kho"
-          icon={Wrench}
-          right={
-            <span className="text-xs font-semibold text-slate-500 tabular-nums">
-              {checked}/{order.equipment.length}
-            </span>
-          }
-        >
-          <ul className="-mx-1">
-            {order.equipment.map((e) => (
-              <li key={e.id}>
-                <label className="flex h-12 cursor-pointer items-center gap-3 rounded-xl px-1 active:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    checked={e.checked}
-                    onChange={() =>
-                      dispatch({
-                        type: "TOGGLE_EQUIPMENT",
-                        orderId: order.id,
-                        itemId: e.id,
-                      })
-                    }
-                    className="size-5 rounded accent-[#FF5A1F]"
-                  />
-                  <span
-                    className={cx(
-                      "flex-1 text-sm",
-                      e.checked
-                        ? "text-slate-400 line-through"
-                        : "font-medium text-slate-800",
-                    )}
-                  >
-                    {e.name}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-500 tabular-nums">
-                    ×{e.quantity}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      )}
 
       {/* Primary progress action */}
       {active && next && (
@@ -363,13 +351,7 @@ export const JobDetail = ({ order }: { order: Order }) => {
           <button
             type="button"
             disabled={paused || blocked}
-            onClick={() =>
-              dispatch({
-                type: "ADVANCE_FIELD_STAGE",
-                orderId: order.id,
-                stage: next.stage,
-              })
-            }
+            onClick={advance}
             className={cx(
               "flex h-14 w-full items-center justify-center gap-2.5 rounded-xl text-base font-bold transition-all active:scale-[0.98]",
               blocked
@@ -385,8 +367,12 @@ export const JobDetail = ({ order }: { order: Order }) => {
             {blocked
               ? nextLocked
                 ? "Khóa: chờ khách xác nhận"
-                : "Khóa: chờ xe thay thế"
-              : next.label}
+                : materialBlock
+                  ? "Khóa: chờ kho xuất vật tư"
+                  : "Khóa: chờ xe thay thế"
+              : receivingStep && receipt.shortage
+                ? "Nhận vật tư (nhận thiếu)"
+                : next.label}
           </button>
         </StickyActionBar>
       )}

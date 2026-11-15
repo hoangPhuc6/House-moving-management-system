@@ -1,8 +1,9 @@
 import { ReceiptText } from 'lucide-react';
-import { Card, CardHeader, KeyValue, StatusBadge } from '@/components/ui';
+import { Badge, Card, CardHeader, KeyValue, StatusBadge } from '@/components/ui';
 import { HOUSE_TYPE_META, SURVEY_METHOD_META } from '@/constants/order';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
+import { settlementBadges } from '@/features/order/settlementStage';
 import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, surveyStageOf } from '@/features/order/surveyStage';
 import { formatTime, formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
@@ -47,7 +48,17 @@ export const OrderInfoCard = ({ order }: { order: Order }) => {
       </div>
       <KeyValue
         label="Trạng thái"
-        value={<StatusBadge status={order.status} />}
+        value={
+          settlementBadges(order) ? (
+            <span className="flex flex-wrap justify-end gap-1.5">
+              {settlementBadges(order)!.map((b) => (
+                <Badge key={b.label} tone={b.tone} dot>{b.label}</Badge>
+              ))}
+            </span>
+          ) : (
+            <StatusBadge status={order.status} />
+          )
+        }
       />
       <KeyValue
         label="Khảo sát"

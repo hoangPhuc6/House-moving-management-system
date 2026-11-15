@@ -14,7 +14,7 @@ import { ScheduleCard } from '@/features/customer/components/ScheduleCard';
 import { SurveyStageCard } from '@/features/customer/components/SurveyStageCard';
 import { WaitTimerCard } from '@/features/customer/components/WaitTimerCard';
 import { customerStepMeta, surveyHeroCopy } from '@/features/customer/surveyStage';
-import { customerActionOf, scrollToSection } from '@/features/customer/utils';
+import { customerActionOf, customerViewStatus, scrollToSection } from '@/features/customer/utils';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
 import { ProcessStepper } from '@/features/order/components/ProcessStepper';
@@ -26,7 +26,9 @@ import type { Order } from '@/types';
 export const OrderOverview = ({ order }: { order: Order }) => {
   const { state } = useApp();
   const inSurveyStage = order.status === "NEW_PENDING_SURVEY";
-  const copy = inSurveyStage ? surveyHeroCopy(order) : CUSTOMER_STATUS_COPY[order.status];
+  // Đã bàn giao & trả đủ → với khách là Hoàn tất (không chờ Admin đóng hồ sơ nội bộ).
+  const viewStatus = customerViewStatus(order);
+  const copy = inSurveyStage ? surveyHeroCopy(order) : CUSTOMER_STATUS_COPY[viewStatus];
   const vehicle = state.resources.vehicles.find(
     (v) => v.id === order.vehicleId,
   );
@@ -38,7 +40,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
     "IN_TRANSIT",
     "PAUSED_WAITING_CUSTOMER",
     "PENDING_PAYMENT_OR_CLAIM",
-  ].includes(order.status);
+  ].includes(viewStatus);
 
   // Hành động có khối đích trên trang mới thành CTA; phát sinh hiện trường đã có banner riêng ở đầu trang.
   const action = customerActionOf(order);
@@ -75,7 +77,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
               <p className="mt-1 text-sm text-white/60">{copy.desc}</p>
             </div>
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white/10">
-              {order.status === "COMPLETED" ? (
+              {viewStatus === "COMPLETED" ? (
                 <CheckCircle2 className="size-5 text-emerald-400" />
               ) : (
                 <Truck className="size-5 text-brand" />
@@ -92,7 +94,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
         <div className="space-y-4 p-5 sm:p-6">
           <CompactProgress order={order} />
           <div className="hidden md:block">
-            <ProcessStepper status={order.status} meta={customerStepMeta(order)} />
+            <ProcessStepper status={viewStatus} meta={customerStepMeta(order)} />
           </div>
           <div className="grid gap-4 md:grid-cols-[1fr_auto]">
             <div className="relative space-y-3 pl-6">

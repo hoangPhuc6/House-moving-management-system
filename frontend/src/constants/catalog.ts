@@ -1,3 +1,4 @@
+import { dashboardMock } from '@/constants/mockDashboard';
 import type { CatalogState, ServiceGroup, ServiceItem } from '@/types';
 
 export const SERVICE_GROUP_LABEL: Record<ServiceGroup, string> = {
@@ -34,20 +35,29 @@ export const createInitialCatalog = (): CatalogState => ({
     { id: 'u-4', name: 'Phạm Thu Trang', email: 'trang.pt@moveflow.vn', phone: '0905 333 444', role: 'ADMIN', locked: false, emailVerified: true },
     { id: 'u-5', name: 'Võ Quốc Bảo', email: 'bao.vq@gmail.com', phone: '0988 777 666', role: 'CUSTOMER', locked: false, emailVerified: false },
     { id: 'u-6', name: 'Đặng Hoài Nam', email: 'nam.dh@moveflow.vn', phone: '0977 555 444', role: 'STAFF', locked: true, emailVerified: true },
+    // Tài khoản của các nhân viên vận hành còn lại (hồ sơ kỹ năng / bằng lái: seedStaff trong constants/resources.ts).
+    { id: 'u-7', name: 'Lê Hoàng Phúc', email: 'phuc.lh@moveflow.vn', phone: '0909 210 021', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-8', name: 'Nguyễn Đức Thịnh', email: 'thinh.nd@moveflow.vn', phone: '0909 330 033', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-9', name: 'Phan Minh Khôi', email: 'khoi.pm@moveflow.vn', phone: '0909 370 037', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-10', name: 'Đỗ Quang Vinh', email: 'vinh.dq@moveflow.vn', phone: '0909 420 042', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-11', name: 'Huỳnh Tấn Lộc', email: 'loc.ht@moveflow.vn', phone: '0909 450 045', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-12', name: 'Vũ Thành Đạt', email: 'dat.vt@moveflow.vn', phone: '0909 510 051', role: 'STAFF', locked: false, emailVerified: true },
+    { id: 'u-13', name: 'Cao Nhật Minh', email: 'minh.cn@moveflow.vn', phone: '0909 580 058', role: 'STAFF', locked: false, emailVerified: false },
   ],
   inventory: [
-    { id: 'inv-1', name: 'Thùng carton 60x40x40', unit: 'thùng', stock: 240, minStock: 100 },
-    { id: 'inv-2', name: 'Băng keo đóng gói', unit: 'cuộn', stock: 85, minStock: 40 },
-    { id: 'inv-3', name: 'Màng PE bọc đồ', unit: 'cuộn', stock: 32, minStock: 30 },
-    { id: 'inv-4', name: 'Xe đẩy hàng', unit: 'chiếc', stock: 8, minStock: 4 },
-    { id: 'inv-5', name: 'Dây chằng hàng', unit: 'bộ', stock: 20, minStock: 10 },
-    { id: 'inv-6', name: 'Chăn bọc nội thất', unit: 'tấm', stock: 36, minStock: 20 },
+    { id: 'inv-1', name: 'Thùng carton 60x40x40', unit: 'thùng', kind: 'CONSUMABLE', stock: 240, minStock: 100 },
+    { id: 'inv-2', name: 'Băng keo đóng gói', unit: 'cuộn', kind: 'CONSUMABLE', stock: 85, minStock: 40 },
+    { id: 'inv-3', name: 'Màng PE bọc đồ', unit: 'cuộn', kind: 'CONSUMABLE', stock: 32, minStock: 30 },
+    { id: 'inv-4', name: 'Xe đẩy hàng', unit: 'chiếc', kind: 'TOOL', stock: 8, minStock: 4 },
+    { id: 'inv-5', name: 'Dây chằng hàng', unit: 'bộ', kind: 'TOOL', stock: 20, minStock: 10 },
+    { id: 'inv-6', name: 'Chăn bọc nội thất', unit: 'tấm', kind: 'TOOL', stock: 36, minStock: 20 },
   ],
   txns: [
     { id: 'tx-1', itemId: 'inv-1', type: 'IN', quantity: 300, delta: 300, orderId: null, by: 'Phạm Thu Trang', note: 'Nhập lô đầu tháng', at: Date.now() - 6 * 86_400_000 },
     { id: 'tx-2', itemId: 'inv-1', type: 'OUT', quantity: 60, delta: -60, orderId: null, by: 'Phạm Thu Trang', note: 'Xuất cho các đơn trong tuần', at: Date.now() - 3 * 86_400_000 },
   ],
   payments: [],
-  feedbacks: [],
-  history: [],
+  // Mock data cho Dashboard báo cáo (xem constants/mockDashboard.ts).
+  feedbacks: [...dashboardMock().feedbacks],
+  history: [...dashboardMock().history],
 });

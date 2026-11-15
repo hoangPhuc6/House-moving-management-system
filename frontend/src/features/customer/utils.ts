@@ -4,10 +4,20 @@ import { CUSTOMER } from '@/features/customer/constants';
 import { isMediaSubmitted, surveyStageOf } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
-import type { AddressDetail, Order } from '@/types';
+import type { AddressDetail, Order, OrderStatus } from '@/types';
+
+/**
+ * Với khách, đơn đã xong khi đã bàn giao và thanh toán đủ — thu hồi vật tư & đóng hồ sơ là việc nội bộ,
+ * khách không phải chờ Admin.
+ */
+export const isCustomerSettled = (o: Order): boolean =>
+  o.status === "COMPLETED" || (o.status === "PENDING_PAYMENT_OR_CLAIM" && computeTotals(o).remaining === 0);
+
+/** Trạng thái hiển thị cho khách: đơn đã quyết toán xong phía khách hiện như Hoàn tất. */
+export const customerViewStatus = (o: Order): OrderStatus => (isCustomerSettled(o) ? "COMPLETED" : o.status);
 
 export const isOpenOrder = (o: Order): boolean =>
-  o.status !== "COMPLETED" && o.status !== "CANCELLED_EXPIRED";
+  o.status !== "CANCELLED_EXPIRED" && !isCustomerSettled(o);
 
 /** Đơn đang chờ khách thao tác: chốt báo giá, xác nhận phát sinh hoặc thanh toán. */
 export const needsAction = (o: Order): boolean =>
@@ -43,7 +53,7 @@ export const customerActionOf = (o: Order): CustomerAction | null => {
   if (o.status === 'SURVEYED_PENDING_CONFIRM') return { label: 'Xem báo giá & đặt cọc', icon: ReceiptText, section: 'quote-section' };
   if (o.status === 'PENDING_PAYMENT_OR_CLAIM' && remaining > 0) return { label: `Thanh toán ${formatVND(remaining)}`, icon: QrCode, section: 'payment-section' };
   if (o.flags.hasFieldDiscrepancyLock) return { label: 'Xác nhận phát sinh hiện trường', icon: AlertTriangle, section: null };
-  if (o.status === 'COMPLETED') return { label: 'Đánh giá & hỗ trợ sau chuyển', icon: Star, section: 'payment-section' };
+  if (isCustomerSettled(o)) return { label: 'Đánh giá & hỗ trợ sau chuyển', icon: Star, section: 'payment-section' };
   return null;
 };
 
@@ -73,7 +83,8 @@ export const customerStatusOf = (o: Order): { label: string; tone: Tone } => {
     case 'PAUSED_WAITING_CUSTOMER':
       return { label: 'Đội xe đang chờ bạn', tone: 'warning' };
     case 'PENDING_PAYMENT_OR_CLAIM':
-      return computeTotals(o).remaining > 0 ? { label: 'Chờ thanh toán', tone: 'brand' } : { label: 'Đang hoàn tất', tone: 'info' };
+      // Đã trả đủ thì với khách là xong — không hiện "đang hoàn tất" chờ Admin đóng hồ sơ.
+      return computeTotals(o).remaining > 0 ? { label: 'Chờ thanh toán', tone: 'brand' } : { label: 'Hoàn tất', tone: 'success' };
     case 'COMPLETED':
       return { label: 'Hoàn tất', tone: 'success' };
     case 'CANCELLED_EXPIRED':

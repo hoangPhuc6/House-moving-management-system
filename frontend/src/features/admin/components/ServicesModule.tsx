@@ -14,7 +14,6 @@ import {
   Tabs,
 } from '@/components/ui';
 import { SERVICE_GROUP_LABEL } from '@/constants/catalog';
-import { PricingEstimator } from '@/features/admin/components/PricingEstimator';
 import { EMPTY_SERVICE } from '@/features/admin/constants';
 import { formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
@@ -83,7 +82,6 @@ export const ServicesModule = ({ query }: { query: string }) => {
           </table>
         </div>
       </Card>
-      <PricingEstimator />
 
       <Modal
         open={!!editing}

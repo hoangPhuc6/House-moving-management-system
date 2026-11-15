@@ -21,13 +21,27 @@ import {
   StatusBadge,
   Tooltip,
 } from '@/components/ui';
-import { STAFF_ROLE_LABEL, VEHICLE_STATUS_META } from '@/constants/resources';
+import { VEHICLE_STATUS_META } from '@/constants/resources';
 import { OrderPicker } from '@/features/coordinator/components/OrderPicker';
 import { HOURS } from '@/features/coordinator/constants';
 import { parseShift } from '@/features/coordinator/utils';
-import { getAssignmentRequirement, isDriverRole, validateAssignment } from '@/services/dispatch';
+import { getAssignmentRequirement, validateAssignment } from '@/services/dispatch';
+import { buildMaterialPlan } from '@/services/materials';
+import {
+  driveBlockReason,
+  hasSkill,
+  isActiveStaff,
+  leaderOf,
+  licenseExpiringSoon,
+  pairDrivers,
+  SKILL_LABEL,
+  SKILL_ORDER,
+  validateCrew,
+  WORK_STATUS_META,
+} from '@/services/staff';
 import { useApp } from '@/services/store/AppStore';
-import type { Order, Vehicle } from '@/types';
+import { useCatalog } from '@/services/store/CatalogStore';
+import type { CrewAssignment, Order, StaffMember, Vehicle } from '@/types';
 
 export const DispatchTab = ({
   order,
@@ -37,10 +51,16 @@ export const DispatchTab = ({
   onSelect: (id: string) => void;
 }) => {
   const { state, dispatch } = useApp();
+  const { catalog } = useCatalog();
   const req = useMemo(() => getAssignmentRequirement(order), [order]);
   const ownTag = order.id.replace("ORD-2026-", "ORD-");
   const [vehicleIds, setVehicleIds] = useState<string[]>(order.vehicleIds);
-  const [crewIds, setCrewIds] = useState<string[]>(order.crewIds);
+  /** Tài xế đã chọn — hệ thống tự ghép với xe (pairDrivers). */
+  const [driverIds, setDriverIds] = useState<string[]>(() => order.crew.filter((c) => c.role === "DRIVER").map((c) => c.staffId));
+  const [loaderIds, setLoaderIds] = useState<string[]>(() => order.crew.filter((c) => c.role === "LOADER").map((c) => c.staffId));
+  const staff = state.resources.staff;
+  const byId = (id: string) => staff.find((s) => s.id === id);
+  const onDate = order.scheduledDate;
   const selectedVehicles = state.resources.vehicles.filter((v) =>
     vehicleIds.includes(v.id),
   );
@@ -52,18 +72,41 @@ export const DispatchTab = ({
   const lateShift = state.resources.vehicles.find(
     (v) => v.id === "veh-2" && v.status === "BUSY",
   );
-  const crewMembers = state.resources.staff.filter((s) => crewIds.includes(s.id));
-  const driverCount = crewMembers.filter((s) => isDriverRole(s.role)).length;
-  const moverCount = crewMembers.length - driverCount;
-  const mismatch = validateAssignment(
-    req,
-    selectedVehicles.map((v) => v.capacityTons),
-    driverCount,
-    moverCount,
-  );
-  const driversOk = req.vehicleTotal === 0 || driverCount === req.vehicleTotal;
-  const moversOk = req.workers === 0 || moverCount === req.workers;
+
+  // Đội theo chuyến: tài xế tự ghép với xe (xe lớn trước) + nhân viên bốc xếp. Tài xế đầu tiên là trưởng nhóm.
+  const pairing = pairDrivers(selectedVehicles, driverIds, staff, onDate);
+  const drivers = pairing.drivers;
+  const crew: CrewAssignment[] = [...drivers, ...loaderIds.map((id) => ({ staffId: id, role: "LOADER" as const, vehicleId: null }))];
+  const leaderId = leaderOf(crew);
+  const plateOf = (vehicleId: string | null) => state.resources.vehicles.find((v) => v.id === vehicleId)?.plateNumber;
+  const mismatch =
+    validateAssignment(req, selectedVehicles.map((v) => v.capacityTons)) ??
+    (driverIds.length !== selectedVehicles.length
+      ? `Cần chọn đúng ${selectedVehicles.length} tài xế — mỗi xe một tài xế (đang chọn ${driverIds.length}).`
+      : pairing.error) ??
+    validateCrew(req, selectedVehicles, crew, staff, onDate);
+  const driversOk = req.vehicleTotal === 0 || (driverIds.length === req.vehicleTotal && !pairing.error);
+  const moversOk = loaderIds.length === req.workers;
+  const assemblyOk = !req.needsAssembly || crew.some((c) => hasSkill(byId(c.staffId)!, "ASSEMBLY"));
   const vehicle = conflict;
+  const smallestTons = selectedVehicles.length ? Math.min(...selectedVehicles.map((v) => v.capacityTons)) : 0;
+
+  /** Lý do một người không thể bốc xếp trong chuyến này (null = chọn được). */
+  const loaderBlockReason = (s: StaffMember): string | null => {
+    if (!isActiveStaff(s)) return WORK_STATUS_META[s.status].label;
+    if (driverIds.includes(s.id)) return "Đang là tài xế";
+    if (!loaderIds.includes(s.id) && loaderIds.length >= req.workers) return "Đủ người";
+    return null;
+  };
+
+  /** Lý do một người không thể chọn làm tài xế chuyến này (null = chọn được). */
+  const driverBlockReason = (s: StaffMember): string | null => {
+    if (!isActiveStaff(s)) return WORK_STATUS_META[s.status].label;
+    if (loaderIds.includes(s.id)) return "Đang bốc xếp";
+    if (!driverIds.includes(s.id) && driverIds.length >= req.vehicleTotal) return "Đủ người";
+    // Không lái được cả xe nhỏ nhất đang chọn (bằng hết hạn / sai hạng).
+    return driveBlockReason(s, smallestTons, onDate);
+  };
 
   /** Lý do một xe không thể chọn (null = chọn được). */
   const vehicleBlockReason = (v: Vehicle): string | null => {
@@ -86,29 +129,48 @@ export const DispatchTab = ({
     setVehicleIds((c) =>
       c.includes(id) ? c.filter((x) => x !== id) : [...c, id],
     );
-  const toggleCrew = (id: string) =>
-    setCrewIds((c) =>
+  const toggleLoader = (id: string) =>
+    setLoaderIds((c) =>
+      c.includes(id) ? c.filter((x) => x !== id) : [...c, id],
+    );
+  const toggleDriver = (id: string) =>
+    setDriverIds((c) =>
       c.includes(id) ? c.filter((x) => x !== id) : [...c, id],
     );
 
-  /** Chọn sẵn xe đúng loại & đủ nhân viên bốc xếp còn rảnh theo báo giá. */
+  /**
+   * Chọn sẵn theo báo giá: xe đúng loại; mỗi xe một tài xế lái được xe đó; đủ người bốc xếp
+   * (ưu tiên người biết tháo lắp nếu đơn cần). Tài xế mặc định là trưởng nhóm.
+   */
   const autoPick = () => {
     const usable = state.resources.vehicles.filter(
       (v) => v.status === "AVAILABLE" || isOwn(v),
     );
-    const picked: string[] = [];
+    const picked: Vehicle[] = [];
     req.vehicles.forEach((r) => {
       usable
-        .filter((v) => !picked.includes(v.id) && (r.capacity === null || v.capacityTons === r.capacity))
+        .filter((v) => !picked.includes(v) && (r.capacity === null || v.capacityTons === r.capacity))
         .slice(0, r.qty)
-        .forEach((v) => picked.push(v.id));
+        .forEach((v) => picked.push(v));
     });
-    setVehicleIds(picked);
-    const free = state.resources.staff.filter((s) => s.isAvailable);
-    setCrewIds([
-      ...free.filter((s) => isDriverRole(s.role)).slice(0, req.vehicleTotal),
-      ...free.filter((s) => !isDriverRole(s.role)).slice(0, req.workers),
-    ].map((s) => s.id));
+    const active = staff.filter(isActiveStaff);
+    const used = new Set<string>();
+    const nextDrivers: Record<string, string> = {};
+    // Xe lớn chọn trước — ít người đủ hạng bằng hơn.
+    [...picked].sort((a, b) => b.capacityTons - a.capacityTons).forEach((v) => {
+      const d = active.find((s) => !used.has(s.id) && !driveBlockReason(s, v.capacityTons, onDate));
+      if (d) {
+        nextDrivers[v.id] = d.id;
+        used.add(d.id);
+      }
+    });
+    const loaderPool = active
+      .filter((s) => !used.has(s.id) && hasSkill(s, "LOAD"))
+      .sort((a, b) => Number(req.needsAssembly && hasSkill(b, "ASSEMBLY")) - Number(req.needsAssembly && hasSkill(a, "ASSEMBLY")));
+    const nextLoaders = loaderPool.slice(0, req.workers).map((s) => s.id);
+    setVehicleIds(picked.map((v) => v.id));
+    setDriverIds(Object.values(nextDrivers));
+    setLoaderIds(nextLoaders);
   };
 
   const blocked =
@@ -276,8 +338,9 @@ export const DispatchTab = ({
               })}
               {req.vehicles.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500 sm:col-span-2">Báo giá không có hạng mục xe — chọn xe phù hợp.</p>}
               {[
-                { label: "Tài xế", need: req.vehicleTotal, got: driverCount, ok: driversOk, hint: "mỗi xe một tài xế" },
-                { label: "Nhân viên bốc xếp", need: req.workers, got: moverCount, ok: moversOk, hint: "theo báo giá" },
+                { label: "Tài xế", need: req.vehicleTotal, got: driverIds.length, ok: driversOk, hint: "mỗi xe một tài xế · kiêm trưởng nhóm" },
+                { label: "Nhân viên bốc xếp", need: req.workers, got: loaderIds.length, ok: moversOk, hint: "theo báo giá" },
+                { label: "Biết tháo lắp", need: req.needsAssembly ? 1 : 0, got: assemblyOk ? 1 : 0, ok: assemblyOk, hint: "đơn có dịch vụ tháo lắp" },
               ]
                 .filter((t) => t.need > 0)
                 .map((t) => (
@@ -340,56 +403,104 @@ export const DispatchTab = ({
             </div>
           </Card>
 
-          {[
-            { title: "Chọn tài xế", need: req.vehicleTotal, got: driverCount, ok: driversOk, pool: state.resources.staff.filter((s) => isDriverRole(s.role)), sub: `Yêu cầu: ${req.vehicleTotal} tài xế (mỗi xe một tài xế)` },
-            { title: "Chọn nhân viên bốc xếp", need: req.workers, got: moverCount, ok: moversOk, pool: state.resources.staff.filter((s) => !isDriverRole(s.role)), sub: `Yêu cầu: ${req.workers} nhân viên bốc xếp` },
-          ]
-            .filter((g) => g.need > 0)
-            .map((g) => (
-            <Card key={g.title}>
+          {req.vehicleTotal > 0 && (
+            <Card>
               <CardHeader
-                title={g.title}
+                title="Chọn tài xế"
                 icon={Users}
-                subtitle={g.sub}
+                subtitle={`Yêu cầu: ${req.vehicleTotal} tài xế (mỗi xe một tài xế) — tài xế kiêm trưởng nhóm; hệ thống tự ghép xe theo hạng bằng`}
                 action={
-                  <Badge tone={g.ok ? "success" : "warning"} className="tabular-nums">
-                    {g.got}/{g.need} đã chọn
+                  <Badge tone={driversOk ? "success" : "warning"} className="tabular-nums">
+                    {driverIds.length}/{req.vehicleTotal} đã chọn
                   </Badge>
                 }
               />
               <div className="grid gap-2 sm:grid-cols-2">
-                {g.pool.length === 0 && <p className="text-sm text-slate-500 sm:col-span-2">Chưa có nhân sự thuộc nhóm này.</p>}
-                {g.pool.map((s) => {
-                  const sel = crewIds.includes(s.id);
-                  const full = !sel && g.need > 0 && g.got >= g.need;
-                  const off = !s.isAvailable || full;
-                  return (
-                    <label
-                      key={s.id}
-                      className={cx(
-                        "flex items-center gap-3 rounded-xl border p-3",
-                        off
-                          ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"
-                          : sel
-                            ? "cursor-pointer border-brand bg-orange-50/40"
-                            : "cursor-pointer border-slate-200 hover:border-slate-300",
-                      )}
-                    >
-                      <input type="checkbox" className="size-4 accent-[#FF5A1F]" checked={sel} disabled={off} onChange={() => toggleCrew(s.id)} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{s.name}</p>
-                        <p className="text-xs text-slate-500">
-                          <span className="tabular-nums">{s.code}</span> · {STAFF_ROLE_LABEL[s.role]}
-                        </p>
-                      </div>
-                      {!s.isAvailable && <Badge tone="neutral">Nghỉ ca</Badge>}
-                      {full && s.isAvailable && <Badge tone="neutral">Đủ người</Badge>}
-                    </label>
-                  );
-                })}
+                {staff
+                  .filter((s) => hasSkill(s, "DRIVE") && s.status !== "RESIGNED")
+                  .map((s) => {
+                    const sel = driverIds.includes(s.id);
+                    const reason = sel ? null : driverBlockReason(s);
+                    const paired = drivers.find((d) => d.staffId === s.id);
+                    const soon = sel && licenseExpiringSoon(s, onDate);
+                    return (
+                      <label
+                        key={s.id}
+                        className={cx(
+                          "flex items-center gap-3 rounded-xl border p-3",
+                          reason
+                            ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"
+                            : sel
+                              ? "cursor-pointer border-brand bg-orange-50/40"
+                              : "cursor-pointer border-slate-200 hover:border-slate-300",
+                        )}
+                      >
+                        <input type="checkbox" className="size-4 accent-[#FF5A1F]" checked={sel} disabled={!!reason} onChange={() => toggleDriver(s.id)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{s.name}</p>
+                          <p className="text-xs text-slate-500">
+                            <span className="tabular-nums">{s.code}</span> · Bằng {s.license?.licenseClass ?? "—"}
+                            {paired && <span className="tabular-nums"> · lái {plateOf(paired.vehicleId)}</span>}
+                          </p>
+                          {soon && <p className="text-[11px] font-medium text-amber-700">Bằng hết hạn {s.license!.expiresAt.split("-").reverse().join("/")}</p>}
+                        </div>
+                        {leaderId === s.id && <Badge tone="brand">Trưởng nhóm</Badge>}
+                        {reason && <Badge tone="neutral">{reason}</Badge>}
+                      </label>
+                    );
+                  })}
+              </div>
+              {pairing.error && driverIds.length === selectedVehicles.length && (
+                <Alert tone="danger" className="mt-3">{pairing.error}</Alert>
+              )}
+            </Card>
+          )}
+
+          {req.workers > 0 && (
+            <Card>
+              <CardHeader
+                title="Nhân viên bốc xếp"
+                icon={Users}
+                subtitle={`Yêu cầu: ${req.workers} người có kỹ năng bốc xếp${req.needsAssembly ? " — đơn có tháo lắp, nên chọn người biết tháo lắp" : ""}`}
+                action={
+                  <Badge tone={moversOk ? "success" : "warning"} className="tabular-nums">
+                    {loaderIds.length}/{req.workers} đã chọn
+                  </Badge>
+                }
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                {staff
+                  .filter((s) => hasSkill(s, "LOAD") && s.status !== "RESIGNED")
+                  .map((s) => {
+                    const sel = loaderIds.includes(s.id);
+                    const reason = sel ? null : loaderBlockReason(s);
+                    return (
+                      <label
+                        key={s.id}
+                        className={cx(
+                          "flex items-center gap-3 rounded-xl border p-3",
+                          reason
+                            ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"
+                            : sel
+                              ? "cursor-pointer border-brand bg-orange-50/40"
+                              : "cursor-pointer border-slate-200 hover:border-slate-300",
+                        )}
+                      >
+                        <input type="checkbox" className="size-4 accent-[#FF5A1F]" checked={sel} disabled={!!reason} onChange={() => toggleLoader(s.id)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{s.name}</p>
+                          <p className="text-xs text-slate-500">
+                            <span className="tabular-nums">{s.code}</span> · {SKILL_ORDER.filter((k) => hasSkill(s, k)).map((k) => SKILL_LABEL[k]).join(", ")}
+                          </p>
+                        </div>
+                        {reason && <Badge tone="neutral">{reason}</Badge>}
+                      </label>
+                    );
+                  })}
               </div>
             </Card>
-          ))}
+          )}
+
         </div>
 
         <Card className="h-fit xl:sticky xl:top-[76px]">
@@ -417,16 +528,20 @@ export const DispatchTab = ({
           {req.vehicleTotal > 0 && (
             <KeyValue
               label="Tài xế"
-              value={`${driverCount}/${req.vehicleTotal} người`}
+              value={drivers.length ? drivers.map((d) => `${byId(d.staffId)?.name} (${plateOf(d.vehicleId)})`).join(", ") : `${driverIds.length}/${req.vehicleTotal}`}
               tone={driversOk ? "success" : "danger"}
             />
           )}
           {req.workers > 0 && (
             <KeyValue
               label="Bốc xếp"
-              value={`${moverCount}/${req.workers} người`}
+              value={`${loaderIds.length}/${req.workers} người`}
               tone={moversOk ? "success" : "danger"}
             />
+          )}
+          {leaderId && <KeyValue label="Trưởng nhóm" value={`${byId(leaderId)?.name} (tài xế)`} />}
+          {mismatch && assignable && vehicleIds.length > 0 && (
+            <p className="mt-3 rounded-lg bg-rose-50 p-3 text-xs font-medium text-rose-700">{mismatch}</p>
           )}
           {!assignable && (
             <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
@@ -454,7 +569,8 @@ export const DispatchTab = ({
                   type: "ASSIGN_RESOURCES",
                   orderId: order.id,
                   vehicleIds,
-                  crewIds,
+                  crew,
+                  materialPlan: buildMaterialPlan(order.quoteItems, catalog.inventory),
                 })
               }
             >

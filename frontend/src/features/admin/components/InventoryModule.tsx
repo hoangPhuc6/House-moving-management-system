@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowUpFromLine, History, PackagePlus } from 'lucide-react';
+import { ArrowUpFromLine, ClipboardList, History, PackagePlus } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -16,52 +16,61 @@ import {
   Tabs,
 } from '@/components/ui';
 import { TXN_META } from '@/features/admin/constants';
-import { formatTime } from '@/services/format';
+import { IssueMaterialsModal, MaterialLinesTable, MaterialSlipActions, MaterialStatusBadge, ReturnMaterialsModal } from '@/features/admin/components/MaterialSlip';
+import { matches } from '@/features/admin/utils';
+import { formatDateVN, formatTime } from '@/services/format';
+import { hasMaterialsOutside, isAwaitingIssue } from '@/services/materials';
 import { useApp } from '@/services/store/AppStore';
 import { useCatalog } from '@/services/store/CatalogStore';
 import { inventoryError } from '@/services/store/catalogReducer';
-import type { InventoryItem, InventoryTxnType } from '@/types';
+import type { InventoryItem, InventoryTxnType, MaterialKind, MaterialSlipStatus } from '@/types';
+
+const KIND_LABEL: Record<MaterialKind, string> = { CONSUMABLE: 'Tiêu hao', TOOL: 'Dụng cụ' };
+
+/** Thứ tự hiển thị phiếu: việc kho cần làm lên trước. */
+const SLIP_PRIORITY: Record<MaterialSlipStatus, number> = { DRAFT: 0, USAGE_REPORTED: 1, ISSUED: 2, RECEIVED: 3, RETURNED: 4, NONE: 5 };
 
 export const InventoryModule = ({ query }: { query: string }) => {
   const { state, dispatch } = useApp();
   const { catalog, dispatchCatalog } = useCatalog();
-  const [tab, setTab] = useState<'stock' | 'history' | 'usage'>('stock');
+  const [tab, setTab] = useState<'stock' | 'history' | 'slips'>('stock');
   const [txn, setTxn] = useState<{ item: InventoryItem; type: InventoryTxnType } | null>(null);
   const [qty, setQty] = useState(1);
-  const [orderId, setOrderId] = useState('');
   const [note, setNote] = useState('');
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ name: '', unit: '', stock: 0, minStock: 0 });
+  const [draft, setDraft] = useState<Omit<InventoryItem, 'id'>>({ name: '', unit: '', kind: 'CONSUMABLE', stock: 0, minStock: 0 });
+  const [issuing, setIssuing] = useState<string | null>(null);
+  const [returning, setReturning] = useState<string | null>(null);
 
   const items = catalog.inventory.filter((i) => !query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase()));
   const low = catalog.inventory.filter((i) => i.stock <= i.minStock);
   const itemName = (id: string) => catalog.inventory.find((i) => i.id === id)?.name ?? id;
-  const needsOrder = txn?.type === 'OUT' || txn?.type === 'RETURN';
+  // Xuất / hoàn kho theo đơn đi qua phiếu vật tư; ở đây chỉ còn giao dịch nội bộ, bắt buộc ghi lý do.
+  const needsReason = txn?.type === 'OUT' || txn?.type === 'RETURN';
   const error = txn ? inventoryError(txn.item, txn.type, qty) : null;
 
-  const usage = useMemo(() => {
-    const map = new Map<string, Map<string, { used: number; returned: number }>>();
-    catalog.txns.forEach((t) => {
-      if (!t.orderId || (t.type !== 'OUT' && t.type !== 'RETURN')) return;
-      const byItem = map.get(t.orderId) ?? new Map();
-      const cur = byItem.get(t.itemId) ?? { used: 0, returned: 0 };
-      if (t.type === 'OUT') cur.used += t.quantity; else cur.returned += t.quantity;
-      byItem.set(t.itemId, cur);
-      map.set(t.orderId, byItem);
-    });
-    return [...map.entries()];
-  }, [catalog.txns]);
+  const slips = useMemo(
+    () =>
+      state.orders
+        .filter((o) => o.materials.lines.length > 0 && matches(query, o.id, o.customerName))
+        .sort((a, b) => SLIP_PRIORITY[a.materials.status] - SLIP_PRIORITY[b.materials.status] || a.scheduledDate.localeCompare(b.scheduledDate)),
+    [state.orders, query],
+  );
+  // Đếm trên toàn bộ đơn (không theo ô tìm kiếm) để khớp badge ở menu bên trái.
+  const toIssue = state.orders.filter(isAwaitingIssue).length;
+  const outside = slips.filter((o) => hasMaterialsOutside(o.materials)).length;
+  const issuingOrder = state.orders.find((o) => o.id === issuing);
+  const returningOrder = state.orders.find((o) => o.id === returning);
 
   const open = (item: InventoryItem, type: InventoryTxnType) => {
     setTxn({ item, type });
     setQty(type === 'ADJUST' ? item.stock : 1);
-    setOrderId('');
     setNote('');
   };
 
   const submit = () => {
-    if (!txn || error || (needsOrder && !orderId)) return;
-    dispatchCatalog({ type: 'INVENTORY_TXN', itemId: txn.item.id, txnType: txn.type, quantity: qty, orderId: needsOrder ? orderId : null, note });
+    if (!txn || error || (needsReason && !note.trim())) return;
+    dispatchCatalog({ type: 'INVENTORY_TXN', itemId: txn.item.id, txnType: txn.type, quantity: qty, orderId: null, note: note.trim() });
     dispatch({ type: 'PUSH_TOAST', tone: 'success', message: `${TXN_META[txn.type].label}: ${txn.item.name}.` });
     setTxn(null);
   };
@@ -69,12 +78,31 @@ export const InventoryModule = ({ query }: { query: string }) => {
   return (
     <>
       <PageHeader eyebrow="Vận hành" title="Kho & dụng cụ" subtitle="Mọi lần nhập, xuất, hoàn kho đều lưu lịch sử; không cho xuất vượt tồn." actions={<Button icon={PackagePlus} onClick={() => setAdding(true)}>Thêm vật tư</Button>} />
-      <div className="mb-4 grid gap-4 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Danh mục vật tư" value={catalog.inventory.length} icon={PackagePlus} />
         <Stat label="Sắp hết hàng" value={low.length} icon={ArrowUpFromLine} tone={low.length ? 'warning' : 'success'} hint={low.map((i) => i.name).join(', ') || 'Tồn kho ổn định'} />
-        <Stat label="Giao dịch kho" value={catalog.txns.length} icon={History} tone="info" />
+        <Stat label="Phiếu chờ xuất kho" value={toIssue} icon={ClipboardList} tone={toIssue ? 'brand' : 'neutral'} hint="Đơn đã gán đội, chưa xuất vật tư" />
+        <Stat label="Phiếu còn ngoài kho" value={outside} icon={History} tone={outside ? 'warning' : 'success'} hint="Đã xuất, chưa kiểm nhận trả" />
       </div>
-      <Tabs className="mb-4" value={tab} onChange={setTab} tabs={[{ id: 'stock', label: 'Tồn kho' }, { id: 'history', label: 'Lịch sử giao dịch' }, { id: 'usage', label: 'Vật tư theo booking' }]} />
+      <Tabs
+        className="mb-4"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'stock', label: 'Tồn kho' },
+          {
+            id: 'slips',
+            label: 'Phiếu vật tư theo đơn',
+            // Cùng kiểu badge với menu bên trái (AppShell) — số phiếu chờ xuất kho.
+            badge: toIssue ? (
+              <span className="min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-[11px] font-bold text-white tabular-nums">
+                {toIssue}
+              </span>
+            ) : undefined,
+          },
+          { id: 'history', label: 'Lịch sử giao dịch' },
+        ]}
+      />
 
       {tab === 'stock' && (
         <Card padded={false}>
@@ -82,14 +110,15 @@ export const InventoryModule = ({ query }: { query: string }) => {
             <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                  <th className="px-6 py-3">Vật tư</th><th className="px-3 py-3 text-right">Tồn</th><th className="px-3 py-3 text-right">Mức tối thiểu</th><th className="px-3 py-3">Tình trạng</th><th className="px-6 py-3 text-right">Giao dịch</th>
+                  <th className="px-6 py-3">Vật tư</th><th className="px-3 py-3">Loại</th><th className="px-3 py-3 text-right">Tồn</th><th className="px-3 py-3 text-right">Mức tối thiểu</th><th className="px-3 py-3">Tình trạng</th><th className="px-6 py-3 text-right">Giao dịch</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.length === 0 && <tr><td colSpan={5} className="p-6"><EmptyState icon={PackagePlus} title="Không có vật tư phù hợp" /></td></tr>}
+                {items.length === 0 && <tr><td colSpan={6} className="p-6"><EmptyState icon={PackagePlus} title="Không có vật tư phù hợp" /></td></tr>}
                 {items.map((i) => (
                   <tr key={i.id}>
                     <td className="px-6 py-3.5 font-semibold">{i.name}</td>
+                    <td className="px-3 py-3.5"><Badge tone={i.kind === 'TOOL' ? 'info' : 'neutral'}>{KIND_LABEL[i.kind]}</Badge></td>
                     <td className="px-3 py-3.5 text-right font-semibold tabular-nums">{i.stock} <span className="text-xs font-normal text-slate-400">{i.unit}</span></td>
                     <td className="px-3 py-3.5 text-right tabular-nums text-slate-500">{i.minStock}</td>
                     <td className="px-3 py-3.5">{i.stock <= i.minStock ? <Badge tone="warning" dot>Sắp hết</Badge> : <Badge tone="success" dot>Đủ hàng</Badge>}</td>
@@ -134,46 +163,54 @@ export const InventoryModule = ({ query }: { query: string }) => {
         </Card>
       )}
 
-      {tab === 'usage' && (
+      {tab === 'slips' && (
         <div className="space-y-4">
-          {usage.length === 0 && <Card><EmptyState icon={History} title="Chưa xuất vật tư cho booking nào" /></Card>}
-          {usage.map(([oid, byItem]) => (
-            <Card key={oid}>
-              <CardHeader title={`Đơn #${oid}`} subtitle={state.orders.find((o) => o.id === oid)?.customerName} />
-              <ul className="divide-y divide-slate-100 text-sm">
-                {[...byItem.entries()].map(([iid, u]) => (
-                  <li key={iid} className="flex items-center justify-between gap-3 py-2.5">
-                    <span className="font-medium">{itemName(iid)}</span>
-                    <span className="text-slate-500 tabular-nums">Đã xuất {u.used} · Hoàn {u.returned} · <b className={u.used - u.returned > 0 ? 'text-amber-600' : 'text-emerald-600'}>Cần thu hồi {Math.max(0, u.used - u.returned)}</b></span>
-                  </li>
-                ))}
-              </ul>
+          {slips.length === 0 && (
+            <Card>
+              <EmptyState icon={ClipboardList} title="Chưa có phiếu vật tư nào">
+                Phiếu được lập tự động khi Điều phối gán đội xe cho đơn.
+              </EmptyState>
+            </Card>
+          )}
+          {slips.map((o) => (
+            <Card key={o.id}>
+              <CardHeader
+                title={<span className="flex flex-wrap items-center gap-2">Đơn #{o.id} <MaterialStatusBadge slip={o.materials} /></span>}
+                subtitle={`${o.customerName} · chuyển ngày ${formatDateVN(o.scheduledDate)}${o.status === 'CANCELLED_EXPIRED' ? ' · ĐƠN ĐÃ HỦY' : ''}`}
+                action={<MaterialSlipActions order={o} onIssue={() => setIssuing(o.id)} onReturn={() => setReturning(o.id)} />}
+              />
+              <MaterialLinesTable slip={o.materials} />
+              {o.materials.resolutionNote && o.materials.lines.some((l) => l.lost > 0) && (
+                <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Biên bản chênh lệch: {o.materials.resolutionNote}</p>
+              )}
             </Card>
           ))}
         </div>
       )}
 
+      {issuingOrder && <IssueMaterialsModal order={issuingOrder} onClose={() => setIssuing(null)} />}
+      {returningOrder && <ReturnMaterialsModal order={returningOrder} onClose={() => setReturning(null)} />}
+
       <Modal
         open={!!txn}
         onClose={() => setTxn(null)}
         title={txn ? `${TXN_META[txn.type].label} — ${txn.item.name}` : ''}
-        footer={<><Button variant="secondary" onClick={() => setTxn(null)}>Hủy</Button><Button disabled={!!error || (needsOrder && !orderId)} onClick={submit}>Xác nhận</Button></>}
+        footer={<><Button variant="secondary" onClick={() => setTxn(null)}>Hủy</Button><Button disabled={!!error || (needsReason && !note.trim())} onClick={submit}>Xác nhận</Button></>}
       >
         {txn && (
           <div className="space-y-4">
             <p>Tồn hiện tại: <b className="tabular-nums">{txn.item.stock} {txn.item.unit}</b></p>
+            {needsReason && (
+              <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                Giao dịch nội bộ, không gắn với đơn. Xuất / thu hồi vật tư cho đơn hàng thực hiện ở tab “Phiếu vật tư theo đơn”.
+              </p>
+            )}
             <Field label={txn.type === 'ADJUST' ? 'Tồn kho thực tế' : 'Số lượng'} error={error}>
               <Input type="number" min={0} value={qty} onChange={(e) => setQty(Math.floor(Number(e.target.value)))} invalid={!!error} />
             </Field>
-            {needsOrder && (
-              <Field label="Gắn với booking" error={!orderId ? 'Chọn booking để theo dõi vật tư' : null}>
-                <Select value={orderId} onChange={(e) => setOrderId(e.target.value)}>
-                  <option value="">— Chọn đơn —</option>
-                  {state.orders.map((o) => <option key={o.id} value={o.id}>#{o.id} · {o.customerName}</option>)}
-                </Select>
-              </Field>
-            )}
-            <Field label="Ghi chú"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+            <Field label={needsReason ? 'Lý do (bắt buộc)' : 'Ghi chú'} error={needsReason && !note.trim() ? 'Nhập lý do xuất / hoàn kho' : null}>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={needsReason ? 'VD: Xuất bảo dưỡng xe đẩy, thanh lý hàng hỏng…' : ''} />
+            </Field>
           </div>
         )}
       </Modal>
@@ -185,12 +222,18 @@ export const InventoryModule = ({ query }: { query: string }) => {
         footer={
           <>
             <Button variant="secondary" onClick={() => setAdding(false)}>Hủy</Button>
-            <Button disabled={!draft.name.trim() || !draft.unit.trim() || draft.stock < 0} onClick={() => { dispatchCatalog({ type: 'ADD_INVENTORY_ITEM', item: { ...draft, name: draft.name.trim(), unit: draft.unit.trim() } }); setAdding(false); setDraft({ name: '', unit: '', stock: 0, minStock: 0 }); }}>Thêm</Button>
+            <Button disabled={!draft.name.trim() || !draft.unit.trim() || draft.stock < 0} onClick={() => { dispatchCatalog({ type: 'ADD_INVENTORY_ITEM', item: { ...draft, name: draft.name.trim(), unit: draft.unit.trim() } }); setAdding(false); setDraft({ name: '', unit: '', kind: 'CONSUMABLE', stock: 0, minStock: 0 }); }}>Thêm</Button>
           </>
         }
       >
         <div className="space-y-4">
           <Field label="Tên vật tư"><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+          <Field label="Loại" hint={draft.kind === 'TOOL' ? 'Xuất cho đội mượn, phải trả đủ khi quyết toán.' : 'Dùng cho khách, phần dư nhập lại kho.'}>
+            <Select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as MaterialKind })}>
+              <option value="CONSUMABLE">Vật tư tiêu hao</option>
+              <option value="TOOL">Dụng cụ dùng lại</option>
+            </Select>
+          </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Đơn vị"><Input value={draft.unit} onChange={(e) => setDraft({ ...draft, unit: e.target.value })} /></Field>
             <Field label="Tồn ban đầu"><Input type="number" min={0} value={draft.stock} onChange={(e) => setDraft({ ...draft, stock: Math.max(0, Number(e.target.value)) })} /></Field>

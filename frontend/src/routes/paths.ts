@@ -28,6 +28,7 @@ export const ROUTES = {
   admin: {
     root: '/admin',
     dashboard: '/admin/dashboard',
+    orders: '/admin/orders',
     settlement: '/admin/settlement',
     payments: '/admin/payments',
     finance: '/admin/finance',

@@ -29,6 +29,7 @@ import {
 import { parseCapacityTons } from '@/services/dispatch';
 import { formatTime, formatVND } from '@/services/format';
 import { buildSurveyQuote, quoteSubtotal } from '@/services/pricing';
+import { isActiveStaff } from '@/services/staff';
 import { useApp } from '@/services/store/AppStore';
 import type { Order, SurveyInput } from '@/types';
 
@@ -237,7 +238,7 @@ const DispatchForm = ({ order, primary }: { order: Order; primary: boolean }) =>
         <Select value={surveyorId} onChange={(e) => setSurveyorId(e.target.value)} className={cx(submitted && !surveyorId && 'border-rose-400')}>
           <option value="">— Chọn nhân viên —</option>
           {state.resources.staff
-            .filter((s) => s.isAvailable)
+            .filter(isActiveStaff)
             .map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})

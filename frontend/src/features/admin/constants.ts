@@ -27,8 +27,6 @@ export const TXN_META: Record<InventoryTxnType, { label: string; icon: typeof Pl
 
 export const ROLE_LABEL: Record<UserRole, string> = { CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', COORDINATOR: 'Điều phối viên', ADMIN: 'Admin' };
 
-export const DAY = 86_400_000;
-
 export const KIND_LABEL: Record<PaymentKind, string> = { DEPOSIT: 'Đặt cọc', FINAL: 'Thanh toán cuối' };
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = { TRANSFER: 'Chuyển khoản / VietQR' };

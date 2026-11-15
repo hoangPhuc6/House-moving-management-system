@@ -1,18 +1,22 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Banknote, BarChart3, Boxes, FileWarning, Tags, Truck, Users, Wallet, Warehouse } from 'lucide-react';
+import { Banknote, BarChart3, Boxes, FileSearch, FileWarning, Tags, Truck, Users, Wallet, Warehouse } from 'lucide-react';
 import type { AdminOutletContext } from '@/features/admin/types';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
+import { isAwaitingIssue } from '@/services/materials';
 import { useApp } from '@/services/store/AppStore';
 
 /** Khung của khu vực Admin: sidebar + ô tìm kiếm chung, các trang con hiển thị qua <Outlet />. */
 export const AdminLayout = () => {
   const { state } = useApp();
   const [query, setQuery] = useState('');
+  // Phiếu vật tư nháp của đơn đã gán đội: thủ kho cần duyệt & xuất trước giờ đội xe tới nhận.
+  const slipsToIssue = state.orders.filter(isAwaitingIssue).length;
 
   const nav: NavItem[] = [
     { to: ROUTES.admin.dashboard, label: 'Dashboard & báo cáo', icon: BarChart3 },
+    { to: ROUTES.admin.orders, label: 'Tra cứu đơn hàng', icon: FileSearch },
     {
       to: ROUTES.admin.settlement,
       label: 'Vật tư & Đóng hồ sơ',
@@ -33,7 +37,12 @@ export const AdminLayout = () => {
       badge: state.claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length || undefined,
       badgeTone: 'danger',
     },
-    { to: ROUTES.admin.inventory, label: 'Kho & dụng cụ', icon: Boxes },
+    {
+      to: ROUTES.admin.inventory,
+      label: 'Kho & dụng cụ',
+      icon: Boxes,
+      badge: slipsToIssue || undefined,
+    },
     { to: ROUTES.admin.vehicles, label: 'Quản lý xe', icon: Truck },
     { to: ROUTES.admin.services, label: 'Dịch vụ & bảng giá', icon: Tags },
     { to: ROUTES.admin.users, label: 'Tài khoản & phân quyền', icon: Users },

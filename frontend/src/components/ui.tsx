@@ -300,13 +300,13 @@ export const Modal = ({ open, onClose, title, children, footer, tone, size = 'md
   );
 };
 
-export const Drawer = ({ open, onClose, title, subtitle, children, footer }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) => {
+export const Drawer = ({ open, onClose, title, subtitle, children, footer, size = 'md' }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; size?: 'md' | 'lg' }) => {
   useEscape(open, onClose);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
       <div className="anim-fade absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="anim-slide absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl">
+      <aside className={cx('anim-slide absolute inset-y-0 right-0 flex w-full flex-col bg-white shadow-2xl', size === 'lg' ? 'max-w-2xl' : 'max-w-md')}>
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-6 py-5">
           <div>
             <h3 className="text-base font-semibold tracking-tight text-slate-900">{title}</h3>

@@ -1,7 +1,6 @@
 import { CheckCircle2, Lock, Phone } from 'lucide-react';
 import { Card, cx, Divider, StatusBadge } from '@/components/ui';
 import { FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
-import { STAFF_ROLE_LABEL } from '@/constants/resources';
 import type { Order } from '@/types';
 
 export const LiveProgressCard = ({
@@ -13,11 +12,12 @@ export const LiveProgressCard = ({
   order: Order;
   vehicle?: string;
   capacity?: number;
-  crew: { id: string; name: string; role: keyof typeof STAFF_ROLE_LABEL }[];
+  crew: { id: string; name: string }[];
 }) => {
   const stageIdx = FIELD_STAGE_ORDER.indexOf(order.fieldStage);
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
-  const leader = crew.find((c) => c.role === "TEAM_LEADER") ?? crew[0];
+  // Khách liên hệ trưởng nhóm của chuyến (Điều phối chỉ định khi gán đội).
+  const leader = crew.find((c) => c.id === order.leaderId) ?? crew[0];
   return (
     <Card className="lg:row-span-2">
       <div className="mb-4 flex items-center justify-between">

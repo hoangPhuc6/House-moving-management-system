@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronRight, History, Package, Plus } from 'lucide-react';
 import { Badge, Button, Card, cx, EmptyState } from '@/components/ui';
-import { customerStatusOf, routeLabelOf } from '@/features/customer/utils';
+import { customerStatusOf, customerViewStatus, isCustomerSettled, routeLabelOf } from '@/features/customer/utils';
 import { ROUTES } from '@/routes/paths';
 import { formatDateVN, formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
@@ -20,7 +20,8 @@ const FILTERS: { key: Filter; label: string }[] = [
 export const HistoryTab = ({ orders, openCount }: { orders: Order[]; openCount: number }) => {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('ALL');
-  const shown = filter === 'ALL' ? orders : orders.filter((o) => o.status === filter);
+  // Lọc theo trạng thái khách thấy: đơn đã trả đủ (dù hồ sơ nội bộ chưa đóng) thuộc "Hoàn tất".
+  const shown = filter === 'ALL' ? orders : orders.filter((o) => customerViewStatus(o) === filter);
 
   if (!orders.length) {
     return (
@@ -90,7 +91,7 @@ export const HistoryTab = ({ orders, openCount }: { orders: Order[]; openCount: 
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <Badge tone={status.tone}>{status.label}</Badge>
-                      {o.status === 'COMPLETED' && o.quoteItems.length > 0 && (
+                      {isCustomerSettled(o) && o.quoteItems.length > 0 && (
                         <span className="text-xs font-semibold text-slate-600 tabular-nums">{formatVND(computeTotals(o).grandTotal)}</span>
                       )}
                     </div>

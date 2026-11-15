@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   Clock,
   FileWarning,
@@ -19,89 +24,250 @@ import {
   cx,
   EmptyState,
   PageHeader,
-  Select,
   Stat,
-  Tabs,
 } from '@/components/ui';
 import { STATUS_META, STATUS_ORDER } from '@/constants/order';
-import { DAY } from '@/features/admin/constants';
-import type { Group, Range, RevenueRow } from '@/features/admin/types';
-import { bucketKey, bucketLabel, isoDate } from '@/features/admin/utils';
+import {
+  bucketOf,
+  chartBuckets,
+  currentPeriod,
+  type DateWindow,
+  inWindow,
+  type Period,
+  type PeriodKind,
+  periodKey,
+  periodLabel,
+  periodOptions,
+  periodWindows,
+  todayISO,
+} from '@/features/admin/period';
+import { isoDate } from '@/features/admin/utils';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 import { useCatalog } from '@/services/store/CatalogStore';
 
-/** Dashboard Admin — số liệu tổng hợp từ store, không tính ở nơi hiển thị khác. */
+const RECENT_FEEDBACKS = 8;
+
+/** Chỉ số phát sinh trong một khoảng ngày — tính giống nhau cho kỳ hiện tại và kỳ so sánh. */
+interface FlowMetrics {
+  revenue: number;
+  completed: number;
+  cancelled: number;
+  collected: number;
+  avgRating: number | null;
+  ratingCount: number;
+  claims: number;
+  openClaims: number;
+}
+
+/**
+ * Mức thay đổi so với kỳ trước. invert: tăng là xấu (hủy, khiếu nại).
+ * points: so theo hiệu số điểm (điểm đánh giá) thay vì phần trăm.
+ */
+const Delta = ({ cur, prev, invert = false, points = false }: { cur: number | null; prev: number | null; invert?: boolean; points?: boolean }) => {
+  if (cur === null || prev === null) return <span className="text-slate-400">Kỳ trước chưa có dữ liệu</span>;
+  if (!points && prev === 0) return <span className="text-slate-400">{cur === 0 ? 'Không đổi' : 'Kỳ trước chưa có'}</span>;
+  const value = points ? cur - prev : ((cur - prev) / prev) * 100;
+  if (Math.abs(value) < (points ? 0.05 : 0.5)) return <span className="text-slate-400">Không đổi</span>;
+  const up = value > 0;
+  const Icon = up ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span className={cx('inline-flex items-center gap-0.5 font-semibold', up !== invert ? 'text-emerald-600' : 'text-rose-600')}>
+      <Icon className="size-3.5" />
+      {up ? '+' : ''}
+      {points ? `${value.toFixed(1)} điểm` : `${value.toFixed(0)}%`}
+    </span>
+  );
+};
+
+const withNote = (delta: ReactNode, note?: string) => (
+  <span className="inline-flex flex-wrap items-center gap-x-1.5">
+    {delta}
+    {note && <span className="text-slate-400">· {note}</span>}
+  </span>
+);
+
+/**
+ * Bộ chọn kỳ gọn một hàng, cùng chiều cao nút (h-10):
+ * [Tháng | Năm]  [‹ Tháng 11/2026 ⌄ ›]. Mũi tên lùi / tiến một kỳ; bấm tên kỳ để chọn từ danh sách.
+ */
+const PeriodPicker = ({
+  kind,
+  onKindChange,
+  period,
+  options,
+  onChange,
+}: {
+  kind: PeriodKind;
+  onKindChange: (k: PeriodKind) => void;
+  period: Period;
+  /** Mới nhất trước. */
+  options: Period[];
+  onChange: (p: Period) => void;
+}) => {
+  const idx = options.findIndex((p) => periodKey(p) === periodKey(period));
+  const older = idx >= 0 ? options[idx + 1] : undefined;
+  const newer = idx > 0 ? options[idx - 1] : undefined;
+  const unit = kind === 'month' ? 'tháng' : 'năm';
+  const arrow = 'grid w-9 shrink-0 place-items-center text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent';
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div role="radiogroup" aria-label="Kiểu kỳ báo cáo" className="flex h-10 items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-1">
+        {(['month', 'year'] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={kind === k}
+            onClick={() => onKindChange(k)}
+            className={cx(
+              'h-full rounded-lg px-3 text-sm font-semibold transition-colors',
+              kind === k ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+            )}
+          >
+            {k === 'month' ? 'Tháng' : 'Năm'}
+          </button>
+        ))}
+      </div>
+      <div className="flex h-10 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <button type="button" className={arrow} disabled={!older} onClick={() => older && onChange(older)} aria-label={`${unit} trước`}>
+          <ChevronLeft className="size-4" />
+        </button>
+        <div className="relative flex items-center border-x border-slate-200">
+          <select
+            value={periodKey(period)}
+            onChange={(e) => onChange(options.find((p) => periodKey(p) === e.target.value) ?? period)}
+            aria-label={`Chọn ${unit}`}
+            className="h-full cursor-pointer appearance-none bg-transparent py-0 pr-8 pl-3 text-sm font-semibold text-slate-900 tabular-nums focus:outline-none focus-visible:bg-slate-50"
+          >
+            {options.map((p) => (
+              <option key={periodKey(p)} value={periodKey(p)}>{periodLabel(p)}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-2.5 size-4 text-slate-400" />
+        </div>
+        <button type="button" className={arrow} disabled={!newer} onClick={() => newer && onChange(newer)} aria-label={`${unit} sau`}>
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/** Dashboard Admin — số liệu theo tháng / năm dương lịch, kèm so sánh với kỳ trước. */
 export const DashboardModule = () => {
   const { state } = useApp();
   const { catalog } = useCatalog();
-  const [range, setRange] = useState<Range>('30');
-  const [group, setGroup] = useState<Group>('day');
+  const [kind, setKind] = useState<PeriodKind>('month');
+  const [period, setPeriod] = useState<Period>(() => currentPeriod('month'));
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const today = todayISO();
+
+  const earliest = useMemo(
+    () => [today, ...catalog.history.map((h) => h.date), ...state.orders.map((o) => isoDate(o.createdAt))].sort()[0]!,
+    [today, catalog.history, state.orders],
+  );
+  const options = useMemo(() => periodOptions(kind, earliest, today), [kind, earliest, today]);
+  const windows = useMemo(() => periodWindows(period, today), [period, today]);
+
+  const changeKind = (k: PeriodKind) => {
+    setKind(k);
+    setPeriod(currentPeriod(k));
+  };
 
   // Mô phỏng thời gian gọi API thống kê để thể hiện trạng thái đang tải.
+  const loadKey = `${periodKey(period)}-${period.kind}-${reloadKey}`;
   useEffect(() => {
     setLoading(true);
     const t = window.setTimeout(() => setLoading(false), 450);
     return () => window.clearTimeout(t);
-  }, [range, group, reloadKey]);
+  }, [loadKey]);
 
   const data = useMemo(() => {
-    const since = range === 'all' ? 0 : Date.now() - Number(range) * DAY;
-    const inRange = (t: number) => t >= since;
-
-    const rows: RevenueRow[] = [
-      ...catalog.history.filter((h) => inRange(new Date(`${h.date}T00:00:00Z`).getTime())).map((h) => ({ date: h.date, revenue: h.revenue, services: h.services })),
+    const { current, previous } = windows;
+    const createdIn = (t: number, w: DateWindow) => inWindow(isoDate(t), w);
+    // Chỉ đơn COMPLETED có doanh thu khóa — loại đơn hủy / thất bại / chờ xác nhận. Đơn lịch sử hoàn tất coi như thu đủ.
+    const revenueRows = (w: DateWindow) => [
+      ...catalog.history.filter((h) => h.status === 'COMPLETED' && inWindow(h.date, w)).map((h) => ({ date: h.date, revenue: h.revenue, services: h.services })),
       ...state.orders
-        // Chỉ đơn COMPLETED có doanh thu khóa — loại đơn hủy / thất bại / chờ xác nhận.
-        .filter((o) => o.status === 'COMPLETED' && o.finalRevenue !== null && inRange(o.createdAt))
+        .filter((o) => o.status === 'COMPLETED' && o.finalRevenue !== null && createdIn(o.createdAt, w))
         .map((o) => ({ date: isoDate(o.createdAt), revenue: o.finalRevenue ?? 0, services: o.quoteItems.map((q) => q.name) })),
     ];
 
-    const buckets = new Map<string, number>();
-    rows.forEach((r) => {
-      const k = bucketKey(r.date, group);
-      buckets.set(k, (buckets.get(k) ?? 0) + r.revenue);
-    });
-    const series = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const metrics = (w: DateWindow): FlowMetrics => {
+      const rows = revenueRows(w);
+      const orders = state.orders.filter((o) => createdIn(o.createdAt, w));
+      const archivedCancelled = catalog.history.filter((h) => h.status === 'CANCELLED' && inWindow(h.date, w)).length;
+      const fbs = catalog.feedbacks.filter((f) => createdIn(f.createdAt, w));
+      const claims = state.claims.filter((c) => createdIn(c.createdAt, w));
+      const revenue = rows.reduce((s, r) => s + r.revenue, 0);
+      return {
+        revenue,
+        completed: rows.length,
+        cancelled: archivedCancelled + orders.filter((o) => o.status === 'CANCELLED_EXPIRED').length,
+        collected:
+          catalog.history.filter((h) => h.status === 'COMPLETED' && inWindow(h.date, w)).reduce((s, h) => s + h.revenue, 0) +
+          orders.reduce((s, o) => s + o.depositPaid + o.balancePaid, 0),
+        avgRating: fbs.length ? fbs.reduce((s, f) => s + f.stars, 0) / fbs.length : null,
+        ratingCount: fbs.length,
+        claims: claims.length,
+        openClaims: claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length,
+      };
+    };
 
-    const orders = state.orders.filter((o) => inRange(o.createdAt));
-    const statusCount = STATUS_ORDER.map((s) => ({ status: s, count: orders.filter((o) => o.status === s).length }));
-    const active = orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED_EXPIRED');
-    const collected = orders.reduce((s, o) => s + o.depositPaid + o.balancePaid, 0);
-    const receivable = active.reduce((s, o) => s + computeTotals(o).remaining, 0);
-    const pending = catalog.payments.filter((p) => p.status === 'PENDING' && inRange(p.createdAt));
+    const cur = metrics(current);
+    const prev = metrics(previous);
+    const rows = revenueRows(current);
+
+    // Biểu đồ: cột theo ngày (tháng) hoặc theo tháng (năm), đủ mọi mốc kể cả mốc không có doanh thu.
+    const sums = new Map<string, number>();
+    rows.forEach((r) => {
+      const k = bucketOf(r.date, period.kind);
+      sums.set(k, (sums.get(k) ?? 0) + r.revenue);
+    });
+    const series = chartBuckets(period, current).map((b) => ({ ...b, value: sums.get(b.key) ?? 0 }));
+
+    const ordersInPeriod = state.orders.filter((o) => createdIn(o.createdAt, current));
+    const statusCount = STATUS_ORDER.map((s) => ({
+      status: s,
+      count:
+        ordersInPeriod.filter((o) => o.status === s).length +
+        (s === 'COMPLETED' ? catalog.history.filter((h) => h.status === 'COMPLETED' && inWindow(h.date, current)).length : 0) +
+        (s === 'CANCELLED_EXPIRED' ? catalog.history.filter((h) => h.status === 'CANCELLED' && inWindow(h.date, current)).length : 0),
+    }));
 
     const svcCount = new Map<string, number>();
     rows.forEach((r) => r.services.forEach((n) => svcCount.set(n, (svcCount.get(n) ?? 0) + 1)));
     const topServices = [...svcCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
 
-    const fbs = catalog.feedbacks.filter((f) => inRange(f.createdAt));
-    const avgRating = fbs.length ? fbs.reduce((s, f) => s + f.stars, 0) / fbs.length : null;
-    const claims = state.claims.filter((c) => inRange(c.createdAt));
+    const recentFeedbacks = catalog.feedbacks
+      .filter((f) => createdIn(f.createdAt, current))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, RECENT_FEEDBACKS);
+
+    // Số liệu tại thời điểm hiện tại (không theo kỳ): công nợ của đơn đang chạy, giao dịch chờ xác nhận.
+    const active = state.orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED_EXPIRED');
+    const receivable = active.reduce((s, o) => s + computeTotals(o).remaining, 0);
+    const pending = catalog.payments.filter((p) => p.status === 'PENDING');
 
     return {
+      cur,
+      prev,
       series,
-      revenue: rows.reduce((s, r) => s + r.revenue, 0),
-      completedCount: rows.length,
-      cancelled: orders.filter((o) => o.status === 'CANCELLED_EXPIRED').length,
-      activeCount: active.length,
       statusCount,
-      collected,
+      topServices,
+      recentFeedbacks,
+      activeCount: active.length,
       receivable,
       pending,
-      topServices,
-      avgRating,
-      ratingCount: fbs.length,
-      claimCount: claims.length,
-      openClaims: claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length,
-      empty: rows.length === 0 && orders.length === 0,
+      empty: cur.completed === 0 && cur.cancelled === 0 && ordersInPeriod.length === 0,
     };
-  }, [range, group, state.orders, state.claims, catalog.history, catalog.payments, catalog.feedbacks]);
+  }, [windows, period, state.orders, state.claims, catalog.history, catalog.payments, catalog.feedbacks]);
 
-  const maxRev = Math.max(1, ...data.series.map(([, v]) => v));
+  const maxRev = Math.max(1, ...data.series.map((b) => b.value));
   const maxStatus = Math.max(1, ...data.statusCount.map((s) => s.count));
   const maxSvc = Math.max(1, ...data.topServices.map(([, c]) => c));
 
@@ -110,16 +276,17 @@ export const DashboardModule = () => {
       <PageHeader
         eyebrow="Báo cáo"
         title="Dashboard & thống kê"
-        subtitle="Doanh thu chỉ tính đơn đã hoàn tất — không cộng giao dịch thất bại hoặc chờ xác nhận."
+        subtitle={
+          <>
+            <b className="font-semibold text-slate-700">{windows.label}</b> · mức thay đổi {windows.compareLabel}. Doanh thu chỉ tính đơn đã hoàn tất.
+          </>
+        }
         actions={
           <>
-            <Select value={range} onChange={(e) => setRange(e.target.value as Range)} className="h-10 w-40" aria-label="Khoảng thời gian">
-              <option value="7">7 ngày qua</option>
-              <option value="30">30 ngày qua</option>
-              <option value="90">90 ngày qua</option>
-              <option value="all">Tất cả</option>
-            </Select>
-            <Button variant="secondary" icon={RefreshCw} onClick={() => setReloadKey((k) => k + 1)}>Làm mới</Button>
+            <PeriodPicker kind={kind} onKindChange={changeKind} period={period} options={options} onChange={setPeriod} />
+            <Button variant="secondary" icon={RefreshCw} onClick={() => setReloadKey((k) => k + 1)} aria-label="Làm mới số liệu">
+              <span className="hidden sm:inline">Làm mới</span>
+            </Button>
           </>
         }
       />
@@ -129,47 +296,51 @@ export const DashboardModule = () => {
           <Loader2 className="size-5 animate-spin text-brand" /> Đang tải số liệu thống kê…
         </Card>
       ) : data.empty ? (
-        <Card><EmptyState icon={BarChart3} title="Không có dữ liệu trong khoảng thời gian này">Hãy chọn khoảng thời gian rộng hơn.</EmptyState></Card>
+        <Card><EmptyState icon={BarChart3} title="Không có dữ liệu trong kỳ này">Hãy chọn tháng hoặc năm khác.</EmptyState></Card>
       ) : (
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Doanh thu" value={formatVND(data.revenue)} icon={CircleDollarSign} tone="success" hint={`${data.completedCount} đơn hoàn tất`} />
-            <Stat label="Đã thu" value={formatVND(data.collected)} icon={Wallet} tone="info" hint="Cọc + thanh toán thành công" />
-            <Stat label="Còn phải thu" value={formatVND(data.receivable)} icon={Hourglass} tone="warning" hint={`${data.activeCount} đơn đang thực hiện`} />
-            <Stat label="Giao dịch chờ xác nhận" value={data.pending.length} icon={Clock} tone="brand" hint={formatVND(data.pending.reduce((s, p) => s + p.amount, 0))} />
-            <Stat label="Hoàn tất" value={data.completedCount} icon={CheckCircle2} tone="success" />
-            <Stat label="Đã hủy / hết hạn" value={data.cancelled} icon={FileWarning} tone="danger" />
-            <Stat label="Điểm đánh giá TB" value={data.avgRating === null ? '—' : `${data.avgRating.toFixed(1)} / 5`} icon={Star} tone="warning" hint={`${data.ratingCount} lượt đánh giá`} />
-            <Stat label="Khiếu nại" value={data.claimCount} icon={FileWarning} tone="danger" hint={`${data.openClaims} đang xử lý`} />
+            <Stat label="Doanh thu" value={formatVND(data.cur.revenue)} icon={CircleDollarSign} tone="success" hint={withNote(<Delta cur={data.cur.revenue} prev={data.prev.revenue} />, `${data.cur.completed} đơn hoàn tất`)} />
+            <Stat label="Đã thu" value={formatVND(data.cur.collected)} icon={Wallet} tone="info" hint={withNote(<Delta cur={data.cur.collected} prev={data.prev.collected} />, 'cọc + thanh toán thành công')} />
+            <Stat label="Còn phải thu" value={formatVND(data.receivable)} icon={Hourglass} tone="warning" hint={`Hiện tại · ${data.activeCount} đơn đang thực hiện`} />
+            <Stat label="Giao dịch chờ xác nhận" value={data.pending.length} icon={Clock} tone="brand" hint={`Hiện tại · ${formatVND(data.pending.reduce((s, p) => s + p.amount, 0))}`} />
+            <Stat label="Hoàn tất" value={data.cur.completed} icon={CheckCircle2} tone="success" hint={withNote(<Delta cur={data.cur.completed} prev={data.prev.completed} />)} />
+            <Stat label="Đã hủy / hết hạn" value={data.cur.cancelled} icon={FileWarning} tone="danger" hint={withNote(<Delta cur={data.cur.cancelled} prev={data.prev.cancelled} invert />)} />
+            <Stat
+              label="Điểm đánh giá TB"
+              value={data.cur.avgRating === null ? '—' : `${data.cur.avgRating.toFixed(1)} / 5`}
+              icon={Star}
+              tone="warning"
+              hint={withNote(<Delta cur={data.cur.avgRating} prev={data.prev.avgRating} points />, `${data.cur.ratingCount} lượt`)}
+            />
+            <Stat label="Khiếu nại" value={data.cur.claims} icon={FileWarning} tone="danger" hint={withNote(<Delta cur={data.cur.claims} prev={data.prev.claims} invert />, `${data.cur.openClaims} đang xử lý`)} />
           </div>
 
           <Card>
             <CardHeader
               title="Doanh thu theo thời gian"
               icon={BarChart3}
-              action={
-                <Tabs<Group>
-                  value={group}
-                  onChange={setGroup}
-                  tabs={[
-                    { id: 'day', label: 'Ngày' },
-                    { id: 'week', label: 'Tuần' },
-                    { id: 'month', label: 'Tháng' },
-                  ]}
-                />
-              }
+              subtitle={`${period.kind === 'month' ? 'Theo ngày' : 'Theo tháng'} · ${windows.label} · tổng ${formatVND(data.cur.revenue)}`}
             />
-            {data.series.length === 0 ? (
-              <EmptyState icon={BarChart3} title="Chưa có doanh thu" />
+            {data.cur.revenue === 0 ? (
+              <EmptyState icon={BarChart3} title="Chưa có doanh thu trong kỳ" />
             ) : (
-              <div className="flex h-56 items-end gap-2 overflow-x-auto pb-1" role="img" aria-label="Biểu đồ cột doanh thu">
-                {data.series.map(([k, v]) => (
-                  <div key={k} className="flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-1.5">
-                    <span className="text-[10px] font-semibold text-slate-500 tabular-nums">{(v / 1_000_000).toFixed(1)}tr</span>
-                    <div className="w-full max-w-14 rounded-t-lg bg-brand/85 transition-all" style={{ height: `${Math.max(4, (v / maxRev) * 100)}%` }} title={formatVND(v)} />
-                    <span className="text-[10px] whitespace-nowrap text-slate-500">{bucketLabel(k, group)}</span>
-                  </div>
-                ))}
+              <div className="flex h-56 items-end gap-0.5 sm:gap-1.5" role="img" aria-label={`Biểu đồ cột doanh thu ${windows.label}`}>
+                {data.series.map((b) => {
+                  // Tháng ~30 cột: chỉ ghi nhãn ngày 1, 5, 10… để không chồng chữ; năm 12 cột: ghi đủ kèm giá trị.
+                  const day = Number(b.label);
+                  const showLabel = period.kind === 'year' || day === 1 || day % 5 === 0;
+                  return (
+                    <div key={b.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5" title={`${b.title}: ${formatVND(b.value)}`}>
+                      {period.kind === 'year' && <span className="text-[10px] font-semibold text-slate-500 tabular-nums">{(b.value / 1_000_000).toFixed(0)}tr</span>}
+                      <div
+                        className={cx('w-full max-w-14 rounded-t-md transition-all', b.value > 0 ? 'bg-brand/85 hover:bg-brand' : 'bg-slate-200')}
+                        style={{ height: b.value > 0 ? `${Math.max(3, (b.value / maxRev) * 100)}%` : '2px' }}
+                      />
+                      <span className={cx('text-[10px] whitespace-nowrap text-slate-500 tabular-nums', !showLabel && 'invisible')}>{b.label}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -210,10 +381,16 @@ export const DashboardModule = () => {
           </div>
 
           <Card padded={false}>
-            <div className="p-6 pb-4"><CardHeader title="Đánh giá gần đây" icon={Star} subtitle="Mỗi booking chỉ có một đánh giá" /></div>
+            <div className="p-6 pb-4">
+              <CardHeader
+                title="Đánh giá gần đây"
+                icon={Star}
+                subtitle={`${RECENT_FEEDBACKS} đánh giá mới nhất trong khoảng đã chọn · mỗi booking chỉ có một đánh giá`}
+              />
+            </div>
             <ul className="divide-y divide-slate-100 border-t border-slate-100">
-              {catalog.feedbacks.length === 0 && <li className="p-6"><EmptyState icon={Star} title="Chưa có đánh giá" /></li>}
-              {catalog.feedbacks.map((f) => (
+              {data.recentFeedbacks.length === 0 && <li className="p-6"><EmptyState icon={Star} title="Chưa có đánh giá" /></li>}
+              {data.recentFeedbacks.map((f) => (
                 <li key={f.id} className="flex flex-wrap items-start gap-3 px-6 py-3.5 text-sm">
                   <div className="flex gap-0.5">{[1, 2, 3, 4, 5].map((n) => <Star key={n} className={cx('size-4', n <= f.stars ? 'fill-amber-400 text-amber-400' : 'text-slate-300')} />)}</div>
                   <div className="min-w-0 flex-1">

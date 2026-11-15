@@ -4,6 +4,7 @@ import { AUTO_CANCEL_MS, TELESALES_THRESHOLD_MS } from '@/constants/pricing';
 import { COLUMNS } from '@/features/coordinator/constants';
 import type { CoordTab } from '@/features/coordinator/types';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
+import { settlementBadges } from '@/features/order/settlementStage';
 import { coordinatorSurveyBadge } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
@@ -153,6 +154,11 @@ export const QueueTab = ({
                               deadline={o.autoCancelDeadline}
                               compact
                             />
+                          ) : settlementBadges(o) ? (
+                            // Chờ quyết toán: ghi rõ đang chờ khách hay chỉ còn việc nội bộ (vật tư).
+                            settlementBadges(o)!.map((b) => (
+                              <Badge key={b.label} tone={b.tone} dot>{b.label}</Badge>
+                            ))
                           ) : (
                             <StatusBadge status={o.status} />
                           )}

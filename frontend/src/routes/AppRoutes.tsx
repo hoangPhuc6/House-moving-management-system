@@ -8,6 +8,7 @@ import { AdminClaimsPage } from '@/pages/admin/AdminClaimsPage';
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage';
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage';
 import { AdminInventoryPage } from '@/pages/admin/AdminInventoryPage';
+import { AdminOrdersPage } from '@/pages/admin/AdminOrdersPage';
 import { AdminPaymentsPage } from '@/pages/admin/AdminPaymentsPage';
 import { AdminServicesPage } from '@/pages/admin/AdminServicesPage';
 import { AdminSettlementPage } from '@/pages/admin/AdminSettlementPage';
@@ -61,6 +62,7 @@ export const AppRoutes = () => (
       <Route path="admin" element={<AdminLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboardPage />} />
+        <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="settlement" element={<AdminSettlementPage />} />
         <Route path="payments" element={<AdminPaymentsPage />} />
         <Route path="finance" element={<AdminFinancePage />} />

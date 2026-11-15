@@ -1,5 +1,6 @@
 import { INCLUDED_KM, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES } from '@/constants/pricing';
 import { formatVND, uid } from '@/services/format';
+import { isMaterialsSettled } from '@/services/materials';
 import type { Order, OrderTotals, QuoteItem, SettlementLockState, SurveyInput } from '@/types';
 
 export const lineTotal = (item: QuoteItem): number => item.unitPrice * item.quantity;
@@ -38,7 +39,7 @@ export const computeTotals = (order: Order): OrderTotals => {
 
 export const selectSettlement = (order: Order): SettlementLockState => ({
   remainingBalance: computeTotals(order).remaining,
-  isWarehouseReturned: order.isWarehouseReturned,
+  materialsSettled: isMaterialsSettled(order.materials),
 });
 
 /**
@@ -48,7 +49,7 @@ export const selectSettlement = (order: Order): SettlementLockState => ({
 export const canFileClaim = (order: Order): boolean =>
   (order.status === 'PENDING_PAYMENT_OR_CLAIM' || order.status === 'COMPLETED') && computeTotals(order).remaining === 0;
 
-export const canCloseOrder =(s: SettlementLockState): boolean => s.remainingBalance === 0 && s.isWarehouseReturned;
+export const canCloseOrder = (s: SettlementLockState): boolean => s.remainingBalance === 0 && s.materialsSettled;
 
 /** Đơn giá vật tư & phụ phí trong báo giá chính thức. */
 export const SURVEY_UNIT_PRICES = {

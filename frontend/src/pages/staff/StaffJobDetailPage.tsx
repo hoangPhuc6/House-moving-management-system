@@ -10,5 +10,6 @@ export const StaffJobDetailPage = () => {
   const { state } = useApp();
   const job = selectStaffJobs(state.orders).find((o) => o.id === orderId);
   if (!job) return <Navigate to={ROUTES.staff.jobs} replace />;
-  return <JobDetail order={job} />;
+  // key theo đơn: chuyển lệnh khác thì form nhận vật tư (số lượng, tick đã kiểm tra) khởi tạo lại.
+  return <JobDetail key={job.id} order={job} />;
 };

@@ -1,13 +1,3 @@
-export type Range = '7' | '30' | '90' | 'all';
-
-export type Group = 'day' | 'week' | 'month';
-
-export interface RevenueRow {
-  date: string;
-  revenue: number;
-  services: string[];
-}
-
 export interface Draft {
   id: string | null;
   plateNumber: string;

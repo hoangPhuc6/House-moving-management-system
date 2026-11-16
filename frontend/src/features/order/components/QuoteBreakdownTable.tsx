@@ -7,6 +7,7 @@ const GROUPS: { label: string; categories: QuoteItemCategory[] }[] = [
   { label: 'Vận chuyển', categories: ['VEHICLE'] },
   { label: 'Nhân công', categories: ['LABOR'] },
   { label: 'Vật tư', categories: ['MATERIAL'] },
+  { label: 'Dịch vụ thêm', categories: ['SERVICE'] },
   { label: 'Phụ phí', categories: ['SURCHARGE', 'FIELD_ADJUSTMENT', 'WAIT_FEE'] },
 ];
 
@@ -41,7 +42,10 @@ export const QuoteBreakdownTable = ({ items, reference }: { items: QuoteItem[]; 
               {g.items.map((i) => (
                 <tr key={i.id} className="align-top">
                   <td className="px-4 py-2">
-                    <p className="font-medium text-slate-900">{i.name}</p>
+                    <p className="font-medium text-slate-900">
+                      {i.name}
+                      {i.offCatalog && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-amber-800">Ngoài bảng giá</span>}
+                    </p>
                     {i.note && <p className="mt-0.5 text-xs text-slate-500">{i.note}</p>}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-slate-600 tabular-nums">

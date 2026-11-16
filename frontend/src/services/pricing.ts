@@ -1,7 +1,7 @@
 import { INCLUDED_KM, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES } from '@/constants/pricing';
 import { formatVND, uid } from '@/services/format';
 import { isMaterialsSettled } from '@/services/materials';
-import type { Order, OrderTotals, QuoteItem, SettlementLockState, SurveyInput } from '@/types';
+import type { Order, OrderTotals, QuoteItem, ServiceItem, SettlementLockState, SurveyInput } from '@/types';
 
 export const lineTotal = (item: QuoteItem): number => item.unitPrice * item.quantity;
 
@@ -69,23 +69,68 @@ export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
   const v = VEHICLE_PRICING[s.vehicleCapacity] ?? VEHICLE_PRICING[2]!;
   const p = SURVEY_UNIT_PRICES;
   const extraKm = Math.max(0, Math.ceil(s.distanceKm - INCLUDED_KM));
-  const vehicleNote =
-    extraKm > 0
-      ? `Giá chuyến ${formatVND(v.perTrip)} (gồm ${INCLUDED_KM} km) + ${extraKm} km vượt × ${formatVND(v.perKm)} — quãng đường ${s.distanceKm} km`
-      : `Giá chuyến ${formatVND(v.perTrip)}, đã gồm ${INCLUDED_KM} km đầu (quãng đường ${s.distanceKm} km)`;
-  const segments = Math.ceil(s.alleyMeters / p.alleySegmentMeters);
+  // Gộp xe cùng tải trọng thành một dòng — Điều phối gán xe đối chiếu số xe theo từng tải trọng.
+  const fleet = new Map<number, number>();
+  [{ capacity: s.vehicleCapacity, qty: s.vehicleQty }, ...(s.extraVehicles ?? [])].forEach((x) => {
+    if (VEHICLE_PRICING[x.capacity] && x.qty > 0) fleet.set(x.capacity, (fleet.get(x.capacity) ?? 0) + x.qty);
+  });
+  const vehicleItems: QuoteItem[] = [...fleet.entries()].map(([cap, qty]) => {
+    const vp = VEHICLE_PRICING[cap]!;
+    const note =
+      extraKm > 0
+        ? `Giá chuyến ${formatVND(vp.perTrip)} (gồm ${INCLUDED_KM} km) + ${extraKm} km vượt × ${formatVND(vp.perKm)} — quãng đường ${s.distanceKm} km`
+        : `Giá chuyến ${formatVND(vp.perTrip)}, đã gồm ${INCLUDED_KM} km đầu (quãng đường ${s.distanceKm} km)`;
+    return { id: uid('qi'), name: vp.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: vp.perTrip + vp.perKm * extraKm, quantity: qty, note };
+  });
   const items: QuoteItem[] = [
-    { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: v.perTrip + v.perKm * extraKm, quantity: s.vehicleQty, note: vehicleNote },
+    ...vehicleItems,
     { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: v.laborPerPerson, quantity: s.workers, note: `Đơn giá bốc xếp đi theo ${v.label}` },
     { id: uid('qi'), name: 'Thùng carton 60x40x40', category: 'MATERIAL', unit: 'thùng', unitPrice: p.carton, quantity: s.cartons, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Băng keo đóng gói', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.tape, quantity: s.tapeRolls, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Màng PE bọc đồ', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.peFilm, quantity: s.peFilmRolls, note: 'Vật tư — đơn giá cố định' },
   ];
-  if (s.floors > 0) {
-    items.push({ id: uid('qi'), name: 'Phụ phí lầu (không thang máy)', category: 'SURCHARGE', unit: 'lầu', unitPrice: p.perFloor, quantity: s.floors, note: `Khiêng thang bộ ${s.floors} lầu (tổng 2 đầu) × ${formatVND(p.perFloor)}/lầu` });
+  // Lầu & hẻm tính riêng từng đầu (điểm đi / điểm đến) — hẻm làm tròn đoạn 50m theo từng đầu.
+  const ends = [
+    { label: 'điểm đi', floors: s.floorsFrom, alley: s.alleyFrom },
+    { label: 'điểm đến', floors: s.floorsTo, alley: s.alleyTo },
+  ];
+  for (const e of ends) {
+    if (e.floors > 0) {
+      items.push({ id: uid('qi'), name: `Phụ phí lầu — ${e.label}`, category: 'SURCHARGE', unit: 'lầu', unitPrice: p.perFloor, quantity: e.floors, note: `Khiêng thang bộ ${e.floors} lầu ở ${e.label} × ${formatVND(p.perFloor)}/lầu` });
+    }
   }
-  if (s.alleyMeters > 0) {
-    items.push({ id: uid('qi'), name: 'Phụ phí hẻm (trung chuyển)', category: 'SURCHARGE', unit: 'đoạn 50m', unitPrice: p.perAlleySegment, quantity: segments, note: `Hẻm ${s.alleyMeters} m ÷ ${p.alleySegmentMeters} m = ${segments} đoạn (làm tròn lên) × ${formatVND(p.perAlleySegment)}` });
+  for (const e of ends) {
+    if (e.alley > 0) {
+      const seg = Math.ceil(e.alley / p.alleySegmentMeters);
+      items.push({ id: uid('qi'), name: `Phụ phí hẻm — ${e.label}`, category: 'SURCHARGE', unit: 'đoạn 50m', unitPrice: p.perAlleySegment, quantity: seg, note: `Hẻm ${e.alley} m ở ${e.label} ÷ ${p.alleySegmentMeters} m = ${seg} đoạn (làm tròn lên) × ${formatVND(p.perAlleySegment)}` });
+    }
   }
   return items.filter((i) => i.quantity > 0);
 };
+
+/** Tên các dòng báo giá tự tính từ số liệu khảo sát — dịch vụ bảng giá trùng tên không cho thêm tay (tránh tính 2 lần). */
+const AUTO_LINE_NAMES = ['Thùng carton 60x40x40', 'Băng keo đóng gói', 'Màng PE bọc đồ'];
+
+/** Nhóm dịch vụ được thêm tay vào báo giá: tháo lắp & đóng gói. Xe / bốc xếp / lầu / hẻm đã có ô số liệu riêng. */
+export const QUOTE_EXTRA_GROUPS: ServiceItem['group'][] = ['ASSEMBLY', 'PACKING'];
+
+export const isQuoteExtraService = (s: ServiceItem): boolean =>
+  s.active && QUOTE_EXTRA_GROUPS.includes(s.group) && !AUTO_LINE_NAMES.includes(s.name);
+
+/** Dòng báo giá từ dịch vụ trong bảng giá — đơn giá theo bảng giá, không sửa tay. */
+export const quoteItemFromService = (s: ServiceItem, quantity: number, note?: string): QuoteItem => ({
+  id: uid('qi'),
+  name: s.name,
+  category: s.group === 'PACKING' ? 'MATERIAL' : 'SERVICE',
+  unit: s.unit,
+  unitPrice: s.basePrice,
+  quantity,
+  note: note ?? 'Theo bảng giá dịch vụ',
+});
+
+/** Đội xe theo số liệu khảo sát: "2 × 2 tấn + 1 × 1,25 tấn". */
+export const fleetText = (s: SurveyInput): string =>
+  [{ capacity: s.vehicleCapacity, qty: s.vehicleQty }, ...(s.extraVehicles ?? [])]
+    .filter((v) => v.qty > 0)
+    .map((v) => `${v.qty} × ${String(v.capacity).replace('.', ',')} tấn`)
+    .join(' + ');

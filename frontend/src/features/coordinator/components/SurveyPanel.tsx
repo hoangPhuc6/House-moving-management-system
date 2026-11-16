@@ -1,5 +1,6 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import {
+  AlarmClock,
   CalendarClock,
   Camera,
   CheckCircle2,
@@ -7,15 +8,14 @@ import {
   Image as ImageIcon,
   type LucideIcon,
   Phone,
-  Sparkles,
   Truck,
   Undo2,
   Video,
 } from 'lucide-react';
-import { Alert, Badge, Button, cx, Field, Input, NumberStepper, Select } from '@/components/ui';
-import { VEHICLE_PRICING } from '@/constants/pricing';
-import { surveyInputFromOrder } from '@/features/coordinator/utils';
-import { QuoteBreakdownTable } from '@/features/order/components/QuoteBreakdownTable';
+import { Alert, Badge, Button, cx, Field, Input, Select } from '@/components/ui';
+import { ONSITE_QUOTE_SLA_MS } from '@/constants/pricing';
+import { QuoteForm } from '@/features/coordinator/components/QuoteForm';
+import { SitePhotoGallery } from '@/features/order/components/SitePhotoGallery';
 import {
   appointmentLabel,
   isMediaSubmitted,
@@ -27,11 +27,10 @@ import {
   uncategorizedMedia,
 } from '@/features/order/surveyStage';
 import { parseCapacityTons } from '@/services/dispatch';
-import { formatTime, formatVND } from '@/services/format';
-import { buildSurveyQuote, quoteSubtotal } from '@/services/pricing';
+import { formatTime } from '@/services/format';
 import { isActiveStaff } from '@/services/staff';
-import { useApp } from '@/services/store/AppStore';
-import type { Order, SurveyInput } from '@/types';
+import { useApp, useNow } from '@/services/store/AppStore';
+import type { Order } from '@/types';
 
 const KIND_ICON: Record<SurveyStageKind, LucideIcon> = {
   TRUCK_CONFIRM: Truck,
@@ -110,7 +109,8 @@ const KindContext = ({ order, kind }: { order: Order; kind: SurveyStageKind }) =
             title={appt ? `Lịch video call: ${appt}` : 'Khách chưa hẹn giờ video call'}
             action={<CallButton order={order}>{appt ? 'Gọi khách' : 'Gọi hẹn giờ'}</CallButton>}
           >
-            Gọi Zalo / Messenger qua số <b className="tabular-nums">{order.phone}</b> để xem đồ đạc và lối đi, sau đó điều chỉnh báo giá bên dưới.
+            Gọi Zalo / Messenger qua số <b className="tabular-nums">{order.phone}</b> để xem đồ đạc và lối đi. Trong lúc gọi,{' '}
+            <b>chụp màn hình</b> lối đi, chỗ đỗ xe, đồ lớn và ghi biên bản bên dưới — đây là căn cứ khi có phát sinh tại hiện trường.
           </Alert>
           {mediaCount > 0 && <MediaGallery order={order} />}
         </div>
@@ -123,7 +123,7 @@ const KindContext = ({ order, kind }: { order: Order; kind: SurveyStageKind }) =
           title={appt ? `Khách hẹn khảo sát tận nơi: ${appt}` : 'Khách muốn khảo sát tận nơi'}
           action={<CallButton order={order}>Gọi khách</CallButton>}
         >
-          Cử một nhân viên vận chuyển đến khảo sát. Nhân viên đó sẽ lập và gửi báo giá cho khách.
+          Cử một nhân viên vận chuyển đến khảo sát. Nhân viên chụp ảnh hiện trường và gửi đề xuất; bạn lập báo giá gửi khách.
         </Alert>
       );
     case 'PHOTOS':
@@ -143,82 +143,6 @@ const KindContext = ({ order, kind }: { order: Order; kind: SurveyStageKind }) =
         </div>
       );
   }
-};
-
-/** Biểu mẫu lập báo giá — điền sẵn theo thông tin khách khai báo. */
-const QuoteForm = ({ order, truckOnly, blocked }: { order: Order; truckOnly: boolean; blocked: string | null }) => {
-  const { dispatch } = useApp();
-  const initial = useMemo(() => surveyInputFromOrder(order), [order.id]);
-  const [s, setS] = useState<SurveyInput>(initial);
-  const set = <K extends keyof SurveyInput>(k: K, v: SurveyInput[K]) => setS((x) => ({ ...x, [k]: v }));
-  const items = useMemo(() => buildSurveyQuote(truckOnly ? { ...s, cartons: 0, tapeRolls: 0, peFilmRolls: 0 } : s), [s, truckOnly]);
-  const maxLabor = VEHICLE_PRICING[s.vehicleCapacity]?.maxLabor;
-
-  const stepper = (label: string, k: Exclude<keyof SurveyInput, 'vehicleCapacity'>, opts: { min?: number; max: number; step?: number; suffix?: string }, hint?: string) => (
-    <Field label={label} hint={hint}>
-      <NumberStepper value={s[k]} onChange={(v) => set(k, v)} {...opts} />
-    </Field>
-  );
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">Báo giá chính thức</p>
-        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-          <Sparkles className="size-3.5" /> Đã điền sẵn theo thông tin khách khai báo
-          <button type="button" className="font-semibold text-brand hover:underline" onClick={() => setS(initial)}>
-            Đặt lại
-          </button>
-        </span>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stepper('Quãng đường', 'distanceKm', { min: 1, max: 200, suffix: 'km' })}
-        <Field label="Loại xe">
-          <Select value={s.vehicleCapacity} onChange={(e) => set('vehicleCapacity', Number(e.target.value))} className="h-11">
-            {Object.keys(VEHICLE_PRICING)
-              .map(Number)
-              .sort((a, b) => a - b)
-              .map((cap) => (
-                <option key={cap} value={cap}>
-                  {VEHICLE_PRICING[cap]?.label}
-                </option>
-              ))}
-          </Select>
-        </Field>
-        {stepper('Số lượng xe', 'vehicleQty', { min: 1, max: 5 })}
-        {stepper(
-          truckOnly ? 'Bốc vác thuê thêm' : 'Nhân viên bốc xếp',
-          'workers',
-          { min: 0, max: 12, suffix: 'người' },
-          truckOnly && maxLabor !== undefined && s.workers > maxLabor * s.vehicleQty ? `Vượt số chỗ trên xe (tối đa ${maxLabor}/xe)` : undefined,
-        )}
-        {!truckOnly && stepper('Thùng carton', 'cartons', { max: 200, step: 5 })}
-        {!truckOnly && stepper('Băng keo', 'tapeRolls', { max: 50, suffix: 'cuộn' })}
-        {!truckOnly && stepper('Màng PE', 'peFilmRolls', { max: 20, suffix: 'cuộn' })}
-        {stepper('Số lầu (thang bộ)', 'floors', { max: 20 })}
-        {stepper('Độ sâu hẻm', 'alleyMeters', { max: 500, step: 50, suffix: 'm' })}
-      </div>
-
-      <QuoteBreakdownTable items={items} reference={order.referenceQuote?.financialSummary.totalEstimated ?? null} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
-        <div>
-          <p className="text-xs text-slate-500">Tổng gửi khách</p>
-          <p className="text-xl font-bold tabular-nums">{formatVND(quoteSubtotal(items))}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <Button
-            icon={CheckCircle2}
-            disabled={Boolean(blocked)}
-            onClick={() => dispatch({ type: 'SUBMIT_SURVEY', orderId: order.id, items, by: 'COORDINATOR' })}
-          >
-            Gửi báo giá cho khách
-          </Button>
-          {blocked && <span className="text-xs text-slate-500">{blocked}</span>}
-        </div>
-      </div>
-    </div>
-  );
 };
 
 /** Cử nhân viên vận chuyển khảo sát trực tiếp. */
@@ -263,10 +187,11 @@ const DispatchForm = ({ order, primary }: { order: Order; primary: boolean }) =>
 /**
  * Bảng khảo sát của Điều phối, đổi theo hình thức khách chọn khi đặt đơn:
  * thuê xe → gọi xác nhận; video call → gọi theo lịch hẹn; gửi ảnh → duyệt ảnh;
- * tận nơi → cử nhân viên vận chuyển (chỉ nhân viên đó gửi báo giá).
+ * tận nơi → cử nhân viên vận chuyển chụp ảnh & gửi đề xuất, rồi Điều phối lập báo giá từ kết quả đó.
  */
 export const SurveyPanel = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
+  const now = useNow(30_000);
   const kind = surveyStageOf(order);
   const Icon = KIND_ICON[kind];
   const req = order.onSiteSurveyRequest;
@@ -281,7 +206,36 @@ export const SurveyPanel = ({ order }: { order: Order }) => {
     </div>
   );
 
+  if (req?.completedAt) {
+    const surveyor = state.resources.staff.find((x) => x.id === req.surveyorId)?.name ?? 'Nhân viên';
+    const slaDeadline = req.completedAt + ONSITE_QUOTE_SLA_MS;
+    const overdue = now > slaDeadline;
+    return (
+      <div className="space-y-5 p-6">
+        {header}
+        <Alert
+          tone={overdue ? 'danger' : 'success'}
+          icon={overdue ? AlarmClock : CheckCircle2}
+          title={`${surveyor} đã khảo sát xong lúc ${formatTime(req.completedAt)} · ${req.sitePhotos.length} ảnh hiện trường`}
+          action={<CallButton order={order}>Gọi khách</CallButton>}
+        >
+          {overdue ? (
+            <b>Quá hạn gửi báo giá ({formatTime(slaDeadline)}) — ưu tiên xử lý ngay.</b>
+          ) : (
+            <>
+              Gửi báo giá trước <b className="tabular-nums">{formatTime(slaDeadline)}</b> (SLA {ONSITE_QUOTE_SLA_MS / 3_600_000} giờ sau khảo sát).
+            </>
+          )}
+          {req.resultNote && <span className="mt-1 block">Nhận xét hiện trường: “{req.resultNote}”</span>}
+        </Alert>
+        <SitePhotoGallery photos={req.sitePhotos} />
+        <QuoteForm order={order} kind="ON_SITE" blocked={null} proposal={req.proposal} />
+      </div>
+    );
+  }
+
   if (req) {
+    const started = Boolean(req.startedAt);
     return (
       <div className="space-y-4 p-6">
         {header}
@@ -292,7 +246,16 @@ export const SurveyPanel = ({ order }: { order: Order }) => {
             {req.note && <> — {req.note}</>}.
           </p>
           {appt && <p className="mt-1">Lịch khách hẹn: <b>{appt}</b></p>}
-          <p className="mt-1">Đang chờ nhân viên khảo sát và gửi báo giá.</p>
+          <p className="mt-1">
+            {started ? (
+              <>
+                Nhân viên đang khảo sát từ <span className="tabular-nums">{formatTime(req.startedAt ?? 0)}</span> · đã chụp{' '}
+                <b className="tabular-nums">{req.sitePhotos.length}</b> ảnh. Báo giá lập được sau khi nhân viên hoàn tất.
+              </>
+            ) : (
+              'Đang chờ nhân viên đến nhà khách và bắt đầu khảo sát.'
+            )}
+          </p>
           <Button className="mt-3" size="sm" variant="secondary" icon={Undo2} onClick={() => dispatch({ type: 'CANCEL_ONSITE_SURVEY', orderId: order.id })}>
             Hủy yêu cầu khảo sát trực tiếp
           </Button>
@@ -311,7 +274,7 @@ export const SurveyPanel = ({ order }: { order: Order }) => {
         <DispatchForm order={order} primary />
       ) : (
         <>
-          <QuoteForm order={order} truckOnly={kind === 'TRUCK_CONFIRM'} blocked={blocked} />
+          <QuoteForm order={order} kind={kind} blocked={blocked} />
           {kind !== 'TRUCK_CONFIRM' && <DispatchForm order={order} primary={false} />}
         </>
       )}

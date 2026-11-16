@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarRange, KanbanSquare, ReceiptText, Siren } from 'lucide-react';
+import { AlertOctagon, CalendarRange, KanbanSquare, ReceiptText, Siren } from 'lucide-react';
 import { Alert, Button } from '@/components/ui';
+import { surchargesNeedingReview } from '@/constants/surcharge';
 import type { CoordTab, CoordinatorOutletContext } from '@/features/coordinator/types';
+import { awaitingOnSiteQuote } from '@/features/order/surveyStage';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
 import { useActiveOrder, useApp } from '@/services/store/AppStore';
@@ -17,6 +19,7 @@ export const CoordinatorLayout = () => {
   const [query, setQuery] = useState('');
   const selected = state.orders.find((o) => o.id === selectedId) ?? active ?? null;
   const incidents = state.orders.filter((o) => o.flags.isVehicleIncident).length;
+  const surchargeReviews = state.orders.reduce((n, o) => n + surchargesNeedingReview(o).length, 0);
 
   const nav: NavItem[] = [
     {
@@ -29,9 +32,11 @@ export const CoordinatorLayout = () => {
       to: ROUTES.coordinator.editor,
       label: 'Báo giá & Audit Log',
       icon: ReceiptText,
-      badge: state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && !o.onSiteSurveyRequest).length || undefined,
+      // Đơn cần Điều phối lập báo giá: chưa cử khảo sát tận nơi, hoặc NV đã khảo sát xong.
+      badge: state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && (!o.onSiteSurveyRequest || awaitingOnSiteQuote(o))).length || undefined,
     },
     { to: ROUTES.coordinator.dispatch, label: 'Điều phối nguồn lực', icon: CalendarRange },
+    { to: ROUTES.coordinator.surcharge, label: 'Phát sinh hiện trường', icon: AlertOctagon, badge: surchargeReviews || undefined, badgeTone: 'danger' },
     { to: ROUTES.coordinator.incident, label: 'Sự cố khẩn cấp', icon: Siren, badge: incidents || undefined, badgeTone: 'danger' },
   ];
 
@@ -68,6 +73,21 @@ export const CoordinatorLayout = () => {
           }
         >
           Cần chuyển giao phương tiện (tăng bo) để đội xe tiếp tục hành trình.
+        </Alert>
+      )}
+      {surchargeReviews > 0 && pathname !== ROUTES.coordinator.surcharge && (
+        <Alert
+          tone="warning"
+          icon={AlertOctagon}
+          className="mb-4"
+          title={`${surchargeReviews} khoản phát sinh hiện trường cần duyệt`}
+          action={
+            <Button size="sm" onClick={() => navigate(ROUTES.coordinator.surcharge)}>
+              Duyệt ngay
+            </Button>
+          }
+        >
+          Đội xe đang tạm dừng chờ Điều phối chốt giá và khách xác nhận.
         </Alert>
       )}
       <Outlet context={context} />

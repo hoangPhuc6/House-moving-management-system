@@ -108,7 +108,7 @@ export const UsersModule = ({ query }: { query: string }) => {
 
   return (
     <>
-      <PageHeader eyebrow="Hệ thống" title="Tài khoản & phân quyền" subtitle="Email duy nhất; tài khoản nhân viên kèm hồ sơ kỹ năng & bằng lái dùng khi gán đội." actions={<Button icon={UserPlus} onClick={openAdd}>Tạo tài khoản</Button>} />
+      <PageHeader eyebrow="Hệ thống" title="Tài khoản & phân quyền" actions={<Button icon={UserPlus} onClick={openAdd}>Tạo tài khoản</Button>} />
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Tổng tài khoản" value={catalog.users.length} icon={Users} />
         <Stat label="Nhân viên đang làm" value={activeStaff.length} icon={IdCard} tone="info" hint={`${activeStaff.filter((s) => s.skills.includes('DRIVE')).length} lái xe · ${activeStaff.filter((s) => s.skills.includes('LOAD')).length} bốc xếp`} />

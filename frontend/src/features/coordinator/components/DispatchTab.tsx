@@ -194,7 +194,6 @@ export const DispatchTab = ({
       <PageHeader
         eyebrow="Điều phối"
         title="Bảng điều phối & gán nguồn lực"
-        subtitle="Cross-check trùng lịch xe và công suất khung giờ trước khi gán."
         actions={
           <OrderPicker
             value={order.id}

@@ -57,6 +57,9 @@ const fullWindow = (p: Period): DateWindow =>
     ? { start: isoOf(p.year, p.month, 1), end: isoOf(p.year, p.month, daysInMonth(p.year, p.month)) }
     : { start: isoOf(p.year, 1, 1), end: isoOf(p.year, 12, 31) };
 
+/** Trọn khoảng ngày của kỳ (kể cả ngày sau hôm nay) — dùng để lọc danh sách theo kỳ. */
+export const periodRange = (p: Period): DateWindow => fullWindow(p);
+
 const previousPeriod = (p: Period): Period =>
   p.kind === 'year' ? { ...p, year: p.year - 1 } : p.month === 1 ? { ...p, year: p.year - 1, month: 12 } : { ...p, month: p.month - 1 };
 

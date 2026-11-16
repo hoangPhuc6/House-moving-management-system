@@ -135,8 +135,17 @@ export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; 
           <ShieldCheck className="size-4 text-brand" /> Giá tạm tính &amp; giá chốt
         </p>
         <p className="mt-2 text-[13px] leading-relaxed text-white/70">
-          Số tạm tính chỉ để bạn hình dung chi phí. <span className="font-semibold text-white">Giá chốt</span> nằm trong báo giá chi tiết từng hạng mục, gửi cho bạn{' '}
-          {truckOnly ? 'sau khi điều phối viên xác nhận xe' : 'sau khi khảo sát'} và chỉ áp dụng khi bạn đồng ý.
+          {truckOnly ? (
+            <>
+              Gói chỉ thuê xe không cần khảo sát: <span className="font-semibold text-white">báo giá chốt</span> được lập ngay khi bạn gửi đơn — đặt cọc là
+              giữ xe luôn.
+            </>
+          ) : (
+            <>
+              Số tạm tính chỉ để bạn hình dung chi phí. <span className="font-semibold text-white">Giá chốt</span> nằm trong báo giá chi tiết từng hạng mục, gửi
+              cho bạn sau khi khảo sát và chỉ áp dụng khi bạn đồng ý.
+            </>
+          )}
         </p>
         <p className="mt-3 text-xs font-semibold text-brand">Phát sinh tại hiện trường (nếu có) luôn cần bạn xác nhận trước khi tính</p>
       </div>

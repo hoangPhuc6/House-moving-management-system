@@ -1,19 +1,26 @@
 import { useState } from 'react';
 import { Banknote, CheckCircle2, CircleDollarSign, Receipt, ShieldCheck } from 'lucide-react';
-import { Badge, Button, Card, cx, PageHeader, Stat, Tabs } from '@/components/ui';
+import { Badge, Button, Card, cx, EmptyState, PageHeader, Stat, Tabs } from '@/components/ui';
+import { AdminPeriodPicker, OutOfPeriodNotice } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
 import { formatTime, formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
 
 export const FinanceModule = () => {
   const { state, dispatch } = useApp();
   const [tab, setTab] = useState<"refunds" | "ledger">("refunds");
-  const pendingRefund = state.refunds
+  // Lọc theo kỳ chọn chung, tính theo ngày tạo phiếu chi / bút toán.
+  const { inPeriodTs } = useAdminPeriod();
+  const refunds = state.refunds.filter((r) => inPeriodTs(r.createdAt));
+  const ledger = state.ledger.filter((l) => inPeriodTs(l.createdAt));
+  const pendingOutside = state.refunds.filter((r) => r.status === "PENDING" && !inPeriodTs(r.createdAt)).length;
+  const pendingRefund = refunds
     .filter((r) => r.status === "PENDING")
     .reduce((s, r) => s + r.amount, 0);
-  const penalty = state.ledger
+  const penalty = ledger
     .filter((l) => l.category === "Thu nhập khác / Phí phạt hủy đơn")
     .reduce((s, l) => s + l.amount, 0);
-  const comp = state.ledger
+  const comp = ledger
     .filter((l) => l.category === "Chi phí bồi thường khiếu nại")
     .reduce((s, l) => s + l.amount, 0);
 
@@ -22,8 +29,9 @@ export const FinanceModule = () => {
       <PageHeader
         eyebrow="Tài chính"
         title="Hoàn tiền"
-        subtitle="Hủy ≥ 12h: tự sinh phiếu chi hoàn 100%. Hủy < 12h: tự hạch toán phí phạt."
+        actions={<AdminPeriodPicker />}
       />
+      <OutOfPeriodNotice count={pendingOutside} what="phiếu chi chờ duyệt" />
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Stat
           label="Phiếu chi chờ duyệt"
@@ -32,7 +40,7 @@ export const FinanceModule = () => {
           tone="warning"
         />
         <Stat
-          label="Thu nhập khác (phí phạt)"
+          label="Thu nhập khác"
           value={formatVND(penalty)}
           icon={CircleDollarSign}
           tone="success"
@@ -52,7 +60,7 @@ export const FinanceModule = () => {
         tabs={[
           {
             id: "refunds",
-            label: "Phiếu yêu cầu chi (Hoàn cọc 100%)",
+            label: "Phiếu yêu cầu chi",
             icon: Receipt,
           },
           { id: "ledger", label: "Sổ cái thu nhập khác", icon: Banknote },
@@ -72,7 +80,10 @@ export const FinanceModule = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {state.refunds.map((r) => (
+                {refunds.length === 0 && (
+                  <tr><td colSpan={5} className="p-6"><EmptyState icon={Receipt} title="Không có phiếu chi trong kỳ này" /></td></tr>
+                )}
+                {refunds.map((r) => (
                   <tr key={r.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="font-semibold tabular-nums">{r.id}</p>
@@ -101,7 +112,7 @@ export const FinanceModule = () => {
                             dispatch({ type: "APPROVE_REFUND", refundId: r.id })
                           }
                         >
-                          Approve / Duyệt hoàn tiền
+                          Duyệt hoàn tiền
                         </Button>
                       ) : (
                         <Badge tone="success" icon={CheckCircle2}>
@@ -128,7 +139,10 @@ export const FinanceModule = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {state.ledger.map((l) => (
+                {ledger.length === 0 && (
+                  <tr><td colSpan={4} className="p-6"><EmptyState icon={Banknote} title="Không có bút toán trong kỳ này" /></td></tr>
+                )}
+                {ledger.map((l) => (
                   <tr key={l.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="font-semibold tabular-nums">#{l.orderId}</p>

@@ -4,9 +4,6 @@ import {
   ArrowUpRight,
   BarChart3,
   CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   Clock,
   FileWarning,
@@ -27,20 +24,9 @@ import {
   Stat,
 } from '@/components/ui';
 import { STATUS_META, STATUS_ORDER } from '@/constants/order';
-import {
-  bucketOf,
-  chartBuckets,
-  currentPeriod,
-  type DateWindow,
-  inWindow,
-  type Period,
-  type PeriodKind,
-  periodKey,
-  periodLabel,
-  periodOptions,
-  periodWindows,
-  todayISO,
-} from '@/features/admin/period';
+import { AdminPeriodPicker } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
+import { bucketOf, chartBuckets, type DateWindow, inWindow, periodKey } from '@/features/admin/period';
 import { isoDate } from '@/features/admin/utils';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
@@ -88,95 +74,13 @@ const withNote = (delta: ReactNode, note?: string) => (
   </span>
 );
 
-/**
- * Bộ chọn kỳ gọn một hàng, cùng chiều cao nút (h-10):
- * [Tháng | Năm]  [‹ Tháng 11/2026 ⌄ ›]. Mũi tên lùi / tiến một kỳ; bấm tên kỳ để chọn từ danh sách.
- */
-const PeriodPicker = ({
-  kind,
-  onKindChange,
-  period,
-  options,
-  onChange,
-}: {
-  kind: PeriodKind;
-  onKindChange: (k: PeriodKind) => void;
-  period: Period;
-  /** Mới nhất trước. */
-  options: Period[];
-  onChange: (p: Period) => void;
-}) => {
-  const idx = options.findIndex((p) => periodKey(p) === periodKey(period));
-  const older = idx >= 0 ? options[idx + 1] : undefined;
-  const newer = idx > 0 ? options[idx - 1] : undefined;
-  const unit = kind === 'month' ? 'tháng' : 'năm';
-  const arrow = 'grid w-9 shrink-0 place-items-center text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent';
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div role="radiogroup" aria-label="Kiểu kỳ báo cáo" className="flex h-10 items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-1">
-        {(['month', 'year'] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            role="radio"
-            aria-checked={kind === k}
-            onClick={() => onKindChange(k)}
-            className={cx(
-              'h-full rounded-lg px-3 text-sm font-semibold transition-colors',
-              kind === k ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
-            )}
-          >
-            {k === 'month' ? 'Tháng' : 'Năm'}
-          </button>
-        ))}
-      </div>
-      <div className="flex h-10 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <button type="button" className={arrow} disabled={!older} onClick={() => older && onChange(older)} aria-label={`${unit} trước`}>
-          <ChevronLeft className="size-4" />
-        </button>
-        <div className="relative flex items-center border-x border-slate-200">
-          <select
-            value={periodKey(period)}
-            onChange={(e) => onChange(options.find((p) => periodKey(p) === e.target.value) ?? period)}
-            aria-label={`Chọn ${unit}`}
-            className="h-full cursor-pointer appearance-none bg-transparent py-0 pr-8 pl-3 text-sm font-semibold text-slate-900 tabular-nums focus:outline-none focus-visible:bg-slate-50"
-          >
-            {options.map((p) => (
-              <option key={periodKey(p)} value={periodKey(p)}>{periodLabel(p)}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2.5 size-4 text-slate-400" />
-        </div>
-        <button type="button" className={arrow} disabled={!newer} onClick={() => newer && onChange(newer)} aria-label={`${unit} sau`}>
-          <ChevronRight className="size-4" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-/** Dashboard Admin — số liệu theo tháng / năm dương lịch, kèm so sánh với kỳ trước. */
+/** Dashboard Admin — số liệu theo tháng / năm dương lịch, kèm so sánh với kỳ trước. Kỳ chọn chung với các tab Admin. */
 export const DashboardModule = () => {
   const { state } = useApp();
   const { catalog } = useCatalog();
-  const [kind, setKind] = useState<PeriodKind>('month');
-  const [period, setPeriod] = useState<Period>(() => currentPeriod('month'));
+  const { period, windows } = useAdminPeriod();
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
-  const today = todayISO();
-
-  const earliest = useMemo(
-    () => [today, ...catalog.history.map((h) => h.date), ...state.orders.map((o) => isoDate(o.createdAt))].sort()[0]!,
-    [today, catalog.history, state.orders],
-  );
-  const options = useMemo(() => periodOptions(kind, earliest, today), [kind, earliest, today]);
-  const windows = useMemo(() => periodWindows(period, today), [period, today]);
-
-  const changeKind = (k: PeriodKind) => {
-    setKind(k);
-    setPeriod(currentPeriod(k));
-  };
 
   // Mô phỏng thời gian gọi API thống kê để thể hiện trạng thái đang tải.
   const loadKey = `${periodKey(period)}-${period.kind}-${reloadKey}`;
@@ -276,14 +180,9 @@ export const DashboardModule = () => {
       <PageHeader
         eyebrow="Báo cáo"
         title="Dashboard & thống kê"
-        subtitle={
-          <>
-            <b className="font-semibold text-slate-700">{windows.label}</b> · mức thay đổi {windows.compareLabel}. Doanh thu chỉ tính đơn đã hoàn tất.
-          </>
-        }
         actions={
           <>
-            <PeriodPicker kind={kind} onKindChange={changeKind} period={period} options={options} onChange={setPeriod} />
+            <AdminPeriodPicker />
             <Button variant="secondary" icon={RefreshCw} onClick={() => setReloadKey((k) => k + 1)} aria-label="Làm mới số liệu">
               <span className="hidden sm:inline">Làm mới</span>
             </Button>
@@ -347,7 +246,7 @@ export const DashboardModule = () => {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader title="Booking theo trạng thái" icon={BarChart3} />
+              <CardHeader title="Đơn hàng theo trạng thái" icon={BarChart3} />
               <ul className="space-y-2.5">
                 {data.statusCount.map(({ status, count }) => (
                   <li key={status} className="flex items-center gap-3 text-sm">

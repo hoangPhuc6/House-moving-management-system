@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Banknote, BarChart3, Boxes, FileSearch, FileWarning, Tags, Truck, Users, Wallet, Warehouse } from 'lucide-react';
+import { initialAdminPeriod } from '@/features/admin/hooks';
+import type { Period } from '@/features/admin/period';
 import type { AdminOutletContext } from '@/features/admin/types';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
@@ -11,6 +13,8 @@ import { useApp } from '@/services/store/AppStore';
 export const AdminLayout = () => {
   const { state } = useApp();
   const [query, setQuery] = useState('');
+  // Kỳ báo cáo dùng chung cho các tab (giữ nguyên khi chuyển tab) — mặc định tháng hiện tại.
+  const [period, setPeriod] = useState<Period>(initialAdminPeriod);
   // Phiếu vật tư nháp của đơn đã gán đội: thủ kho cần duyệt & xuất trước giờ đội xe tới nhận.
   const slipsToIssue = state.orders.filter(isAwaitingIssue).length;
 
@@ -35,7 +39,6 @@ export const AdminLayout = () => {
       label: 'Quản lý khiếu nại',
       icon: FileWarning,
       badge: state.claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length || undefined,
-      badgeTone: 'danger',
     },
     {
       to: ROUTES.admin.inventory,
@@ -47,7 +50,7 @@ export const AdminLayout = () => {
     { to: ROUTES.admin.services, label: 'Dịch vụ & bảng giá', icon: Tags },
     { to: ROUTES.admin.users, label: 'Tài khoản & phân quyền', icon: Users },
   ];
-  const context: AdminOutletContext = { query };
+  const context: AdminOutletContext = { query, period, setPeriod };
 
   return (
     <AppShell

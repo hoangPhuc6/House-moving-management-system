@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { ArrowUpFromLine, ClipboardList, History, PackagePlus } from 'lucide-react';
+import { ArrowUpFromLine, ChevronRight, ClipboardList, History, PackagePlus } from 'lucide-react';
 import {
   Badge,
   Button,
   Card,
-  CardHeader,
   cx,
   EmptyState,
   Field,
@@ -16,7 +15,14 @@ import {
   Tabs,
 } from '@/components/ui';
 import { TXN_META } from '@/features/admin/constants';
-import { IssueMaterialsModal, MaterialLinesTable, MaterialSlipActions, MaterialStatusBadge, ReturnMaterialsModal } from '@/features/admin/components/MaterialSlip';
+import {
+  IssueMaterialsModal,
+  MaterialLinesTable,
+  MaterialSlipActions,
+  MaterialStatusBadge,
+  ReturnMaterialsModal,
+  slipSummary,
+} from '@/features/admin/components/MaterialSlip';
 import { matches } from '@/features/admin/utils';
 import { formatDateVN, formatTime } from '@/services/format';
 import { hasMaterialsOutside, isAwaitingIssue } from '@/services/materials';
@@ -41,6 +47,15 @@ export const InventoryModule = ({ query }: { query: string }) => {
   const [draft, setDraft] = useState<Omit<InventoryItem, 'id'>>({ name: '', unit: '', kind: 'CONSUMABLE', stock: 0, minStock: 0 });
   const [issuing, setIssuing] = useState<string | null>(null);
   const [returning, setReturning] = useState<string | null>(null);
+  // Phiếu mặc định thu gọn — chỉ xổ chi tiết khi chọn.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const items = catalog.inventory.filter((i) => !query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase()));
   const low = catalog.inventory.filter((i) => i.stock <= i.minStock);
@@ -77,7 +92,7 @@ export const InventoryModule = ({ query }: { query: string }) => {
 
   return (
     <>
-      <PageHeader eyebrow="Vận hành" title="Kho & dụng cụ" subtitle="Mọi lần nhập, xuất, hoàn kho đều lưu lịch sử; không cho xuất vượt tồn." actions={<Button icon={PackagePlus} onClick={() => setAdding(true)}>Thêm vật tư</Button>} />
+      <PageHeader eyebrow="Vận hành" title="Kho & dụng cụ" actions={<Button icon={PackagePlus} onClick={() => setAdding(true)}>Thêm vật tư</Button>} />
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Danh mục vật tư" value={catalog.inventory.length} icon={PackagePlus} />
         <Stat label="Sắp hết hàng" value={low.length} icon={ArrowUpFromLine} tone={low.length ? 'warning' : 'success'} hint={low.map((i) => i.name).join(', ') || 'Tồn kho ổn định'} />
@@ -172,19 +187,73 @@ export const InventoryModule = ({ query }: { query: string }) => {
               </EmptyState>
             </Card>
           )}
-          {slips.map((o) => (
-            <Card key={o.id}>
-              <CardHeader
-                title={<span className="flex flex-wrap items-center gap-2">Đơn #{o.id} <MaterialStatusBadge slip={o.materials} /></span>}
-                subtitle={`${o.customerName} · chuyển ngày ${formatDateVN(o.scheduledDate)}${o.status === 'CANCELLED_EXPIRED' ? ' · ĐƠN ĐÃ HỦY' : ''}`}
-                action={<MaterialSlipActions order={o} onIssue={() => setIssuing(o.id)} onReturn={() => setReturning(o.id)} />}
-              />
-              <MaterialLinesTable slip={o.materials} />
-              {o.materials.resolutionNote && o.materials.lines.some((l) => l.lost > 0) && (
-                <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Biên bản chênh lệch: {o.materials.resolutionNote}</p>
-              )}
+          {slips.length > 0 && (
+            <Card padded={false} className="overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 text-xs text-slate-500 sm:px-6">
+                <span>
+                  <span className="font-semibold text-slate-700 tabular-nums">{slips.length}</span> phiếu · bấm vào phiếu để xem chi tiết từng dòng
+                </span>
+                <button
+                  type="button"
+                  className="font-semibold text-brand hover:underline"
+                  onClick={() => setExpanded(expanded.size === slips.length ? new Set() : new Set(slips.map((o) => o.id)))}
+                >
+                  {expanded.size === slips.length ? 'Thu gọn tất cả' : 'Mở tất cả'}
+                </button>
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {slips.map((o) => {
+                  const open = expanded.has(o.id);
+                  const sum = slipSummary(o.materials);
+                  return (
+                    <li key={o.id} className={cx(open && 'bg-slate-50/40')}>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          aria-controls={`slip-${o.id}`}
+                          onClick={() => toggle(o.id)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          <ChevronRight className={cx('size-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-90')} />
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold tabular-nums">Đơn #{o.id}</span>
+                              <MaterialStatusBadge slip={o.materials} />
+                              {o.status === 'CANCELLED_EXPIRED' && <Badge tone="danger">Đơn đã hủy</Badge>}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">
+                              {o.customerName} · chuyển ngày {formatDateVN(o.scheduledDate)}
+                            </span>
+                          </span>
+                        </button>
+                        <span className="hidden text-xs text-slate-500 tabular-nums md:block">
+                          {sum.lines} dòng · KH {sum.planned}
+                          {sum.issued !== null && <> · xuất {sum.issued}</>}
+                          {sum.gap > 0 && (
+                            <span className={cx('ml-1 font-semibold', sum.settled ? 'text-rose-600' : 'text-amber-600')}>
+                              · {sum.settled ? 'chênh lệch' : 'ngoài kho'} {sum.gap}
+                            </span>
+                          )}
+                        </span>
+                        <div className="shrink-0">
+                          <MaterialSlipActions order={o} onIssue={() => setIssuing(o.id)} onReturn={() => setReturning(o.id)} />
+                        </div>
+                      </div>
+                      {open && (
+                        <div id={`slip-${o.id}`} className="border-t border-slate-100 px-4 pt-1 pb-4 sm:px-6">
+                          <MaterialLinesTable slip={o.materials} />
+                          {o.materials.resolutionNote && o.materials.lines.some((l) => l.lost > 0) && (
+                            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Biên bản chênh lệch: {o.materials.resolutionNote}</p>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </Card>
-          ))}
+          )}
         </div>
       )}
 
@@ -208,7 +277,7 @@ export const InventoryModule = ({ query }: { query: string }) => {
             <Field label={txn.type === 'ADJUST' ? 'Tồn kho thực tế' : 'Số lượng'} error={error}>
               <Input type="number" min={0} value={qty} onChange={(e) => setQty(Math.floor(Number(e.target.value)))} invalid={!!error} />
             </Field>
-            <Field label={needsReason ? 'Lý do (bắt buộc)' : 'Ghi chú'} error={needsReason && !note.trim() ? 'Nhập lý do xuất / hoàn kho' : null}>
+            <Field label={needsReason ? 'Lý do *' : 'Ghi chú'} error={needsReason && !note.trim() ? 'Nhập lý do xuất / hoàn kho' : null}>
               <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={needsReason ? 'VD: Xuất bảo dưỡng xe đẩy, thanh lý hàng hỏng…' : ''} />
             </Field>
           </div>

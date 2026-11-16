@@ -1,6 +1,6 @@
 import type { Order } from '@/types';
 
-export type CoordTab = 'queue' | 'editor' | 'dispatch' | 'incident';
+export type CoordTab = 'queue' | 'editor' | 'dispatch' | 'incident' | 'surcharge';
 
 /** Trạng thái dùng chung giữa các trang con của Điều phối (qua <Outlet context>). */
 export interface CoordinatorOutletContext {

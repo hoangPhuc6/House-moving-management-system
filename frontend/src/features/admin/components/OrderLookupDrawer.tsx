@@ -153,7 +153,7 @@ export const OrderLookupDrawer = ({ order, onClose }: { order: Order; onClose: (
             )}
           </>
         ) : (
-          <Empty>Đơn không dùng vật tư kho (hoặc chưa gán đội).</Empty>
+          <Empty>Đơn không dùng vật tư kho hoặc chưa gán đội.</Empty>
         )}
       </Section>
 

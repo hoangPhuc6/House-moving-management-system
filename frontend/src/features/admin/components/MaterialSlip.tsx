@@ -32,11 +32,23 @@ export const MaterialStatusBadge = ({ slip }: { slip: MaterialSlip }) => {
   return <Badge tone={meta.tone}>{meta.label}</Badge>;
 };
 
+/** Chênh lệch theo dòng: sau quyết toán = thất thoát; trước đó = số đang nằm ngoài kho chưa trả. */
+const gapOf = (slip: MaterialSlip, l: MaterialLine): number =>
+  slip.status === 'RETURNED' ? l.lost : slip.status === 'DRAFT' ? 0 : l.issued - usedOf(l) - (l.returned ?? 0);
+
+/** Tóm tắt một phiếu cho dòng thu gọn: số dòng, tổng kế hoạch / đã xuất, tổng chênh lệch (hoặc còn ngoài kho). */
+export const slipSummary = (slip: MaterialSlip) => ({
+  lines: slip.lines.length,
+  planned: slip.lines.reduce((s, l) => s + l.planned, 0),
+  issued: slip.status === 'DRAFT' ? null : slip.lines.reduce((s, l) => s + l.issued, 0),
+  gap: slip.lines.reduce((s, l) => s + gapOf(slip, l), 0),
+  settled: slip.status === 'RETURNED',
+});
+
 /** Bảng đối chiếu theo dòng: kế hoạch → xuất → nhận → dùng → trả → chênh lệch. */
 export const MaterialLinesTable = ({ slip }: { slip: MaterialSlip }) => {
   const settled = slip.status === 'RETURNED';
-  // Trước khi quyết toán, chênh lệch tạm tính = số đang nằm ngoài kho chưa trả.
-  const gap = (l: MaterialLine) => (settled ? l.lost : slip.status === 'DRAFT' ? 0 : l.issued - usedOf(l) - (l.returned ?? 0));
+  const gap = (l: MaterialLine) => gapOf(slip, l);
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px] text-sm">
@@ -141,7 +153,7 @@ export const IssueMaterialsModal = ({ order, onClose }: { order: Order; onClose:
     >
       <p className="mb-3 text-sm text-slate-500">
         Kế hoạch: vật tư tiêu hao theo báo giá, dụng cụ bốc xếp theo số người bốc vác. Dòng xuất 0 sẽ bỏ khỏi phiếu.
-        Trang bị theo xe (dây chằng, bạt) không xuất theo đơn.
+        Trang bị theo xe như dây chằng, bạt không xuất theo đơn.
       </p>
       <ul className="divide-y divide-slate-100">
         {slip.lines.map((l) => {
@@ -191,7 +203,7 @@ export const IssueMaterialsModal = ({ order, onClose }: { order: Order; onClose:
               <option value="">Thêm vật tư / dụng cụ ngoài kế hoạch…</option>
               {addable.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.name} ({KIND_LABEL[i.kind]} · tồn {i.stock} {i.unit})
+                  {i.name} · {KIND_LABEL[i.kind]} · tồn {i.stock} {i.unit}
                 </option>
               ))}
             </Select>
@@ -240,7 +252,7 @@ export const ReturnMaterialsModal = ({ order, onClose }: { order: Order; onClose
       open
       size="lg"
       onClose={onClose}
-      title={`${cancelled ? 'Thu hồi vật tư (đơn đã hủy)' : 'Kiểm nhận vật tư trả về'} — #${order.id}`}
+      title={`${cancelled ? 'Thu hồi vật tư đơn đã hủy' : 'Kiểm nhận vật tư trả về'} — #${order.id}`}
       tone={lostTotal > 0 ? 'warning' : undefined}
       footer={
         <>
@@ -301,9 +313,9 @@ export const ReturnMaterialsModal = ({ order, onClose }: { order: Order; onClose
       </div>
       {lostTotal > 0 && (
         <Field
-          label="Biên bản xử lý chênh lệch (bắt buộc)"
+          label="Biên bản xử lý chênh lệch *"
           className="mt-4"
-          hint="Ghi lý do (mất, hỏng, hao hụt, kho giao thiếu) và người chịu trách nhiệm."
+          hint="Ghi lý do mất, hỏng, hao hụt hoặc kho giao thiếu và người chịu trách nhiệm."
           error={note.trim().length < MIN_NOTE_LENGTH ? `Tối thiểu ${MIN_NOTE_LENGTH} ký tự` : null}
         >
           <textarea

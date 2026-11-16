@@ -57,7 +57,6 @@ export const VehiclesModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Vận hành"
         title="Quản lý xe"
-        subtitle="Loại xe (tải trọng) phải khớp với báo giá khi điều phối. Xe đang gán cho đơn không thể sửa hoặc xóa."
         actions={<Button icon={Plus} onClick={() => open({ id: null, plateNumber: '', capacityTons: CAPACITIES[0] ?? 2 })}>Thêm xe</Button>}
       />
       <div className="mb-4 grid gap-4 sm:grid-cols-4">

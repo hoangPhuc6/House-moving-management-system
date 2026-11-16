@@ -26,6 +26,8 @@ import {
   Tooltip,
 } from '@/components/ui';
 import { MaterialLinesTable, MaterialSlipActions, MaterialStatusBadge, ReturnMaterialsModal } from '@/features/admin/components/MaterialSlip';
+import { AdminPeriodPicker, OutOfPeriodNotice } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
 import { matches } from '@/features/admin/utils';
 import { ROUTES } from '@/routes/paths';
 import { formatVND } from '@/services/format';
@@ -37,12 +39,15 @@ export const SettlementModule = ({ query }: { query: string }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [returning, setReturning] = useState<string | null>(null);
   const returningOrder = state.orders.find((o) => o.id === returning);
-  const pending = state.orders.filter(
+  // Lọc theo kỳ chọn chung, tính theo ngày chuyển của đơn.
+  const { inPeriod } = useAdminPeriod();
+  const pendingAll = state.orders.filter(
     (o) =>
       o.status === "PENDING_PAYMENT_OR_CLAIM" &&
       matches(query, o.id, o.customerName),
   );
-  const completed = state.orders.filter((o) => o.status === "COMPLETED");
+  const pending = pendingAll.filter((o) => inPeriod(o.scheduledDate));
+  const completed = state.orders.filter((o) => o.status === "COMPLETED" && inPeriod(o.scheduledDate));
   const revenue = completed.reduce((s, o) => s + (o.finalRevenue ?? 0), 0);
   const receivable = pending.reduce(
     (s, o) => s + computeTotals(o).remaining,
@@ -54,8 +59,9 @@ export const SettlementModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Quyết toán"
         title="Kiểm soát vật tư & đóng hồ sơ"
-        subtitle="Hồ sơ tự đóng ngay khi công nợ khách hàng = 0đ và phiếu vật tư đã quyết toán (đối chiếu xuất – dùng – trả). Khách đã trả đủ thì thấy đơn Hoàn tất, không phải chờ bước nội bộ này."
+        actions={<AdminPeriodPicker />}
       />
+      <OutOfPeriodNotice count={pendingAll.length - pending.length} what="hồ sơ chờ đóng" />
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat
           label="Chờ quyết toán"
@@ -171,7 +177,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
                       <td className="px-6 py-4 text-right">
                         <Tooltip
                           enabled={!ok}
-                          content={`Hard-Lock: ${[
+                          content={`Chưa thể đóng: ${[
                             s.remainingBalance > 0 ? "khách còn nợ " + formatVND(s.remainingBalance) : "",
                             !s.materialsSettled ? "phiếu vật tư chưa quyết toán" : "",
                           ].filter(Boolean).join(" · ")}.`}
@@ -185,7 +191,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
                               dispatch({ type: "CLOSE_ORDER", orderId: o.id })
                             }
                           >
-                            Đóng hồ sơ (Hoàn tất)
+                            Đóng hồ sơ
                           </Button>
                         </Tooltip>
                       </td>
@@ -214,7 +220,7 @@ export const SettlementModule = ({ query }: { query: string }) => {
       <Card className="mt-4" padded={false}>
         <div className="p-6 pb-4">
           <CardHeader
-            title="Hồ sơ đã đóng gần đây"
+            title="Hồ sơ đã đóng trong kỳ"
             icon={Lock}
             subtitle="Doanh thu đã khóa — không thể chỉnh sửa"
             action={

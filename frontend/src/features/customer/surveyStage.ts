@@ -20,6 +20,9 @@ export const surveyHeroCopy = (order: Order): { title: string; desc: string } =>
     case 'VIDEO_CALL':
       return { title: `Chờ khảo sát qua video call${when}`, desc: 'Chuyên viên sẽ gọi Zalo / Messenger đúng khung giờ bạn hẹn để xem đồ đạc.' };
     case 'ON_SITE':
+      if (order.onSiteSurveyRequest?.completedAt) {
+        return { title: 'Chuyên viên đang lập báo giá', desc: 'Nhân viên đã khảo sát xong tại nhà bạn. Báo giá chính thức sẽ được gửi qua ứng dụng.' };
+      }
       return order.onSiteSurveyRequest && !when
         ? { title: 'Sắp xếp khảo sát trực tiếp', desc: 'Nhân viên vận chuyển sẽ liên hệ hẹn giờ đến khảo sát tại nhà bạn.' }
         : { title: `Chờ khảo sát tận nơi${when}`, desc: 'Chuyên viên sẽ đến đo đạc, kiểm tra lối đi và tư vấn phương án chuyển dọn.' };
@@ -35,14 +38,14 @@ export const customerStepMeta = (order: Order): { title?: string; sub?: string |
   const d = order.bookingDetails;
   const kind = surveyStageOf(order);
   const surveySub = (() => {
-    if (kind === 'TRUCK_CONFIRM') return 'Điều phối gọi xác nhận';
+    if (kind === 'TRUCK_CONFIRM') return 'Báo giá tự động';
     if (kind === 'PHOTOS') return isMediaSubmitted(order) ? 'Đã gửi ảnh / video' : 'Chờ bạn gửi ảnh';
     const label = kind === 'VIDEO_CALL' ? 'Video call' : 'Tận nơi';
     return d && hasAppointment(order) ? `${label} ${shortDate(d.surveyDate)}` : label;
   })();
   return [
     { sub: `Đã gửi ${formatTime(order.createdAt)}` },
-    { title: kind === 'TRUCK_CONFIRM' ? 'Xác nhận xe' : undefined, sub: surveySub },
+    { title: kind === 'TRUCK_CONFIRM' ? 'Báo giá xe' : undefined, sub: surveySub },
     { sub: order.status === 'SURVEYED_PENDING_CONFIRM' ? 'Đang chờ bạn duyệt' : null },
     { sub: `Dự kiến ${shortDate(order.scheduledDate)}` },
     { sub: null },

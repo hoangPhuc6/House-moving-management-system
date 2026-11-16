@@ -9,7 +9,9 @@ import {
   QrCode,
 } from 'lucide-react';
 import { Button, Card, cx, Field, KeyValue, Modal, QrMock } from '@/components/ui';
+import { surchargeAmount, surchargesWithStatus } from '@/constants/surcharge';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
+import { SurveyRecordCard } from '@/features/order/components/SurveyRecordCard';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { formatTime, formatVND } from '@/services/format';
 import { computeTotals, lineTotal } from '@/services/pricing';
@@ -73,6 +75,11 @@ export const QuoteSection = ({ order }: { order: Order }) => {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-900">
                     {it.name}
+                    {it.offCatalog && (
+                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-amber-800">
+                        Ngoài bảng giá
+                      </span>
+                    )}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
                     {it.quantity} {it.unit} × {formatVND(it.unitPrice)}
@@ -82,6 +89,9 @@ export const QuoteSection = ({ order }: { order: Order }) => {
                       </span>
                     )}
                   </p>
+                  {it.offCatalog && it.note && (
+                    <p className="mt-0.5 text-xs text-amber-800">{it.note}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold tabular-nums">
@@ -90,21 +100,22 @@ export const QuoteSection = ({ order }: { order: Order }) => {
                 </div>
               </li>
             ))}
-            {order.pendingAdjustment && (
-              <li className="flex items-start gap-3 bg-rose-50/60 px-4 py-3.5 sm:px-5">
+            {surchargesWithStatus(order, 'WAITING_CUSTOMER', 'REJECTED_BY_CUSTOMER').map((s) => (
+              <li key={s.id} className="flex items-start gap-3 bg-rose-50/60 px-4 py-3.5 sm:px-5">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-900">
-                    {order.pendingAdjustment.name}
+                    Phát sinh: {s.name}
                   </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-rose-600">
-                    <Lock className="size-3" /> Chờ bạn xác nhận
+                  <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-rose-600 tabular-nums">
+                    <Lock className="size-3" /> {s.quantity} {s.unit} × {formatVND(s.unitPrice)} ·{" "}
+                    {s.status === 'WAITING_CUSTOMER' ? 'Chờ bạn xác nhận' : 'Bạn đã từ chối'}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-rose-600 tabular-nums">
-                  +{formatVND(order.pendingAdjustment.unitPrice)}
+                  +{formatVND(surchargeAmount(s))}
                 </p>
               </li>
-            )}
+            ))}
           </ul>
           <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3 sm:px-5">
             <KeyValue label="Tạm tính" value={formatVND(totals.baseQuote)} />
@@ -131,6 +142,8 @@ export const QuoteSection = ({ order }: { order: Order }) => {
             />
           </div>
         </Card>
+
+        {order.surveyRecord && <SurveyRecordCard record={order.surveyRecord} />}
 
         <Card padded={false}>
           <button

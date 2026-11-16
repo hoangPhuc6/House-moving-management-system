@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, CheckCircle2, FileWarning, Lock, Scale, Search, XCircle } from 'lucide-react';
+import { Camera, CheckCircle2, FileWarning, Lock, Scale, XCircle } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -15,6 +15,8 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { EvidenceTile } from '@/features/admin/components/EvidenceTile';
+import { AdminPeriodPicker, OutOfPeriodNotice } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
 import { CLAIM_STATUS } from '@/features/admin/constants';
 import { matches } from '@/features/admin/utils';
 import { formatVND } from '@/services/format';
@@ -24,9 +26,19 @@ import type { ClaimTicket } from '@/types';
 
 export const ClaimsModule = ({ query }: { query: string }) => {
   const { state, dispatch } = useApp();
-  const [selectedId, setSelectedId] = useState(state.claims[0]?.id ?? "");
+  // Lọc theo kỳ chọn chung, tính theo ngày khách gửi khiếu nại.
+  const { inPeriodTs } = useAdminPeriod();
+  const searched = state.claims.filter((c) =>
+    matches(query, c.id, c.orderId, c.customerName, c.title),
+  );
+  const visibleClaims = searched.filter((c) => inPeriodTs(c.createdAt));
+  const openOutside = searched.filter(
+    (c) => (c.status === "OPEN" || c.status === "INVESTIGATING") && !inPeriodTs(c.createdAt),
+  ).length;
+  // Phiếu đang xem luôn thuộc danh sách trong kỳ; đổi kỳ thì chọn phiếu đầu của kỳ mới.
+  const [selectedId, setSelectedId] = useState(visibleClaims[0]?.id ?? "");
   const claim =
-    state.claims.find((c) => c.id === selectedId) ?? state.claims[0];
+    visibleClaims.find((c) => c.id === selectedId) ?? visibleClaims[0];
   const [amount, setAmount] = useState<number>(claim?.requestedAmount ?? 0);
   const order = claim
     ? state.orders.find((o) => o.id === claim.orderId)
@@ -36,9 +48,6 @@ export const ClaimsModule = ({ query }: { query: string }) => {
   const orderRevenue = order
     ? (order.finalRevenue ?? computeTotals(order).grandTotal)
     : 0;
-  const visibleClaims = state.claims.filter((c) =>
-    matches(query, c.id, c.orderId, c.customerName, c.title),
-  );
   const select = (c: ClaimTicket) => {
     setSelectedId(c.id);
     setAmount(c.approvedAmount ?? c.requestedAmount);
@@ -49,8 +58,9 @@ export const ClaimsModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Chăm sóc sau bán"
         title="Quản lý khiếu nại"
-        subtitle="Khiếu nại được xử lý trên phiếu riêng — doanh thu gốc của đơn không bị thay đổi."
+        actions={<AdminPeriodPicker />}
       />
+      <OutOfPeriodNotice count={openOutside} what="khiếu nại chưa xử lý" />
       <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
         <div className="h-fit space-y-4">
           {[
@@ -137,8 +147,8 @@ export const ClaimsModule = ({ query }: { query: string }) => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                   <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Camera className="size-4 text-slate-500" /> Ảnh/Video lúc
-                    đóng gói (Đội xe chụp)
+                    <Camera className="size-4 text-slate-500" /> Ảnh, video lúc
+                    đóng gói
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {claim.packingEvidence.map((m) => (
@@ -183,7 +193,7 @@ export const ClaimsModule = ({ query }: { query: string }) => {
                         <Lock className="size-3.5" /> Doanh thu gốc
                       </span>
                     ) : (
-                      "Tổng hóa đơn (chưa khóa)"
+                      "Tổng hóa đơn"
                     )
                   }
                   value={formatVND(orderRevenue)}
@@ -233,27 +243,11 @@ export const ClaimsModule = ({ query }: { query: string }) => {
                         }
                       />
                     </Field>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {claim.status === "OPEN" && (
-                        <Button
-                          variant="secondary"
-                          icon={Search}
-                          onClick={() =>
-                            dispatch({
-                              type: "SET_CLAIM_STATUS",
-                              claimId: claim.id,
-                              status: "INVESTIGATING",
-                              approvedAmount: null,
-                            })
-                          }
-                        >
-                          Đối chiếu
-                        </Button>
-                      )}
+                    {/* Hai lựa chọn ngang hàng: chia đôi chiều ngang, Từ chối trái — Duyệt (hành động chính) phải. */}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
                       <Button
-                        variant="ghost"
+                        variant="danger"
                         icon={XCircle}
-                        className="text-rose-600 hover:bg-rose-50"
                         onClick={() =>
                           dispatch({
                             type: "SET_CLAIM_STATUS",

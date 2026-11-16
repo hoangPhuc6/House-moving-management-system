@@ -19,6 +19,7 @@ import { CoordinatorDispatchPage } from '@/pages/coordinator/CoordinatorDispatch
 import { CoordinatorEditorPage } from '@/pages/coordinator/CoordinatorEditorPage';
 import { CoordinatorIncidentPage } from '@/pages/coordinator/CoordinatorIncidentPage';
 import { CoordinatorQueuePage } from '@/pages/coordinator/CoordinatorQueuePage';
+import { CoordinatorSurchargePage } from '@/pages/coordinator/CoordinatorSurchargePage';
 import { CustomerCreatePage } from '@/pages/customer/CustomerCreatePage';
 import { CustomerHistoryPage } from '@/pages/customer/CustomerHistoryPage';
 import { CustomerOrderDetailPage } from '@/pages/customer/CustomerOrderDetailPage';
@@ -57,6 +58,7 @@ export const AppRoutes = () => (
         <Route path="editor" element={<CoordinatorEditorPage />} />
         <Route path="dispatch" element={<CoordinatorDispatchPage />} />
         <Route path="incident" element={<CoordinatorIncidentPage />} />
+        <Route path="surcharge" element={<CoordinatorSurchargePage />} />
       </Route>
 
       <Route path="admin" element={<AdminLayout />}>

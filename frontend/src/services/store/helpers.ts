@@ -6,7 +6,7 @@ import type {
   AuditLogEntry,
   Order,
   OrderStatus,
-  QuoteItem,
+  Surcharge,
   ToastTone,
   Vehicle,
 } from '@/types';
@@ -45,14 +45,8 @@ export const withLog = (o: Order, entry: AuditLogEntry): Order => (entry.actorRo
 
 export const statusIndex = (s: OrderStatus): number => STATUS_ORDER.indexOf(s);
 
-export const fieldAdjustmentItem = (): QuoteItem => ({
-  id: uid('qi'),
-  name: 'Phát sinh hiện trường: Hẻm sâu 200m + Tháo lắp tủ gỗ',
-  category: 'FIELD_ADJUSTMENT',
-  unit: 'gói',
-  unitPrice: 350_000,
-  quantity: 1,
-});
+export const findSurcharge = (state: AppState, orderId: string, surchargeId: string): Surcharge | undefined =>
+  findOrder(state, orderId)?.surcharges.find((s) => s.id === surchargeId);
 
 export const shortId = (orderId: string): string => orderId.replace('ORD-2026-', 'ORD-');
 

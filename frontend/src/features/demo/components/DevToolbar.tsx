@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cx, Toggle } from '@/components/ui';
 import { STATUS_META, STATUS_ORDER } from '@/constants/order';
+import { isSurchargeBlocking } from '@/constants/surcharge';
 import { ROLE_HOME, roleFromPath } from '@/routes/paths';
 import { useClickOutside } from '@/layouts/shell';
 import { formatVND } from '@/services/format';
@@ -30,8 +31,7 @@ export const ROLES: { id: RoleType; label: string; icon: LucideIcon }[] = [
   { id: 'ADMIN', label: 'Admin', icon: ShieldCheck },
 ];
 
-export const FLAG_ROWS: { key: keyof Pick<ExceptionFlags, 'hasFieldDiscrepancyLock' | 'isVehicleIncident'>; code: string; label: string }[] = [
-  { key: 'hasFieldDiscrepancyLock', code: '1.1.1', label: 'Sai lệch hiện trường' },
+export const FLAG_ROWS: { key: keyof Pick<ExceptionFlags, 'isVehicleIncident'>; code: string; label: string }[] = [
   { key: 'isVehicleIncident', code: '1.1.2', label: 'Sự cố xe hỏng' },
 ];
 
@@ -47,7 +47,7 @@ export const DevToolbar = () => {
 
   const setFlags = (patch: Partial<ExceptionFlags>) => order && dispatch({ type: 'SET_FLAGS', orderId: order.id, patch });
   const activeCount = order
-    ? Number(order.flags.hasFieldDiscrepancyLock) + Number(order.flags.isVehicleIncident) + Number(order.flags.waitingMinutes > 30) + Number(order.flags.hoursUntilDeparture < 12)
+    ? Number(isSurchargeBlocking(order)) + Number(order.flags.isVehicleIncident) + Number(order.flags.waitingMinutes > 30) + Number(order.flags.hoursUntilDeparture < 12)
     : 0;
   const currentRole = roleFromPath(pathname);
   const current = ROLES.find((r) => r.id === currentRole);
@@ -93,6 +93,10 @@ export const DevToolbar = () => {
             </select>
           </div>
           <div className="mt-2 space-y-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[13px] text-white/80">{tag('1.1.1')}Sai lệch hiện trường (đề xuất mẫu)</span>
+              <Toggle checked={isSurchargeBlocking(order)} onChange={(v) => dispatch({ type: 'DEMO_SURCHARGE', orderId: order.id, on: v })} tone="danger" />
+            </div>
             {FLAG_ROWS.map((f) => (
               <div key={f.key} className="flex items-center justify-between gap-3">
                 <span className="text-[13px] text-white/80">{tag(f.code)}{f.label}</span>

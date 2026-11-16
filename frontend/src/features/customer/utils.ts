@@ -1,5 +1,6 @@
 import { AlertTriangle, type LucideIcon, QrCode, ReceiptText, Star } from 'lucide-react';
 import type { Tone } from '@/components/ui';
+import { surchargesWithStatus } from '@/constants/surcharge';
 import { CUSTOMER } from '@/features/customer/constants';
 import { isMediaSubmitted, surveyStageOf } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
@@ -22,7 +23,7 @@ export const isOpenOrder = (o: Order): boolean =>
 /** Đơn đang chờ khách thao tác: chốt báo giá, xác nhận phát sinh hoặc thanh toán. */
 export const needsAction = (o: Order): boolean =>
   o.status === "SURVEYED_PENDING_CONFIRM" ||
-  o.flags.hasFieldDiscrepancyLock ||
+  surchargesWithStatus(o, 'WAITING_CUSTOMER').length > 0 ||
   (o.status === "PENDING_PAYMENT_OR_CLAIM" && computeTotals(o).remaining > 0);
 
 export const scrollToSection = (id: string) =>
@@ -52,7 +53,7 @@ export const customerActionOf = (o: Order): CustomerAction | null => {
   const { remaining } = computeTotals(o);
   if (o.status === 'SURVEYED_PENDING_CONFIRM') return { label: 'Xem báo giá & đặt cọc', icon: ReceiptText, section: 'quote-section' };
   if (o.status === 'PENDING_PAYMENT_OR_CLAIM' && remaining > 0) return { label: `Thanh toán ${formatVND(remaining)}`, icon: QrCode, section: 'payment-section' };
-  if (o.flags.hasFieldDiscrepancyLock) return { label: 'Xác nhận phát sinh hiện trường', icon: AlertTriangle, section: null };
+  if (surchargesWithStatus(o, 'WAITING_CUSTOMER').length > 0) return { label: 'Xác nhận phát sinh hiện trường', icon: AlertTriangle, section: null };
   if (isCustomerSettled(o)) return { label: 'Đánh giá & hỗ trợ sau chuyển', icon: Star, section: 'payment-section' };
   return null;
 };
@@ -67,7 +68,7 @@ export const customerStatusOf = (o: Order): { label: string; tone: Tone } => {
         case 'VIDEO_CALL':
           return { label: 'Chờ khảo sát video', tone: 'info' };
         case 'ON_SITE':
-          return { label: 'Chờ khảo sát tận nơi', tone: 'info' };
+          return o.onSiteSurveyRequest?.completedAt ? { label: 'Đang lập báo giá', tone: 'info' } : { label: 'Chờ khảo sát tận nơi', tone: 'info' };
         case 'PHOTOS':
           return isMediaSubmitted(o) ? { label: 'Đang lập báo giá', tone: 'info' } : { label: 'Chờ bạn gửi ảnh', tone: 'warning' };
       }

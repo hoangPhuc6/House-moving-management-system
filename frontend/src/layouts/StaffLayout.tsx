@@ -12,7 +12,8 @@ export const StaffLayout = () => {
   const { state } = useApp();
   const navigate = useNavigate();
   const jobs = selectStaffJobs(state.orders);
-  const surveyCount = state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && o.onSiteSurveyRequest).length;
+  // Chỉ đếm khảo sát còn việc của NV (chưa hoàn tất).
+  const surveyCount = state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && o.onSiteSurveyRequest && !o.onSiteSurveyRequest.completedAt).length;
   const runningCount = jobs.filter((j) => RUNNING.includes(j.status)).length;
 
   const nav: MobileNavItem[] = [

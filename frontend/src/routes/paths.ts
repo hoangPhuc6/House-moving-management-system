@@ -24,6 +24,7 @@ export const ROUTES = {
     editor: '/coordinator/editor',
     dispatch: '/coordinator/dispatch',
     incident: '/coordinator/incident',
+    surcharge: '/coordinator/surcharge',
   },
   admin: {
     root: '/admin',

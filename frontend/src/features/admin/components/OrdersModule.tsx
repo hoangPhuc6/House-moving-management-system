@@ -141,7 +141,6 @@ export const OrdersModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Vận hành"
         title="Tra cứu đơn hàng"
-        subtitle="Mọi đơn ở mọi trạng thái. Bấm một đơn để xem chi tiết, tài chính, vật tư và nhật ký — thao tác thực hiện ở module tương ứng."
       />
 
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -156,7 +155,7 @@ export const OrdersModule = ({ query }: { query: string }) => {
           <Field label="Trạng thái">
             <Select value={status} onChange={(e) => changeStatus(e.target.value as StatusFilter)}>
               <option value="ALL">Tất cả trạng thái</option>
-              <option value="ACTIVE">Đang xử lý (chưa đóng)</option>
+              <option value="ACTIVE">Đang xử lý</option>
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>{STATUS_META[s].label}</option>
               ))}

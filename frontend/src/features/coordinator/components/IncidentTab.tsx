@@ -66,7 +66,6 @@ export const IncidentTab = ({
       <PageHeader
         eyebrow="Khẩn cấp"
         title="Xử lý sự cố phương tiện"
-        subtitle="Chuyển giao phương tiện (tăng bo) cho đơn đang vận chuyển."
         actions={<OrderPicker value={order.id} onChange={onSelect} />}
       />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">

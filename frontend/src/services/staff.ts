@@ -30,7 +30,7 @@ export const WORK_STATUS_META: Record<StaffWorkStatus, { label: string; tone: To
 /** Tải trọng tối đa (tấn) theo hạng GPLX. */
 export const LICENSE_MAX_TONS: Record<LicenseClass, number> = { B2: 3.5, C: Number.POSITIVE_INFINITY };
 
-export const LICENSE_LABEL: Record<LicenseClass, string> = { B2: 'B2 (≤ 3,5 tấn)', C: 'C (mọi xe tải)' };
+export const LICENSE_LABEL: Record<LicenseClass, string> = { B2: 'B2 · xe ≤ 3,5 tấn', C: 'C · mọi xe tải' };
 
 export const hasSkill = (s: StaffMember, skill: StaffSkill) => s.skills.includes(skill);
 export const isActiveStaff = (s: StaffMember) => s.status === 'ACTIVE';

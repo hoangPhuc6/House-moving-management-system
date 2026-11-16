@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertOctagon,
   ArrowLeft,
   CheckCircle2,
   Lock,
@@ -14,8 +13,10 @@ import {
 } from 'lucide-react';
 import { Badge, Button, cx, StatusBadge } from '@/components/ui';
 import { FIELD_STAGE_LABEL, FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
+import { isSurchargeBlocking, surchargesWithStatus } from '@/constants/surcharge';
 import { Block } from '@/features/staff/components/Block';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
+import { SurchargeBlock } from '@/features/staff/components/SurchargeBlock';
 import { MaterialsBlock, useMaterialReceipt } from '@/features/staff/components/MaterialsBlock';
 import { RUNNING, STAGE_ICONS } from '@/features/staff/constants';
 import { StickyActionBar } from '@/layouts/MobileShell';
@@ -27,6 +28,16 @@ import { waitFee } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 import type { FieldStage, Order } from '@/types';
 
+/** Lý do đang khóa theo trạng thái các khoản phát sinh. */
+const lockReason = (order: Order): string => {
+  const parts = [
+    [surchargesWithStatus(order, 'PROPOSED').length, 'chờ Điều phối duyệt'],
+    [surchargesWithStatus(order, 'WAITING_CUSTOMER').length, 'chờ khách xác nhận'],
+    [surchargesWithStatus(order, 'REJECTED_BY_CUSTOMER').length, 'khách từ chối — Điều phối đang thương lượng'],
+  ] as const;
+  return parts.filter(([n]) => n > 0).map(([n, l]) => `${n} khoản ${l}`).join(' · ') + '.';
+};
+
 export const JobDetail = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
   const vehicle = state.resources.vehicles.find(
@@ -37,7 +48,7 @@ export const JobDetail = ({ order }: { order: Order }) => {
   );
   const stageIdx = FIELD_STAGE_ORDER.indexOf(order.fieldStage);
   const next = FIELD_STAGES[stageIdx];
-  const locked = order.flags.hasFieldDiscrepancyLock;
+  const locked = isSurchargeBlocking(order);
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
   const active = RUNNING.includes(order.status);
   const nextLocked =
@@ -149,12 +160,10 @@ export const JobDetail = ({ order }: { order: Order }) => {
             <Lock className="mt-0.5 size-5 shrink-0 text-rose-600" />
             <div>
               <p className="text-sm font-semibold text-rose-900">
-                Đang khóa luồng: Chờ khách hàng bấm Xác nhận báo giá điều chỉnh
-                trên Web.
+                Đang khóa luồng: chờ xử lý phát sinh hiện trường
               </p>
-              <p className="mt-1 text-xs text-rose-700 tabular-nums">
-                Phát sinh đề xuất: +
-                {formatVND(order.pendingAdjustment?.unitPrice ?? 350_000)}
+              <p className="mt-1 text-xs text-rose-700">
+                {lockReason(order)}
               </p>
             </div>
           </div>
@@ -238,27 +247,14 @@ export const JobDetail = ({ order }: { order: Order }) => {
         <MaterialsBlock key={`${order.id}-${order.materials.status}`} order={order} receipt={receipt} />
       </div>
 
+      {(order.surcharges.length > 0 || (active && order.fieldStage !== "HANDED_OVER")) && (
+        <SurchargeBlock order={order} canReport={active && order.fieldStage !== "HANDED_OVER"} />
+      )}
+
       {/* Exceptions */}
       {active && order.fieldStage !== "HANDED_OVER" && (
-        <Block title="Xử lý phát sinh">
+        <Block title="Sự cố & chờ khách">
           <div className="grid gap-2">
-            <Button
-              variant="secondary"
-              size="lg"
-              icon={AlertOctagon}
-              className="h-14 border-amber-300 text-amber-800 hover:bg-amber-50"
-              disabled={locked}
-              onClick={() =>
-                dispatch({
-                  type: "REPORT_FIELD_DISCREPANCY",
-                  orderId: order.id,
-                })
-              }
-            >
-              {locked
-                ? "Đã báo — chờ khách xác nhận"
-                : "Báo cáo sai lệch hiện trường"}
-            </Button>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="danger"
@@ -366,7 +362,7 @@ export const JobDetail = ({ order }: { order: Order }) => {
             )}
             {blocked
               ? nextLocked
-                ? "Khóa: chờ khách xác nhận"
+                ? "Khóa: chờ xử lý phát sinh"
                 : materialBlock
                   ? "Khóa: chờ kho xuất vật tư"
                   : "Khóa: chờ xe thay thế"

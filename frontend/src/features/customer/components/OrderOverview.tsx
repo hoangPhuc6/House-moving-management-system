@@ -48,9 +48,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
 
   return (
     <div className="space-y-4">
-      {order.flags.hasFieldDiscrepancyLock && (
-        <FieldAdjustmentBanner order={order} />
-      )}
+      <FieldAdjustmentBanner order={order} />
       {order.flags.isVehicleIncident && (
         <Alert
           tone="info"

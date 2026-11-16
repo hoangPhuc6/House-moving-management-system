@@ -1,11 +1,12 @@
 import { Clock, KanbanSquare, PhoneCall, PlayCircle, Siren, Truck } from 'lucide-react';
 import { Badge, Button, cx, PageHeader, Stat, StatusBadge } from '@/components/ui';
-import { AUTO_CANCEL_MS, TELESALES_THRESHOLD_MS } from '@/constants/pricing';
+import { AUTO_CANCEL_MS, ONSITE_QUOTE_SLA_MS, TELESALES_THRESHOLD_MS } from '@/constants/pricing';
+import { surchargesNeedingReview } from '@/constants/surcharge';
 import { COLUMNS } from '@/features/coordinator/constants';
 import type { CoordTab } from '@/features/coordinator/types';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { settlementBadges } from '@/features/order/settlementStage';
-import { coordinatorSurveyBadge } from '@/features/order/surveyStage';
+import { awaitingOnSiteQuote, coordinatorSurveyBadge } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp, useNow } from '@/services/store/AppStore';
@@ -34,7 +35,6 @@ export const QueueTab = ({
       <PageHeader
         eyebrow="Ca sáng · Thứ Năm, 29/10/2026"
         title="Hàng đợi đơn hàng"
-        subtitle="Theo dõi vòng đời đơn hàng. Đơn chưa chốt sau 24h sẽ tự động hủy."
         actions={
           <Button
             variant="dark"
@@ -112,6 +112,12 @@ export const QueueTab = ({
                     const needsCall =
                       o.status === "SURVEYED_PENDING_CONFIRM" &&
                       surveyedAgo > TELESALES_THRESHOLD_MS;
+                    const onSiteDoneAt = awaitingOnSiteQuote(o)
+                      ? o.onSiteSurveyRequest?.completedAt ?? null
+                      : null;
+                    const quoteOverdue =
+                      onSiteDoneAt !== null &&
+                      now - onSiteDoneAt > ONSITE_QUOTE_SLA_MS;
                     return (
                       <button
                         key={o.id}
@@ -121,7 +127,9 @@ export const QueueTab = ({
                             o.id,
                             o.status === "QUOTED_PENDING_SCHEDULE"
                               ? "dispatch"
-                              : o.flags.isVehicleIncident
+                              : surchargesNeedingReview(o).length > 0
+                                ? "surcharge"
+                                : o.flags.isVehicleIncident
                                 ? "incident"
                                 : "editor",
                           )
@@ -170,6 +178,17 @@ export const QueueTab = ({
                             <span className="flex w-full items-start gap-1.5 rounded-lg bg-orange-50 px-2 py-1.5 text-[11px] leading-snug font-semibold text-brand ring-1 ring-brand/15 ring-inset">
                               <PhoneCall className="mt-px size-3 shrink-0" />{" "}
                               Cần gọi Tele-sales chăm sóc (&gt;2h chưa chốt)
+                            </span>
+                          )}
+                          {surchargesNeedingReview(o).length > 0 && (
+                            <Badge tone="danger" dot pulse>
+                              {surchargesNeedingReview(o).length} phát sinh cần duyệt
+                            </Badge>
+                          )}
+                          {quoteOverdue && (
+                            <span className="flex w-full items-start gap-1.5 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] leading-snug font-semibold text-rose-700 ring-1 ring-rose-200 ring-inset">
+                              <Clock className="mt-px size-3 shrink-0" />{" "}
+                              Quá hạn báo giá (&gt;2h sau khảo sát tận nơi)
                             </span>
                           )}
                         </div>

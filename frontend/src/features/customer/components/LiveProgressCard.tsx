@@ -1,6 +1,7 @@
 import { CheckCircle2, Lock, Phone } from 'lucide-react';
 import { Card, cx, Divider, StatusBadge } from '@/components/ui';
 import { FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
+import { hasCustomerSurcharge } from '@/constants/surcharge';
 import type { Order } from '@/types';
 
 export const LiveProgressCard = ({
@@ -35,7 +36,7 @@ export const LiveProgressCard = ({
               paused);
           const locked =
             (s.stage === "WORKING" || s.stage === "MOVING") &&
-            order.flags.hasFieldDiscrepancyLock &&
+            hasCustomerSurcharge(order) &&
             !done;
           return (
             <li key={s.stage} className="relative flex gap-3.5 pb-5 last:pb-0">

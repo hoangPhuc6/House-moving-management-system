@@ -45,7 +45,6 @@ export const ServicesModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Danh mục"
         title="Dịch vụ & bảng giá"
-        subtitle="Dịch vụ ngừng hoạt động không thể dùng cho đơn mới."
         actions={<Button icon={Plus} onClick={() => setEditing({ ...EMPTY_SERVICE })}>Thêm dịch vụ</Button>}
       />
       <Tabs<ServiceGroup | 'ALL'>

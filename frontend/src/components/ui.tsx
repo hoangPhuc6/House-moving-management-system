@@ -5,13 +5,15 @@ import {
   type SelectHTMLAttributes,
   useEffect,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, type LucideIcon, X, XCircle } from 'lucide-react';
 import { STATUS_META } from '@/constants/order';
 import type { OrderStatus, ToastTone } from '@/types';
 
 export const cx = (...classes: (string | false | null | undefined)[]): string => classes.filter(Boolean).join(' ');
 
-export type ButtonVariant = 'primary' | 'secondary' | 'dark' | 'ghost' | 'danger' | 'success';
+/** soft: hành động phụ cần nổi (VD mọi nút "Thêm…" trong biểu mẫu) — nền cam nhạt, chữ cam. */
+export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'dark' | 'ghost' | 'danger' | 'success';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -25,6 +27,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-brand text-white hover:bg-brand-hover shadow-sm shadow-brand/20',
   secondary: 'bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 hover:border-slate-300',
+  soft: 'bg-orange-50 text-brand border border-brand/25 hover:bg-orange-100 hover:border-brand/40',
   dark: 'bg-slate-900 text-white hover:bg-slate-800',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   danger: 'bg-rose-600 text-white hover:bg-rose-700',
@@ -122,12 +125,13 @@ export const CardHeader = ({ title, subtitle, icon: Icon, action, eyebrow }: { t
 
 export const PageHeader = ({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) => (
   <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-    <div>
+    {/* basis-0 + grow: mô tả dài tự xuống dòng bên trong, không đẩy nút / bộ chọn kỳ xuống hàng dưới. */}
+    <div className="min-w-64 grow basis-0">
       {eyebrow && <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">{eyebrow}</p>}
       <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">{title}</h1>
       {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
     </div>
-    {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
   </div>
 );
 
@@ -277,7 +281,8 @@ export const Modal = ({ open, onClose, title, children, footer, tone, size = 'md
   useEscape(open, onClose);
   if (!open) return null;
   const s = tone ? ALERT_STYLE[tone] : null;
-  return (
+  // Portal ra body: tránh bị header / thanh điều hướng (z-40) của layout đè khi Modal nằm trong vùng nội dung có stacking context riêng.
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true">
       <div className="anim-fade absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={onClose} />
       <div className={cx('anim-pop relative w-full overflow-hidden rounded-t-3xl bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl sm:rounded-2xl sm:pb-0', size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
@@ -293,17 +298,19 @@ export const Modal = ({ open, onClose, title, children, footer, tone, size = 'md
             <X className="size-4" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5 text-sm leading-relaxed text-slate-600">{children}</div>
+        {/* relative: phần tử absolute bên trong (vd. input file sr-only) bám theo vùng cuộn — focus không cuộn lệch cả khung Modal. */}
+        <div className="relative max-h-[70vh] overflow-y-auto px-6 py-5 text-sm leading-relaxed text-slate-600">{children}</div>
         {footer && <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4 sm:flex-row sm:justify-end">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
 export const Drawer = ({ open, onClose, title, subtitle, children, footer, size = 'md' }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; size?: 'md' | 'lg' }) => {
   useEscape(open, onClose);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
       <div className="anim-fade absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={onClose} />
       <aside className={cx('anim-slide absolute inset-y-0 right-0 flex w-full flex-col bg-white shadow-2xl', size === 'lg' ? 'max-w-2xl' : 'max-w-md')}>
@@ -316,10 +323,11 @@ export const Drawer = ({ open, onClose, title, subtitle, children, footer, size 
             <X className="size-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="relative flex-1 overflow-y-auto px-6 py-5">{children}</div>
         {footer && <div className="flex gap-2 border-t border-slate-100 px-6 py-4">{footer}</div>}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

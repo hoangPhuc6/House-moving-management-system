@@ -101,7 +101,7 @@ export const StaffProfileFields = ({ value, onChange, showStatus = true }: { val
         </div>
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={drives ? 'Hạng bằng lái (bắt buộc)' : 'Hạng bằng lái'}>
+        <Field label={drives ? 'Hạng bằng lái *' : 'Hạng bằng lái'}>
           <Select value={value.licenseClass} onChange={(e) => set('licenseClass', e.target.value as LicenseClass | '')}>
             <option value="">Không có</option>
             {(Object.keys(LICENSE_LABEL) as LicenseClass[]).map((c) => (

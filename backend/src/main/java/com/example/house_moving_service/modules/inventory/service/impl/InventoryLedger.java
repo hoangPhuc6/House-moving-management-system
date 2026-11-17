@@ -86,12 +86,7 @@ public class InventoryLedger {
             throw new AppException(ErrorCode.ERR_INVENTORY_INVALID_QUANTITY, "tồn kho vượt giới hạn cho phép");
         }
         if (balanceAfter < 0) {
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("materialId", material.getId());
-            details.put("onHand", onHand);
-            details.put("requested", -entry.quantityChange());
-            throw AppException.withDetails(ErrorCode.ERR_INVENTORY_INSUFFICIENT, details,
-                    material.getCode() + " (còn " + onHand + ", cần " + (-entry.quantityChange()) + ")");
+            throw insufficient(material, -entry.quantityChange());
         }
 
         if (balanceAfter != onHand) {
@@ -120,6 +115,26 @@ public class InventoryLedger {
                 material.getId(), entry.type(), entry.quantityChange(), balanceAfter,
                 allocation != null ? allocation.getId() : null, entry.actorUserId());
         return saved;
+    }
+
+    /**
+     * Kiểm trước khi ghi sổ (vật tư đã khóa): tồn hiện tại đủ để lấy ra {@code requested} không. Service xử lý nhiều
+     * vật tư gọi hàm này cho mọi món trước khi ghi giao dịch nào, để thiếu tồn một món thì không ghi gì.
+     */
+    public void requireAvailable(Material material, int requested) {
+        if (material.getQuantityOnHand() < requested) {
+            throw insufficient(material, requested);
+        }
+    }
+
+    private static AppException insufficient(Material material, int requested) {
+        int onHand = material.getQuantityOnHand();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("materialId", material.getId());
+        details.put("onHand", onHand);
+        details.put("requested", requested);
+        return AppException.withDetails(ErrorCode.ERR_INVENTORY_INSUFFICIENT, details,
+                material.getCode() + " (còn " + onHand + ", cần " + requested + ")");
     }
 
     private static void validate(Entry entry) {

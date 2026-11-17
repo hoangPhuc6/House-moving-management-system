@@ -89,6 +89,17 @@ public enum ErrorCode {
     ERR_SURCHARGE_INVALID_AMOUNT(8205, HttpStatus.BAD_REQUEST, "Số tiền phụ phí không hợp lệ: %s"),
     ERR_SURCHARGE_REFERENCE_INVALID(8206, HttpStatus.BAD_REQUEST, "Tham chiếu không hợp lệ: %s"),
     ERR_SURCHARGE_BOOKING_INVALID_STATUS(8207, HttpStatus.BAD_REQUEST, "Trạng thái đơn hàng không cho phép tạo phụ phí"),
+    ERR_MATERIAL_NOT_FOUND(9001, HttpStatus.NOT_FOUND, "Không tìm thấy vật tư với ID: %s"),
+    ERR_MATERIAL_CODE_DUPLICATE(9002, HttpStatus.CONFLICT, "Mã vật tư đã tồn tại trên hệ thống: %s"),
+    ERR_MATERIAL_INACTIVE(9003, HttpStatus.BAD_REQUEST, "Vật tư đang ngừng sử dụng, không thể nhập / xuất kho: %s"),
+    ERR_INVENTORY_INSUFFICIENT(9004, HttpStatus.CONFLICT, "Không đủ tồn kho cho vật tư: %s"),
+    ERR_INVENTORY_INVALID_QUANTITY(9005, HttpStatus.BAD_REQUEST, "Số lượng không hợp lệ: %s"),
+    ERR_ALLOCATION_NOT_FOUND(9006, HttpStatus.NOT_FOUND, "Không tìm thấy dòng cấp phát vật tư với ID: %s"),
+    ERR_ALLOCATION_INVALID_STATUS(9007, HttpStatus.BAD_REQUEST, "Trạng thái dòng cấp phát không cho phép thực hiện thao tác này"),
+    ERR_ALLOCATION_SCHEDULE_INVALID_STATUS(9008, HttpStatus.BAD_REQUEST, "Trạng thái chuyến không cho phép xuất / hoàn kho: %s"),
+    ERR_ALLOCATION_SETTLE_MISMATCH(9009, HttpStatus.BAD_REQUEST, "Số liệu chốt vật tư không khớp: %s"),
+    ERR_ALLOCATION_TOOL_USED(9010, HttpStatus.BAD_REQUEST, "Dụng cụ (TOOL) phải hoàn kho, không được ghi số đã dùng: %s"),
+    ERR_INVENTORY_ADJUST_NO_CHANGE(9011, HttpStatus.BAD_REQUEST, "Số kiểm kê khớp tồn hiện tại, không có chênh lệch để điều chỉnh"),
     ERR_INTERNAL_SERVER(9999, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống ngoài dự tính");
 
     private final int code;

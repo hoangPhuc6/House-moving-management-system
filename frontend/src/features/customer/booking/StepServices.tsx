@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   Info,
   Layers,
+  Package,
   ShieldCheck,
   Sparkles,
   Truck,
@@ -9,17 +10,20 @@ import {
 } from "lucide-react";
 import { Badge, Toggle, cx } from "@/components/ui";
 import { SERVICE_GROUP_LABEL } from "@/constants/catalog";
-import { VEHICLE_PRICING } from "@/constants/pricing";
+import { INCLUDED_KM, LABOR_PER_PERSON, VEHICLE_PRICING, vehicleTripPrice } from "@/constants/pricing";
 import { parseCapacityTons } from "@/services/dispatch";
 import { formatVND } from "@/services/format";
 import type { ServiceGroup, ServiceMode } from "@/types";
-import { SERVICE_MODES } from "./constants";
+import { PACKING_LABEL, SERVICE_MODES } from "./constants";
 import { CompactStepper, FieldError, SectionCard, choiceClass } from "./parts";
-import { HomeScaleSection, SurveySection } from "./StepSurvey";
+import { SurveySection } from "./StepSurvey";
 import type { BookingWizard, StepErrors } from "./useBookingWizard";
 
-/** Phụ phí (lầu, hẻm…) không cho khách tự chọn — điều phối tính sau khảo sát. */
-const ADD_ON_GROUPS: ServiceGroup[] = ["PACKING", "ASSEMBLY"];
+/**
+ * Phụ phí (lầu, hẻm…) không cho khách tự chọn — điều phối tính sau khảo sát.
+ * Vật tư đóng gói (PACKING) gộp thành một lựa chọn "Đóng gói đồ đạc" riêng.
+ */
+const ADD_ON_GROUPS: ServiceGroup[] = ["ASSEMBLY"];
 
 export const StepServices = ({
   wizard,
@@ -35,6 +39,7 @@ export const StepServices = ({
     laborService,
     vehiclePricing,
     selectVehicle,
+    distanceKm,
   } = wizard;
   const truckOnly = draft.serviceMode === "TRUCK_ONLY";
   const vehicles = activeServices.filter((s) => s.group === "TRANSPORT");
@@ -146,7 +151,7 @@ export const StepServices = ({
           icon={Truck}
           tone="brand"
           title="Chọn xe & nhân viên bốc vác"
-          subtitle="Giá xe đã gồm 10 km đầu tiên, tài xế hỗ trợ chằng buộc"
+          subtitle={distanceKm !== null ? `Giá tính theo quãng đường ${distanceKm} km của bạn, tài xế hỗ trợ chằng buộc` : "Giá xe tính theo quãng đường, tài xế hỗ trợ chằng buộc"}
           action={<Badge tone="neutral">Bắt buộc</Badge>}
         >
           <div
@@ -157,6 +162,7 @@ export const StepServices = ({
             {vehicles.map((v) => {
               const cap = parseCapacityTons(v.name);
               const price = cap !== null ? VEHICLE_PRICING[cap] : undefined;
+              const trip = price && distanceKm !== null ? vehicleTripPrice(price, distanceKm) : null;
               const sel = draft.vehicleService === v.name;
               return (
                 <button
@@ -173,16 +179,26 @@ export const StepServices = ({
                   <span className="mt-0.5 text-xs leading-relaxed text-slate-500">
                     {v.description}
                   </span>
-                  <span className="mt-2 text-sm font-bold tabular-nums text-slate-900">
-                    {formatVND(price?.perTrip ?? v.basePrice)}{" "}
-                    <span className="text-xs font-medium text-slate-500">
-                      / chuyến
+                  {!price ? (
+                    <span className="mt-2 text-sm font-bold tabular-nums text-slate-900">
+                      {formatVND(v.basePrice)}{" "}
+                      <span className="text-xs font-medium text-slate-500">/ {v.unit}</span>
                     </span>
-                  </span>
-                  {price && (
-                    <span className="text-[11px] text-slate-500 tabular-nums">
-                      +{formatVND(price.perKm)}/km vượt • bốc vác{" "}
-                      {formatVND(price.laborPerPerson)}/người
+                  ) : trip && distanceKm !== null ? (
+                    <>
+                      <span className="mt-2 text-sm font-bold tabular-nums text-slate-900">
+                        {formatVND(trip.total)}{" "}
+                        <span className="text-xs font-medium text-slate-500">/ {distanceKm} km</span>
+                      </span>
+                      <span className="text-[11px] text-slate-500 tabular-nums">
+                        {trip.extraKm > 0
+                          ? `${formatVND(price.perTrip)} (${INCLUDED_KM} km đầu) + ${trip.extraKm} km × ${formatVND(price.perKm)}`
+                          : `Đã gồm ${INCLUDED_KM} km đầu`}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="mt-2 text-[11px] text-slate-500">
+                      Nhập đủ 2 địa chỉ ở Bước 1 để xem giá theo quãng đường
                     </span>
                   )}
                 </button>
@@ -216,17 +232,15 @@ export const StepServices = ({
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
                   {vehiclePricing
-                    ? `Không bắt buộc — ${formatVND(vehiclePricing.laborPerPerson)}/người với ${vehiclePricing.label}, tối đa ${vehiclePricing.maxLabor} người.`
-                    : "Chọn loại xe trước — đơn giá bốc vác phụ thuộc loại xe."}
+                    ? `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người, ${vehiclePricing.label} chở được tối đa ${vehiclePricing.maxLabor} người.`
+                    : `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người. Chọn loại xe trước để biết số chỗ tối đa.`}
                 </p>
               </div>
               {vehiclePricing && (
                 <div className="flex items-center gap-3">
                   {draft.laborCount > 0 && (
                     <span className="text-sm font-semibold tabular-nums text-slate-900">
-                      {formatVND(
-                        vehiclePricing.laborPerPerson * draft.laborCount,
-                      )}
+                      {formatVND(LABOR_PER_PERSON * draft.laborCount)}
                     </span>
                   )}
                   <CompactStepper
@@ -242,14 +256,37 @@ export const StepServices = ({
         </SectionCard>
       )}
 
-      {!truckOnly && <HomeScaleSection wizard={wizard} errors={errors} />}
-
       <SectionCard
         icon={Sparkles}
         title="Nhóm tiện ích bổ sung chuyên sâu"
-        subtitle="Có thể chọn nhiều mục — giá tham khảo theo bảng giá hiện hành"
+        subtitle={truckOnly ? "Có thể chọn nhiều mục — giá theo bảng giá hiện hành" : "Có thể chọn nhiều mục — chi phí nằm trong báo giá sau khảo sát"}
         action={<Badge tone="neutral">Chọn nhiều</Badge>}
       >
+        {!truckOnly && (
+          <div
+            className={cx(
+              "flex items-start gap-3 rounded-xl border p-3.5 transition-colors",
+              draft.packing ? "border-brand/40 bg-orange-50/40" : "border-slate-200",
+            )}
+          >
+            <span
+              className={cx(
+                "grid size-9 shrink-0 place-items-center rounded-lg",
+                draft.packing ? "bg-brand text-white" : "bg-slate-100 text-slate-500",
+              )}
+            >
+              <Package className="size-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">{PACKING_LABEL}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                Nhân viên mang theo thùng carton, băng keo, màng PE, xốp chống sốc để đóng gói và bọc lót đồ đạc.
+                Số lượng vật tư được chốt khi khảo sát. Tắt nếu bạn tự đóng gói.
+              </p>
+            </div>
+            <Toggle checked={draft.packing} onChange={(v) => update("packing", v)} />
+          </div>
+        )}
         {ADD_ON_GROUPS.map((g) => {
           const list = activeServices.filter((s) => s.group === g);
           if (list.length === 0) return null;
@@ -278,11 +315,11 @@ export const StepServices = ({
                         <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
                           {s.description}
                         </p>
-                        <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                          <Info className="size-3" /> Từ{" "}
-                          {formatVND(s.basePrice)} / {s.unit} — chốt sau khảo
-                          sát
-                        </p>
+                        {truckOnly && (
+                          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                            <Info className="size-3" /> {formatVND(s.basePrice)} / {s.unit}
+                          </p>
+                        )}
                       </div>
                       <Toggle
                         checked={on}

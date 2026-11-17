@@ -32,13 +32,12 @@ export const weekdayOf = (iso: string): string => {
 export const shortDate = (iso: string): string => formatDateVN(iso).slice(0, 5);
 
 /**
- * Hình thức ở bước khảo sát. Ưu tiên: gói chỉ thuê xe → không khảo sát; Điều phối đã cử khảo sát trực tiếp → tận nơi;
- * còn lại theo lựa chọn của khách trong wizard (mặc định: gửi ảnh / video).
+ * Hình thức ở bước khảo sát: gói chỉ thuê xe → không khảo sát; còn lại theo lựa chọn của khách
+ * trong wizard (mặc định: gửi ảnh / video).
  */
 export const surveyStageOf = (order: Order): SurveyStageKind => {
   const d = order.bookingDetails;
   if (d?.serviceMode === 'TRUCK_ONLY') return 'TRUCK_CONFIRM';
-  if (order.onSiteSurveyRequest) return 'ON_SITE';
   if (d?.surveyPreference === 'VIDEO_CALL') return 'VIDEO_CALL';
   if (d?.surveyPreference === 'ON_SITE') return 'ON_SITE';
   return 'PHOTOS';
@@ -67,22 +66,32 @@ export const SURVEY_STAGE_META: Record<SurveyStageKind, { label: string; short: 
   PHOTOS: { label: 'Khảo sát qua ảnh / video khách gửi', short: 'Qua ảnh' },
 };
 
-/** Nhãn ngắn cho thẻ đơn ở hàng đợi Điều phối: hình thức + việc cần làm tiếp theo. */
+/**
+ * Đơn đang chờ khảo sát nằm ở bước nào của flow:
+ * ASSIGN (Điều phối phân người khảo sát) → SURVEYING (người khảo sát làm việc / chờ khách gửi ảnh)
+ * → QUOTE (có kết quả khảo sát, Điều phối lập báo giá). Gói chỉ thuê xe bỏ qua khảo sát → QUOTE ngay.
+ */
+export type SurveyPhase = 'ASSIGN' | 'SURVEYING' | 'QUOTE';
+
+export const surveyPhaseOf = (order: Order): SurveyPhase => {
+  if (surveyStageOf(order) === 'TRUCK_CONFIRM' || order.surveyReport) return 'QUOTE';
+  return order.surveyAssignment ? 'SURVEYING' : 'ASSIGN';
+};
+
+/** Nhãn ngắn cho thẻ đơn ở hàng đợi Điều phối: hình thức + việc đang chờ. */
 export const coordinatorSurveyBadge = (order: Order): { label: string; tone: Tone } => {
   const kind = surveyStageOf(order);
+  if (kind === 'TRUCK_CONFIRM') return { label: 'Thuê xe · gọi xác nhận & báo giá', tone: 'brand' };
+  const short = SURVEY_STAGE_META[kind].short;
   const when = order.bookingDetails && hasAppointment(order) ? ` ${shortDate(order.bookingDetails.surveyDate)}` : '';
-  switch (kind) {
-    case 'TRUCK_CONFIRM':
-      return { label: 'Thuê xe · cần gọi xác nhận', tone: 'brand' };
-    case 'VIDEO_CALL':
-      return { label: `Video call${when || ' · chưa hẹn'}`, tone: 'info' };
-    case 'ON_SITE':
-      return order.onSiteSurveyRequest
-        ? { label: `Tận nơi · đã cử NV${when}`, tone: 'neutral' }
-        : { label: `Tận nơi${when} · cần cử NV`, tone: 'warning' };
-    case 'PHOTOS':
-      return isMediaSubmitted(order)
-        ? { label: `Qua ảnh · đã gửi ${order.customerPhotos.length}`, tone: 'success' }
-        : { label: 'Qua ảnh · chờ khách gửi', tone: 'neutral' };
+  switch (surveyPhaseOf(order)) {
+    case 'ASSIGN':
+      return { label: `${short}${when} · cần phân người`, tone: 'warning' };
+    case 'SURVEYING':
+      return kind === 'PHOTOS' && !isMediaSubmitted(order)
+        ? { label: 'Qua ảnh · chờ khách gửi', tone: 'neutral' }
+        : { label: `${short}${when} · đang khảo sát`, tone: 'info' };
+    case 'QUOTE':
+      return { label: `${short} · có kết quả khảo sát`, tone: 'success' };
   }
 };

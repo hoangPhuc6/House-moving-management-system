@@ -8,7 +8,6 @@ import {
   Store,
   Truck,
 } from 'lucide-react';
-import type { HouseType } from '@/types';
 
 export const LINKS = [
   { href: '#features', label: 'Dịch vụ' },
@@ -41,24 +40,6 @@ export const FOOTER_COLS: { title: string; links: string[] }[] = [
   { title: 'Công ty', links: ['Về chúng tôi', 'Tuyển dụng', 'Đối tác vận tải', 'Tin tức'] },
   { title: 'Hỗ trợ', links: ['Trung tâm trợ giúp', 'Chính sách hủy đơn', 'Chính sách bảo hiểm', 'Điều khoản dịch vụ'] },
 ];
-
-// Toạ độ giả lập (km) để tính quãng đường ước tính giữa các khu vực.
-export const AREAS: { id: string; label: string; x: number; y: number }[] = [
-  { id: "q1", label: "Quận 1", x: 0, y: 0 },
-  { id: "q3", label: "Quận 3", x: -2, y: 1.5 },
-  { id: "q7", label: "Quận 7", x: 1, y: -7 },
-  { id: "bt", label: "Bình Thạnh", x: 2, y: 3 },
-  { id: "td", label: "TP. Thủ Đức", x: 9, y: 6 },
-  { id: "gv", label: "Gò Vấp", x: -2, y: 7 },
-  { id: "tb", label: "Tân Bình", x: -5, y: 3 },
-  { id: "nb", label: "Nhà Bè", x: 2, y: -12 },
-];
-
-export const HOUSE_SURCHARGE: Record<HouseType, number> = {
-  GROUND_FLOOR: 0,
-  APARTMENT: 250_000,
-  DEEP_ALLEY: 400_000,
-};
 
 export const STEP_ICONS: LucideIcon[] = [
   Calendar,

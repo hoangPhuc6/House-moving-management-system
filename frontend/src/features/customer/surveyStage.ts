@@ -1,9 +1,9 @@
 import {
   hasAppointment,
   isMediaSubmitted,
+  surveyPhaseOf,
   shortDate,
   surveyStageOf,
-  weekdayOf,
 } from '@/features/order/surveyStage';
 import { formatTime } from '@/services/format';
 import type { Order } from '@/types';
@@ -12,22 +12,24 @@ export * from '@/features/order/surveyStage';
 
 /** Lời nhắn ở phần đầu trang khi đơn đang ở bước 2 (chỉ áp dụng đơn tạo qua wizard). */
 export const surveyHeroCopy = (order: Order): { title: string; desc: string } => {
-  const d = order.bookingDetails;
-  const when = d && hasAppointment(order) ? ` · ${weekdayOf(d.surveyDate)} ${shortDate(d.surveyDate)}` : '';
-  switch (surveyStageOf(order)) {
-    case 'TRUCK_CONFIRM':
-      return { title: 'Đang xác nhận xe', desc: 'Điều phối viên sẽ gọi xác nhận loại xe, nhân viên bốc vác và gửi báo giá cho bạn.' };
-    case 'VIDEO_CALL':
-      return { title: `Chờ khảo sát qua video call${when}`, desc: 'Chuyên viên sẽ gọi Zalo / Messenger đúng khung giờ bạn hẹn để xem đồ đạc.' };
-    case 'ON_SITE':
-      return order.onSiteSurveyRequest && !when
-        ? { title: 'Sắp xếp khảo sát trực tiếp', desc: 'Nhân viên vận chuyển sẽ liên hệ hẹn giờ đến khảo sát tại nhà bạn.' }
-        : { title: `Chờ khảo sát tận nơi${when}`, desc: 'Chuyên viên sẽ đến đo đạc, kiểm tra lối đi và tư vấn phương án chuyển dọn.' };
-    case 'PHOTOS':
-      return isMediaSubmitted(order)
-        ? { title: 'Chuyên viên đang lập báo giá', desc: 'Báo giá được lập dựa trên ảnh / video bạn đã gửi.' }
-        : { title: 'Chờ bạn gửi ảnh / video', desc: 'Tải ảnh / video đồ đạc và lối đi để chuyên viên lập báo giá.' };
+  // Ngày giờ hẹn khảo sát chỉ hiện ở thẻ khảo sát bên dưới — tiêu đề không lặp lại.
+  const kind = surveyStageOf(order);
+  if (kind === 'TRUCK_CONFIRM') {
+    return { title: 'Đang xác nhận xe', desc: 'Điều phối viên sẽ gọi xác nhận loại xe, nhân viên bốc vác và gửi báo giá cho bạn.' };
   }
+  const phase = surveyPhaseOf(order);
+  if (phase === 'QUOTE') return { title: 'Đang lập báo giá', desc: 'Đã khảo sát xong. Điều phối viên đang lập báo giá chi tiết cho bạn.' };
+  if (kind === 'PHOTOS') {
+    return isMediaSubmitted(order)
+      ? { title: 'Chuyên viên đang kiểm tra ảnh', desc: 'Chuyên viên khảo sát xem ảnh / video bạn gửi, sau đó MoveFlow gửi báo giá.' }
+      : { title: 'Chờ bạn gửi ảnh / video', desc: 'Tải ảnh / video đồ đạc và lối đi để chuyên viên khảo sát.' };
+  }
+  if (phase === 'ASSIGN') {
+    return { title: 'Đang sắp xếp chuyên viên khảo sát', desc: 'MoveFlow đang phân chuyên viên khảo sát theo lịch bạn hẹn.' };
+  }
+  return kind === 'VIDEO_CALL'
+    ? { title: 'Chờ khảo sát qua video call', desc: 'Chuyên viên sẽ gọi Zalo / Messenger đúng khung giờ bạn hẹn để xem đồ đạc.' }
+    : { title: 'Chờ khảo sát tận nơi', desc: 'Chuyên viên sẽ đến đo đạc, kiểm tra lối đi và tư vấn phương án chuyển dọn.' };
 };
 
 /** Tiêu đề & nhãn phụ cho từng bước trên thanh tiến độ của khách (khớp CUSTOMER_PROCESS_STEPS). */

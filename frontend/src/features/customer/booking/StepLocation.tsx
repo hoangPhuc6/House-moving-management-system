@@ -1,10 +1,11 @@
 import { type ReactNode, useState } from 'react';
 import { ArrowDown, Bookmark, CalendarDays, CheckCircle2, CircleDot, Home, LocateFixed, MapPin, Plus, Route } from 'lucide-react';
 import { Badge, Field, Input, Select, cx } from '@/components/ui';
-import { TIME_SLOTS } from '@/constants/resources';
+import { isValidStartTime } from '@/constants/resources';
+import { StartTimePicker } from '@/features/customer/components/StartTimePicker';
 import { formatDateVN } from '@/services/format';
 import type { AddressDetail } from '@/types';
-import { ADMIN_AREAS, FLOOR_OPTIONS, PROPERTY_TYPES, SAVED_ADDRESSES } from './constants';
+import { ADMIN_AREAS, PROPERTY_TYPES, SAVED_ADDRESSES, floorOptionsFor, needsFloor } from './constants';
 import { SectionCard } from './parts';
 import { type BookingWizard, type StepErrors, minMoveDate } from './useBookingWizard';
 
@@ -36,6 +37,7 @@ const AddressSection = ({
 }) => {
   const isFrom = side === 'from';
   const wards = ADMIN_AREAS[value.province] ?? [];
+  const askFloor = needsFloor(value.propertyType);
   const err = (k: string) => errors[`${side}.${k}`] ?? null;
   const isSaved = (a: (typeof SAVED_ADDRESSES)[number]['address']) => a.street === value.street && a.ward === value.ward && a.province === value.province;
 
@@ -113,7 +115,7 @@ const AddressSection = ({
           />
         </div>
       </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={cx('grid gap-3', askFloor && 'sm:grid-cols-2')}>
         <Field label={isFrom ? 'Loại bất động sản & Lối đi' : 'Loại bất động sản'}>
           <Select value={value.propertyType} onChange={(e) => onChange({ propertyType: e.target.value })}>
             {PROPERTY_TYPES.map((p) => (
@@ -121,13 +123,15 @@ const AddressSection = ({
             ))}
           </Select>
         </Field>
-        <Field label={isFrom ? 'Tầng lầu bốc dỡ' : 'Tầng lầu bàn giao'}>
-          <Select value={value.floor} onChange={(e) => onChange({ floor: e.target.value })}>
-            {FLOOR_OPTIONS.map((f) => (
-              <option key={f}>{f}</option>
-            ))}
-          </Select>
-        </Field>
+        {askFloor && (
+          <Field label={isFrom ? 'Tầng lầu bốc dỡ' : 'Tầng lầu bàn giao'}>
+            <Select value={value.floor} onChange={(e) => onChange({ floor: e.target.value })}>
+              {floorOptionsFor(value.propertyType).map((f) => (
+                <option key={f}>{f}</option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
       <OptionalNote label={isFrom ? 'Thêm ghi chú về hẻm, lối xe vào' : 'Thêm ghi chú ban quản lý & hầm đỗ'} filled={Boolean(value.note)}>
         <Field label={isFrom ? 'Ghi chú vận chuyển điểm đi' : 'Ghi chú ban quản lý & hầm đỗ'}>
@@ -180,7 +184,7 @@ export const StepLocation = ({ wizard, errors }: { wizard: BookingWizard; errors
 
       <AddressSection side="to" value={draft.to} errors={errors} onChange={(p) => updateAddress('to', p)} />
 
-      <SectionCard icon={CalendarDays} title="Thời gian vận chuyển dự kiến" subtitle="Chọn ngày và khung giờ thuận tiện để MoveFlow sắp xếp đội xe">
+      <SectionCard icon={CalendarDays} title="Thời gian vận chuyển dự kiến" subtitle="Chọn ngày và giờ bắt đầu thuận tiện để MoveFlow sắp xếp đội xe">
         <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr]">
           <Field label="Ngày thực hiện dọn nhà *" error={errors.scheduledDate ?? null}>
             <Input
@@ -193,31 +197,13 @@ export const StepLocation = ({ wizard, errors }: { wizard: BookingWizard; errors
             />
           </Field>
           <div>
-            <p className="mb-1.5 text-[13px] font-semibold text-slate-700">Khung giờ ưu tiên *</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {TIME_SLOTS.map((s) => {
-                const sel = draft.timeSlot === s.label;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    aria-pressed={sel}
-                    onClick={() => update('timeSlot', s.label)}
-                    className={cx(
-                      'h-11 rounded-xl border px-3 text-sm font-semibold tabular-nums transition-colors',
-                      sel ? 'border-brand bg-orange-50/60 text-slate-900 ring-4 ring-brand/10' : 'border-slate-200 text-slate-700 hover:border-slate-300',
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
+            <p className="mb-1.5 text-[13px] font-semibold text-slate-700">Giờ xe bắt đầu đi *</p>
+            <StartTimePicker value={draft.timeSlot} onChange={(v) => update('timeSlot', v)} error={errors.timeSlot ?? null} />
           </div>
         </div>
-        {draft.scheduledDate && !errors.scheduledDate && (
+        {draft.scheduledDate && !errors.scheduledDate && isValidStartTime(draft.timeSlot) && (
           <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-            <CheckCircle2 className="size-4 shrink-0" /> Lịch dự kiến: {formatDateVN(draft.scheduledDate)}, khung {draft.timeSlot}. Điều phối viên sẽ xác nhận xe & nhân sự.
+            <CheckCircle2 className="size-4 shrink-0" /> Lịch dự kiến: {formatDateVN(draft.scheduledDate)}, xe bắt đầu lúc {draft.timeSlot}. Điều phối viên sẽ xác nhận xe & nhân sự.
           </p>
         )}
         <label className="flex items-start gap-2.5 text-sm text-slate-700">

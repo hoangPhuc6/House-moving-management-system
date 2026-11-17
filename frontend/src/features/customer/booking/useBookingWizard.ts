@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { CUSTOMER } from '@/features/customer/constants';
 import { VEHICLE_PRICING } from '@/constants/pricing';
-import { TIME_SLOTS } from '@/constants/resources';
+import { DEFAULT_START_TIME, LAST_START_TIME, OPEN_TIME, isValidStartTime, toStartTime } from '@/constants/resources';
 import { parseCapacityTons } from '@/services/dispatch';
 import { buildReferenceQuote, estimateDistanceKm } from '@/services/referenceQuote';
 import { useCatalog } from '@/services/store/CatalogStore';
@@ -9,11 +9,12 @@ import type { AddressDetail, BookingDetails, BookingItem, HouseType, NewOrderInp
 import {
   DRAFT_STORAGE_KEY,
   EMAIL_REGEX,
-  HOME_SCALES,
   LABOR_SERVICE_KEYWORD,
+  PACKING_LABEL,
   PHONE_REGEX,
   SURVEY_TIME_SLOTS,
   emptyAddress,
+  fitFloor,
   formatAddress,
   houseTypeOf,
   isAddressComplete,
@@ -24,6 +25,7 @@ export interface WizardDraft {
   from: AddressDetail;
   to: AddressDetail;
   scheduledDate: string;
+  /** Giờ xe bắt đầu đi (HH:MM). */
   timeSlot: string;
   flexibleTime: boolean;
   scheduleNote: string;
@@ -32,9 +34,10 @@ export interface WizardDraft {
   vehicleService: string;
   /** Gói chỉ thuê xe: số nhân viên bốc vác thuê thêm (0 = tự khiêng vác). */
   laborCount: number;
+  /** Gói trọn gói: có cần MoveFlow đóng gói đồ đạc không (vật tư carton, băng keo, màng PE… chốt khi khảo sát). */
+  packing: boolean;
+  /** Tiện ích bổ sung khác (tháo lắp…) — không gồm vật tư đóng gói. */
   addOns: string[];
-  /** Gói trọn gói: quy mô nhà — preset của quy mô được dùng làm danh mục ước lượng cho giá tham khảo. */
-  homeScale: string;
   surveyPreference: SurveyPreference;
   /** Ngày hẹn khảo sát (Video Call / tận nơi). */
   surveyDate: string;
@@ -68,14 +71,14 @@ const defaultDraft = (): WizardDraft => {
     from: emptyAddress(),
     to: emptyAddress(),
     scheduledDate: toISODate(d),
-    timeSlot: TIME_SLOTS[0]!.label,
+    timeSlot: DEFAULT_START_TIME,
     flexibleTime: false,
     scheduleNote: '',
     serviceMode: 'FULL_PACKAGE',
     vehicleService: '',
     laborCount: 0,
+    packing: true,
     addOns: [],
-    homeScale: '',
     surveyPreference: 'VIDEO_CALL',
     surveyDate: minMoveDate(),
     surveyContactSlot: SURVEY_TIME_SLOTS[1]!,
@@ -91,7 +94,9 @@ const readDraft = (): WizardDraft | null => {
   try {
     const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
-    return { ...defaultDraft(), ...(JSON.parse(raw) as Partial<WizardDraft>), agreed: false };
+    const draft: WizardDraft = { ...defaultDraft(), ...(JSON.parse(raw) as Partial<WizardDraft>), agreed: false };
+    const fit = (a: AddressDetail): AddressDetail => ({ ...a, floor: fitFloor(a.propertyType, a.floor) });
+    return { ...draft, from: fit(draft.from), to: fit(draft.to), timeSlot: toStartTime(draft.timeSlot) };
   } catch {
     return null;
   }
@@ -113,10 +118,10 @@ export const validateStep = (draft: WizardDraft, step: number): StepErrors => {
     }
     if (!draft.scheduledDate) e.scheduledDate = 'Chọn ngày chuyển nhà';
     else if (draft.scheduledDate < minMoveDate()) e.scheduledDate = 'Ngày chuyển phải từ ngày mai trở đi';
+    if (!isValidStartTime(draft.timeSlot)) e.timeSlot = `Chọn giờ bắt đầu trong khoảng ${OPEN_TIME} – ${LAST_START_TIME}`;
   }
   if (step === 1 && draft.serviceMode === 'TRUCK_ONLY' && !draft.vehicleService) e.vehicleService = 'Chọn loại xe cần thuê';
   if (step === 1 && draft.serviceMode === 'FULL_PACKAGE') {
-    if (!HOME_SCALES.some((s) => s.label === draft.homeScale)) e.homeScale = 'Chọn quy mô nhà để ước lượng khối lượng';
     if (needsSurveyAppointment(draft.surveyPreference)) {
       if (!draft.surveyDate) e.surveyDate = 'Chọn ngày khảo sát';
       else if (draft.surveyDate < todayISO()) e.surveyDate = 'Ngày khảo sát không được ở quá khứ';
@@ -140,7 +145,12 @@ export const useBookingWizard = () => {
 
   const update = useCallback(<K extends keyof WizardDraft>(key: K, value: WizardDraft[K]) => setDraft((d) => ({ ...d, [key]: value })), []);
   const updateAddress = useCallback(
-    (side: 'from' | 'to', patch: Partial<AddressDetail>) => setDraft((d) => ({ ...d, [side]: { ...d[side], ...patch } })),
+    (side: 'from' | 'to', patch: Partial<AddressDetail>) =>
+      setDraft((d) => {
+        const next = { ...d[side], ...patch };
+        // Đổi loại bất động sản → tầng phải thuộc danh sách tầng của loại mới (VD: nhà mặt tiền chỉ có tầng trệt).
+        return { ...d, [side]: { ...next, floor: fitFloor(next.propertyType, next.floor) } };
+      }),
     [],
   );
 
@@ -148,8 +158,6 @@ export const useBookingWizard = () => {
 
   /** Danh mục đồ không thu thập trong wizard — chuyên viên chốt khi khảo sát. */
   const items = useMemo<BookingItem[]>(() => [], []);
-  /** Gói trọn gói: xe & số bốc xếp ước lượng theo quy mô nhà. */
-  const homeScale = draft.serviceMode === 'FULL_PACKAGE' ? (HOME_SCALES.find((s) => s.label === draft.homeScale) ?? null) : null;
 
   const houseType = useMemo<HouseType>(() => {
     const a = HOUSE_SEVERITY.indexOf(houseTypeOf(draft.from.propertyType));
@@ -162,14 +170,27 @@ export const useBookingWizard = () => {
     [activeServices],
   );
 
+  /** Vật tư đóng gói trong danh mục — khách chỉ chọn "có / không", điều phối chốt số lượng từng loại khi khảo sát. */
+  const packingServices = useMemo(() => activeServices.filter((s) => s.group === 'PACKING').map((s) => s.name), [activeServices]);
+  /** Gói chỉ thuê xe dành cho khách đã tự đóng gói — không có dịch vụ đóng gói. */
+  const packingRequested = draft.serviceMode === 'FULL_PACKAGE' && draft.packing && packingServices.length > 0;
+
   const requestedServices = useMemo(() => {
     const names: string[] = [];
     const truckOnly = draft.serviceMode === 'TRUCK_ONLY';
     if (truckOnly && draft.vehicleService) names.push(draft.vehicleService);
     if (laborService && (!truckOnly || draft.laborCount > 0)) names.push(laborService.name);
-    draft.addOns.filter((n) => activeServices.some((s) => s.name === n)).forEach((n) => names.push(n));
+    if (packingRequested) names.push(...packingServices);
+    draft.addOns.filter((n) => !packingServices.includes(n) && activeServices.some((s) => s.name === n)).forEach((n) => names.push(n));
     return names;
-  }, [draft.vehicleService, draft.serviceMode, draft.laborCount, draft.addOns, activeServices, laborService]);
+  }, [draft.vehicleService, draft.serviceMode, draft.laborCount, draft.addOns, activeServices, laborService, packingRequested, packingServices]);
+
+  /** Dịch vụ hiển thị cho khách — các vật tư đóng gói gộp thành một mục "Đóng gói đồ đạc". */
+  const displayServices = useMemo(() => {
+    const names = requestedServices.filter((n) => !packingServices.includes(n));
+    if (packingRequested) names.push(PACKING_LABEL);
+    return names;
+  }, [requestedServices, packingServices, packingRequested]);
 
   /** Bảng giá của xe khách chọn (gói chỉ thuê xe) — quyết định đơn giá & số bốc vác tối đa. */
   const vehiclePricing = useMemo(() => {
@@ -188,8 +209,11 @@ export const useBookingWizard = () => {
   const toAddress = formatAddress(draft.to);
   const routeReady = isAddressComplete(draft.from) && isAddressComplete(draft.to);
   const distanceKm = routeReady ? estimateDistanceKm(fromAddress, toAddress) : null;
-  /** Đủ dữ liệu để hiện giá tạm tính: có lộ trình + (trọn gói: quy mô nhà | chỉ thuê xe: loại xe). */
-  const estimateReady = routeReady && (draft.serviceMode === 'FULL_PACKAGE' ? Boolean(homeScale) : Boolean(draft.vehicleService));
+  /**
+   * Chỉ hiện giá tạm tính cho gói chỉ thuê xe (khách tự chọn xe, giá gần như giá chốt).
+   * Gói trọn gói phụ thuộc khảo sát — không hiện số tạm tính để tránh khách bỏ đơn vì con số chưa chính xác.
+   */
+  const estimateReady = routeReady && draft.serviceMode === 'TRUCK_ONLY' && Boolean(draft.vehicleService);
 
   const referenceQuote = useMemo(
     () =>
@@ -200,12 +224,11 @@ export const useBookingWizard = () => {
           houseType,
           items,
           requestedServices,
-          laborQuantity: draft.serviceMode === 'TRUCK_ONLY' ? draft.laborCount : homeScale?.labor,
-          vehicleTons: homeScale?.vehicleTons,
+          laborQuantity: draft.serviceMode === 'TRUCK_ONLY' ? draft.laborCount : undefined,
         },
         catalog.services,
       ),
-    [fromAddress, toAddress, houseType, items, requestedServices, draft.serviceMode, draft.laborCount, homeScale, catalog.services],
+    [fromAddress, toAddress, houseType, items, requestedServices, draft.serviceMode, draft.laborCount, catalog.services],
   );
 
   const saveDraft = (): boolean => {
@@ -237,7 +260,6 @@ export const useBookingWizard = () => {
       from: draft.from,
       to: draft.to,
       serviceMode: draft.serviceMode,
-      homeScale: fullPackage ? draft.homeScale : '',
       surveyPreference: fullPackage ? draft.surveyPreference : null,
       laborCount: fullPackage ? 0 : draft.laborCount,
       surveyDate: appointment ? draft.surveyDate : '',
@@ -274,9 +296,9 @@ export const useBookingWizard = () => {
     vehiclePricing,
     selectVehicle,
     items,
-    homeScale,
     houseType,
     requestedServices,
+    displayServices,
     fromAddress,
     toAddress,
     routeReady,

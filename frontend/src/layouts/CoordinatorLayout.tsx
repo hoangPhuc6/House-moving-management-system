@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarRange, KanbanSquare, ReceiptText, Siren } from 'lucide-react';
 import { Alert, Button } from '@/components/ui';
 import type { CoordTab, CoordinatorOutletContext } from '@/features/coordinator/types';
+import { surveyPhaseOf } from '@/features/order/surveyStage';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
 import { useActiveOrder, useApp } from '@/services/store/AppStore';
@@ -21,15 +22,18 @@ export const CoordinatorLayout = () => {
   const nav: NavItem[] = [
     {
       to: ROUTES.coordinator.queue,
-      label: 'Hàng đợi & Kanban',
+      label: 'Việc cần làm',
       icon: KanbanSquare,
-      badge: state.orders.filter((o) => o.status === 'SURVEYED_PENDING_CONFIRM').length || undefined,
     },
     {
       to: ROUTES.coordinator.editor,
-      label: 'Báo giá & Audit Log',
+      label: 'Khảo sát & Báo giá',
       icon: ReceiptText,
-      badge: state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && !o.onSiteSurveyRequest).length || undefined,
+      // Đơn đang chờ chính Điều phối: phân người khảo sát, lập báo giá, hoặc phản hồi thương lượng.
+      badge:
+        state.orders.filter(
+          (o) => (o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) !== 'SURVEYING') || (o.status === 'SURVEYED_PENDING_CONFIRM' && o.negotiation),
+        ).length || undefined,
     },
     { to: ROUTES.coordinator.dispatch, label: 'Điều phối nguồn lực', icon: CalendarRange },
     { to: ROUTES.coordinator.incident, label: 'Sự cố khẩn cấp', icon: Siren, badge: incidents || undefined, badgeTone: 'danger' },

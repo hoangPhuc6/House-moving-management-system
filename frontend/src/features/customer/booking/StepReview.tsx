@@ -84,8 +84,7 @@ export const StepReview = ({
   const {
     draft,
     update,
-    homeScale,
-    requestedServices,
+    displayServices: requestedServices,
     fromAddress,
     toAddress,
     distanceKm,
@@ -111,7 +110,7 @@ export const StepReview = ({
               <p className="text-xs text-slate-500">Thời gian vận chuyển</p>
               <p className="text-sm font-semibold text-slate-900">
                 {weekdayOf(draft.scheduledDate)},{" "}
-                {formatDateVN(draft.scheduledDate)} ({draft.timeSlot})
+                {formatDateVN(draft.scheduledDate)}, bắt đầu lúc {draft.timeSlot}
               </p>
             </div>
           </div>
@@ -194,32 +193,10 @@ export const StepReview = ({
       {!truckOnly && (
         <SectionCard
           icon={ClipboardCheck}
-          title="Quy mô nhà & Hình thức khảo sát"
+          title="Hình thức khảo sát"
           subtitle="Danh mục đồ chi tiết được chốt khi khảo sát"
           action={<EditLink onClick={() => onEdit(1)} />}
         >
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              {
-                k: "Quy mô",
-                v: homeScale ? `${homeScale.label} (${homeScale.hint})` : "Chưa chọn",
-              },
-              {
-                k: "Ước lượng ban đầu",
-                v: homeScale ? `Xe ${homeScale.vehicleTons} tấn · ${homeScale.labor} người` : "—",
-              },
-            ].map((x) => (
-              <div
-                key={x.k}
-                className="rounded-xl border border-slate-200 px-3 py-2.5 text-center"
-              >
-                <p className="text-[11px] font-medium text-slate-500">{x.k}</p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-900 tabular-nums">
-                  {x.v}
-                </p>
-              </div>
-            ))}
-          </div>
           <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-slate-700 ring-1 ring-slate-200">
               <survey.icon className="size-[18px]" />

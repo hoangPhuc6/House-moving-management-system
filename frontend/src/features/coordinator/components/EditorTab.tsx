@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { History, Lock, ReceiptText, Save, Undo2 } from 'lucide-react';
+import { History, Lock, MessageSquareWarning, ReceiptText, Send, Undo2 } from 'lucide-react';
 import {
+  Alert,
   Button,
   Card,
   CardHeader,
@@ -73,8 +74,8 @@ export const EditorTab = ({
     <>
       <PageHeader
         eyebrow="Báo giá"
-        title="Chỉnh sửa báo giá"
-        subtitle="Mọi chỉnh sửa được ghi nhật ký và cập nhật ngay cho khách hàng."
+        title="Báo giá"
+        subtitle="Lập báo giá từ kết quả khảo sát, xử lý thương lượng của khách. Mọi thay đổi được ghi nhật ký."
         actions={<OrderPicker value={order.id} onChange={onSelect} />}
       />
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -89,6 +90,19 @@ export const EditorTab = ({
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {order.negotiation && editable && (
+                <Alert
+                  tone="warning"
+                  icon={MessageSquareWarning}
+                  title="Khách yêu cầu thương lượng"
+                  className="mx-6 mb-3"
+                >
+                  <span className="block whitespace-pre-line">“{order.negotiation.message}”</span>
+                  <span className="mt-1 block text-xs opacity-80">
+                    Gửi lúc <span className="tabular-nums">{formatTime(order.negotiation.requestedAt)}</span> · Bộ đếm 24h đang tạm dừng — sửa báo giá bên dưới rồi gửi lại cho khách.
+                  </span>
+                </Alert>
+              )}
               {!editable && (
                 <div className="mx-6 mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   <Lock className="size-4 shrink-0" />
@@ -146,6 +160,8 @@ export const EditorTab = ({
               </table>
             </div>
           )}
+          {order.status !== "NEW_PENDING_SURVEY" && order.quoteItems.length > 0 && (
+          <>
           <div className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-100 p-6">
             <Field
               label="Giảm giá toàn đơn (%)"
@@ -195,7 +211,7 @@ export const EditorTab = ({
                 disabled={!editable}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="VD: Khách thân thiết, áp dụng chiết khấu"
+                placeholder={order.negotiation ? "VD: Bớt 1 nhân viên theo yêu cầu khách" : "VD: Khách thân thiết, áp dụng chiết khấu"}
               />
             </Field>
             <div className="flex gap-2">
@@ -211,23 +227,29 @@ export const EditorTab = ({
                 Hoàn tác
               </Button>
               <Button
-                icon={Save}
-                disabled={!dirty || !editable}
+                icon={Send}
+                disabled={!editable || (!dirty && !order.negotiation)}
                 onClick={() => {
-                  dispatch({
-                    type: "UPDATE_QUOTE_ITEMS",
-                    orderId: order.id,
-                    patches: draft,
-                    discountPercent: discountPct,
-                    note,
-                  });
+                  // Lưu thay đổi (nếu có) rồi gửi lại cho khách — bộ đếm 24h chạy lại từ đầu.
+                  if (dirty) {
+                    dispatch({
+                      type: "UPDATE_QUOTE_ITEMS",
+                      orderId: order.id,
+                      patches: draft,
+                      discountPercent: discountPct,
+                      note,
+                    });
+                  }
+                  dispatch({ type: "RESEND_QUOTE", orderId: order.id, note: dirty ? "" : note });
                   setNote("");
                 }}
               >
-                Lưu & ghi Audit Log
+                {dirty ? "Lưu & gửi lại báo giá" : "Giữ giá & gửi lại"}
               </Button>
             </div>
           </div>
+          </>
+          )}
         </Card>
 
         <div className="space-y-4">

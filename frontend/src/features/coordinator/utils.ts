@@ -1,5 +1,5 @@
 import { MIN_SURVEY_INPUT, VEHICLE_PRICING } from '@/constants/pricing';
-import { FLOOR_OPTIONS, HOME_SCALES, houseTypeOf } from '@/features/customer/booking/constants';
+import { FLOOR_OPTIONS, houseTypeOf } from '@/features/customer/booking/constants';
 import { parseCapacityTons } from '@/services/dispatch';
 import type { AddressDetail, Order, SurveyInput } from '@/types';
 
@@ -23,6 +23,8 @@ const alleyMeters = (a: AddressDetail): number => (houseTypeOf(a.propertyType) =
  * (quãng đường, xe, bốc vác, lầu, hẻm, thùng carton) — Điều phối chỉ cần chỉnh lại.
  */
 export const surveyInputFromOrder = (order: Order): SurveyInput => {
+  // Đã có kết quả khảo sát → dùng đúng đề xuất của người khảo sát.
+  if (order.surveyReport) return { ...order.surveyReport.proposal };
   const d = order.bookingDetails;
   const ref = order.referenceQuote;
   const input: SurveyInput = { ...MIN_SURVEY_INPUT };
@@ -35,15 +37,8 @@ export const surveyInputFromOrder = (order: Order): SurveyInput => {
   if (cartons) input.cartons = cartons.quantity;
 
   if (!d) return input;
-  if (d.serviceMode === 'TRUCK_ONLY') {
-    input.workers = d.laborCount;
-  } else {
-    const scale = HOME_SCALES.find((s) => s.label === d.homeScale);
-    if (scale) {
-      input.vehicleCapacity = scale.vehicleTons;
-      input.workers = scale.labor;
-    }
-  }
+  // Gói trọn gói: xe & nhân sự do chuyên viên chốt khi khảo sát — để mức thấp nhất cho điều phối tự tăng.
+  if (d.serviceMode === 'TRUCK_ONLY') input.workers = d.laborCount;
   input.floors = stairFloors(d.from) + stairFloors(d.to);
   input.alleyMeters = alleyMeters(d.from) + alleyMeters(d.to);
   return input;

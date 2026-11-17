@@ -399,7 +399,7 @@ export const DispatchTab = ({
             label="Trạng thái"
             value={<StatusBadge status={order.status} />}
           />
-          <KeyValue label="Khung giờ" value={order.timeSlot} />
+          <KeyValue label="Giờ bắt đầu" value={order.timeSlot} />
           <KeyValue
             label="Xe"
             value={

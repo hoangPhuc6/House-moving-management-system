@@ -1,4 +1,4 @@
-import { INCLUDED_KM, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES } from '@/constants/pricing';
+import { INCLUDED_KM, LABOR_PER_PERSON, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES, vehicleTripPrice } from '@/constants/pricing';
 import { formatVND, uid } from '@/services/format';
 import type { Order, OrderTotals, QuoteItem, SettlementLockState, SurveyInput } from '@/types';
 
@@ -67,15 +67,15 @@ export const SURVEY_UNIT_PRICES = {
 export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
   const v = VEHICLE_PRICING[s.vehicleCapacity] ?? VEHICLE_PRICING[2]!;
   const p = SURVEY_UNIT_PRICES;
-  const extraKm = Math.max(0, Math.ceil(s.distanceKm - INCLUDED_KM));
+  const { extraKm, total: tripPrice } = vehicleTripPrice(v, s.distanceKm);
   const vehicleNote =
     extraKm > 0
       ? `Giá chuyến ${formatVND(v.perTrip)} (gồm ${INCLUDED_KM} km) + ${extraKm} km vượt × ${formatVND(v.perKm)} — quãng đường ${s.distanceKm} km`
       : `Giá chuyến ${formatVND(v.perTrip)}, đã gồm ${INCLUDED_KM} km đầu (quãng đường ${s.distanceKm} km)`;
   const segments = Math.ceil(s.alleyMeters / p.alleySegmentMeters);
   const items: QuoteItem[] = [
-    { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: v.perTrip + v.perKm * extraKm, quantity: s.vehicleQty, note: vehicleNote },
-    { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: v.laborPerPerson, quantity: s.workers, note: `Đơn giá bốc xếp đi theo ${v.label}` },
+    { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: tripPrice, quantity: s.vehicleQty, note: vehicleNote },
+    { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: LABOR_PER_PERSON, quantity: s.workers, note: 'Đơn giá bốc xếp cố định / người' },
     { id: uid('qi'), name: 'Thùng carton 60x40x40', category: 'MATERIAL', unit: 'thùng', unitPrice: p.carton, quantity: s.cartons, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Băng keo đóng gói', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.tape, quantity: s.tapeRolls, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Màng PE bọc đồ', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.peFilm, quantity: s.peFilmRolls, note: 'Vật tư — đơn giá cố định' },

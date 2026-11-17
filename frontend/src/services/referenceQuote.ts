@@ -1,8 +1,10 @@
 import {
   DEPOSIT_AMOUNT,
   INCLUDED_KM,
+  LABOR_PER_PERSON,
   REFERENCE_DISCLAIMER,
   VEHICLE_PRICING,
+  vehicleTripPrice,
 } from '@/constants/pricing';
 import { parseCapacityTons } from '@/services/dispatch';
 import type {
@@ -40,9 +42,8 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
 
   // Vận chuyển: giá xe đã gồm INCLUDED_KM đầu tiên, phần vượt tính theo cước km của xe.
   line(vehicle.label, 1, vehicle.perTrip, `Đã gồm ${INCLUDED_KM} km đầu tiên`, false);
-  const chargeableExtraKm = Math.max(0, Math.ceil(distanceKm - INCLUDED_KM));
+  const { extraKm: chargeableExtraKm, total: transportFee } = vehicleTripPrice(vehicle, distanceKm);
   if (chargeableExtraKm > 0) line('Cước km vượt', chargeableExtraKm, vehicle.perKm, `Quãng đường ước tính ${distanceKm} km, vượt ${chargeableExtraKm} km so với ${INCLUDED_KM} km đã gồm`, true);
-  const transportFee = vehicle.perTrip + chargeableExtraKm * vehicle.perKm;
 
   // Dịch vụ khách chọn (trừ xe — đã tính ở trên).
   const totalItems = input.items.reduce((s, i) => s + i.quantity, 0);
@@ -55,11 +56,11 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
       let note: string | null = null;
       if (s.group === 'LABOR' && input.laborQuantity !== undefined) {
         qty = input.laborQuantity;
-        unitPrice = vehicle.laborPerPerson;
-        note = input.vehicleTons ? 'Ước lượng theo quy mô nhà, chốt sau khảo sát' : `Số người bạn chọn, đơn giá theo ${vehicle.label}`;
+        unitPrice = LABOR_PER_PERSON;
+        note = input.vehicleTons ? 'Ước lượng theo quy mô nhà, chốt sau khảo sát' : 'Số người bạn chọn';
       } else if (s.group === 'LABOR') {
         qty = Math.max(2, Math.ceil(totalItems / 4));
-        unitPrice = vehicle.laborPerPerson;
+        unitPrice = LABOR_PER_PERSON;
         note = 'Số lượng ước tính theo khối lượng khai báo';
       } else if (/carton/i.test(s.name)) {
         qty = Math.max(1, input.items.filter((i) => /carton|thùng/i.test(i.name)).reduce((sum, i) => sum + i.quantity, 0) || 10);

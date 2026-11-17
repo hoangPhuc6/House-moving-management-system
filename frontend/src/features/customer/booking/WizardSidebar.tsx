@@ -1,72 +1,18 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, Clock, Phone, Route, Send, ShieldCheck, Wallet } from 'lucide-react';
-import { Button, Card, KeyValue, cx } from '@/components/ui';
+import { BadgeCheck, Clock, Phone, Route, ShieldCheck, Wallet } from 'lucide-react';
+import { Card, KeyValue } from '@/components/ui';
 import { formatDateVN, formatVND } from '@/services/format';
-import { HOTLINE, WIZARD_STEPS } from './constants';
+import { HOTLINE } from './constants';
 import { EditLink } from './parts';
 import type { BookingWizard } from './useBookingWizard';
 
-export interface WizardNavProps {
-  step: number;
-  onNext: () => void;
-  onBack: () => void;
-}
-
-const isLast = (step: number) => step === WIZARD_STEPS.length - 1;
-
-/** Các nút điều hướng wizard — chỉ dùng cho sidebar desktop (lưu nháp nằm ở đầu trang). */
-const NavButtons = ({ step, onNext, onBack }: WizardNavProps) => {
-  const last = isLast(step);
-  const NextIcon = last ? Send : ArrowRight;
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={onNext}
-        className={cx(
-          'group flex h-11 w-full items-center gap-3 rounded-xl pr-2 pl-4 text-left text-white transition-all duration-150 active:scale-[0.98]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2',
-          last ? 'bg-brand shadow-sm shadow-brand/20 hover:bg-brand-hover' : 'bg-slate-900 hover:bg-slate-800',
-        )}
-      >
-        <span className="min-w-0 flex-1 text-[15px] font-semibold">{last ? 'Gửi yêu cầu chuyển nhà' : 'Tiếp tục'}</span>
-        <span className={cx('grid size-7 shrink-0 place-items-center rounded-lg transition-transform group-hover:translate-x-0.5', last ? 'bg-white/20' : 'bg-white/10')}>
-          <NextIcon className="size-4" strokeWidth={2.25} />
-        </span>
-      </button>
-      {step > 0 && (
-        <Button variant="secondary" block icon={ArrowLeft} onClick={onBack}>
-          Quay lại Bước {step}
-        </Button>
-      )}
-      <p className="text-center text-[11px] text-slate-500">
-        {last ? 'Miễn phí hủy lịch trước 24 giờ so với giờ vận chuyển.' : 'Thông tin được giữ lại khi chuyển bước.'}
-      </p>
-    </div>
-  );
-};
-
-export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; nav: WizardNavProps; onEdit: (s: number) => void }) => {
-  const { draft, fromAddress, toAddress, distanceKm, estimateReady, referenceQuote, requestedServices } = wizard;
-  const { step } = nav;
+export const WizardSidebar = ({ wizard, step, onEdit }: { wizard: BookingWizard; step: number; onEdit: (s: number) => void }) => {
+  const { draft, fromAddress, toAddress, distanceKm, estimateReady, referenceQuote, displayServices: requestedServices } = wizard;
   const hasRoute = Boolean(draft.from.street.trim() || draft.to.street.trim());
   const showEstimate = step >= 1 && estimateReady;
   const truckOnly = draft.serviceMode === 'TRUCK_ONLY';
 
   return (
     <div className="space-y-4">
-      <Card className="hidden space-y-4 lg:block">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900">
-            <span className="size-2 rounded-full bg-brand" /> Tiến trình: Bước {step + 1}/{WIZARD_STEPS.length}
-          </span>
-          <span className="truncate text-slate-500">{WIZARD_STEPS[step]!.title}</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-brand transition-all duration-300" style={{ width: `${((step + 1) / WIZARD_STEPS.length) * 100}%` }} />
-        </div>
-        <NavButtons {...nav} />
-      </Card>
-
       {hasRoute && step > 0 && (
         <Card className="space-y-4">
           <div className="flex items-center justify-between gap-2">
@@ -132,11 +78,20 @@ export const WizardSidebar = ({ wizard, nav, onEdit }: { wizard: BookingWizard; 
 
       <div className="rounded-2xl bg-slate-900 p-5 text-white">
         <p className="flex items-center gap-2 text-sm font-semibold">
-          <ShieldCheck className="size-4 text-brand" /> Giá tạm tính &amp; giá chốt
+          <ShieldCheck className="size-4 text-brand" /> {truckOnly ? <>Giá tạm tính &amp; giá chốt</> : "Báo giá sau khảo sát"}
         </p>
         <p className="mt-2 text-[13px] leading-relaxed text-white/70">
-          Số tạm tính chỉ để bạn hình dung chi phí. <span className="font-semibold text-white">Giá chốt</span> nằm trong báo giá chi tiết từng hạng mục, gửi cho bạn{' '}
-          {truckOnly ? 'sau khi điều phối viên xác nhận xe' : 'sau khi khảo sát'} và chỉ áp dụng khi bạn đồng ý.
+          {truckOnly ? (
+            <>
+              Số tạm tính tính theo loại xe, quãng đường và số người bạn chọn. <span className="font-semibold text-white">Giá chốt</span> nằm trong báo giá
+              chi tiết gửi cho bạn sau khi điều phối viên xác nhận xe, và chỉ áp dụng khi bạn đồng ý.
+            </>
+          ) : (
+            <>
+              Chi phí trọn gói phụ thuộc khối lượng đồ, lối đi và tầng lầu thực tế. Chuyên viên gửi bạn <span className="font-semibold text-white">báo giá chi tiết từng hạng mục</span> sau
+              khi khảo sát — chỉ áp dụng khi bạn đồng ý.
+            </>
+          )}
         </p>
         <p className="mt-3 text-xs font-semibold text-brand">Phát sinh tại hiện trường (nếu có) luôn cần bạn xác nhận trước khi tính</p>
       </div>

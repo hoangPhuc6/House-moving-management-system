@@ -66,7 +66,7 @@ export const ADMIN_AREAS: Record<string, string[]> = {
 export const SAVED_ADDRESSES: { label: string; address: Pick<AddressDetail, 'province' | 'ward' | 'street' | 'propertyType' | 'floor'> }[] = [
   {
     label: 'Nhà hiện tại',
-    address: { province: 'TP. Hồ Chí Minh', ward: 'Phường Thạnh Mỹ Tây', street: '128/4 Ung Văn Khiêm', propertyType: 'Nhà trong ngõ/hẻm (xe tải vào được)', floor: 'Tầng 2 (thang bộ)' },
+    address: { province: 'TP. Hồ Chí Minh', ward: 'Phường Thạnh Mỹ Tây', street: '128/4 Ung Văn Khiêm', propertyType: 'Nhà trong ngõ/hẻm (xe tải vào được)', floor: 'Tầng trệt' },
   },
   {
     label: 'Căn hộ mới',
@@ -74,17 +74,35 @@ export const SAVED_ADDRESSES: { label: string; address: Pick<AddressDetail, 'pro
   },
 ];
 
-/** Loại bất động sản & lối đi — mỗi lựa chọn quy về một HouseType để tính phụ phí. */
-export const PROPERTY_TYPES: { label: string; houseType: HouseType }[] = [
-  { label: 'Nhà mặt tiền (xe đỗ sát cửa)', houseType: 'GROUND_FLOOR' },
-  { label: 'Nhà trong ngõ/hẻm (xe tải vào được)', houseType: 'GROUND_FLOOR' },
-  { label: 'Nhà trong hẻm sâu > 100m', houseType: 'DEEP_ALLEY' },
-  { label: 'Chung cư có thang máy', houseType: 'APARTMENT' },
-  { label: 'Chung cư / nhà tập thể thang bộ', houseType: 'APARTMENT' },
-  { label: 'Văn phòng / mặt bằng kinh doanh', houseType: 'GROUND_FLOOR' },
+export const FLOOR_OPTIONS = ['Tầng trệt', 'Tầng 2 (thang bộ)', 'Tầng 3 (thang bộ)', 'Tầng 4+ (thang bộ)', 'Tầng cao (thang máy)'];
+
+const STAIR_FLOORS = FLOOR_OPTIONS.slice(0, 4);
+
+/**
+ * Loại bất động sản & lối đi — mỗi lựa chọn quy về một HouseType để tính phụ phí.
+ * `floors`: các tầng được phép chọn; chỉ 1 lựa chọn = không cần hỏi khách (tự gán), phần tử đầu là mặc định.
+ */
+export const PROPERTY_TYPES: { label: string; houseType: HouseType; floors: string[] }[] = [
+  { label: 'Nhà mặt tiền (xe đỗ sát cửa)', houseType: 'GROUND_FLOOR', floors: ['Tầng trệt'] },
+  { label: 'Nhà trong ngõ/hẻm (xe tải vào được)', houseType: 'GROUND_FLOOR', floors: ['Tầng trệt'] },
+  { label: 'Nhà trong hẻm sâu > 100m', houseType: 'DEEP_ALLEY', floors: ['Tầng trệt'] },
+  { label: 'Chung cư có thang máy', houseType: 'APARTMENT', floors: ['Tầng cao (thang máy)'] },
+  { label: 'Chung cư / nhà tập thể thang bộ', houseType: 'APARTMENT', floors: STAIR_FLOORS },
+  { label: 'Văn phòng / mặt bằng kinh doanh', houseType: 'GROUND_FLOOR', floors: FLOOR_OPTIONS },
 ];
 
-export const FLOOR_OPTIONS = ['Tầng trệt', 'Tầng 2 (thang bộ)', 'Tầng 3 (thang bộ)', 'Tầng 4+ (thang bộ)', 'Tầng cao (thang máy)'];
+/** Các tầng hợp lệ cho loại bất động sản (mặc định: tất cả). */
+export const floorOptionsFor = (propertyType: string): string[] =>
+  PROPERTY_TYPES.find((p) => p.label === propertyType)?.floors ?? FLOOR_OPTIONS;
+
+/** Chỉ hỏi "Tầng lầu" khi loại bất động sản có từ 2 lựa chọn tầng trở lên. */
+export const needsFloor = (propertyType: string): boolean => floorOptionsFor(propertyType).length > 1;
+
+/** Giữ tầng đang chọn nếu còn hợp lệ với loại bất động sản, ngược lại về tầng mặc định của loại đó. */
+export const fitFloor = (propertyType: string, floor: string): string => {
+  const opts = floorOptionsFor(propertyType);
+  return opts.includes(floor) ? floor : opts[0]!;
+};
 
 export const houseTypeOf = (propertyType: string): HouseType =>
   PROPERTY_TYPES.find((p) => p.label === propertyType)?.houseType ?? 'GROUND_FLOOR';
@@ -123,17 +141,11 @@ export const SERVICE_MODES: Record<ServiceMode, { title: string; badge: string; 
   },
 };
 
+/** Tên hiển thị cho dịch vụ đóng gói (gộp các vật tư carton, băng keo, màng PE…). */
+export const PACKING_LABEL = 'Đóng gói đồ đạc';
+
 /** Tên dịch vụ nhân công được tự thêm khi chọn gói trọn gói. */
 export const LABOR_SERVICE_KEYWORD = 'bốc xếp';
-
-/** Quy mô nhà (gói trọn gói) → xe & số nhân viên bốc xếp ước lượng cho giá tham khảo; chốt lại sau khảo sát. */
-export const HOME_SCALES: { label: string; hint: string; vehicleTons: number; labor: number }[] = [
-  { label: 'Phòng trọ / Studio', hint: '≈ 20 – 30 m²', vehicleTons: 1.25, labor: 2 },
-  { label: '1 phòng ngủ', hint: '≈ 40 – 55 m²', vehicleTons: 1.25, labor: 2 },
-  { label: '2 phòng ngủ', hint: '≈ 65 – 80 m²', vehicleTons: 2, labor: 3 },
-  { label: '3+ phòng ngủ', hint: '> 90 m²', vehicleTons: 5, labor: 4 },
-  { label: 'Nhà nguyên căn / Văn phòng', hint: 'Khối lượng lớn', vehicleTons: 5, labor: 5 },
-];
 
 export const SURVEY_PREFERENCES: Record<SurveyPreference, { title: string; badge?: string; desc: string; meta: string[]; icon: LucideIcon }> = {
   VIDEO_CALL: {

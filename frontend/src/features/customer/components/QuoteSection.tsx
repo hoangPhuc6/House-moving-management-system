@@ -31,7 +31,10 @@ export const QuoteSection = ({ order }: { order: Order }) => {
         (l.action === "Chỉnh sửa báo giá" ||
           l.action === "Cập nhật giảm giá toàn đơn"),
     );
-  const canDeposit = order.status === "SURVEYED_PENDING_CONFIRM";
+  const awaitingConfirm = order.status === "SURVEYED_PENDING_CONFIRM";
+  // Đang chờ Điều phối phản hồi thương lượng → tạm khóa đặt cọc cho tới khi có báo giá mới.
+  const negotiating = awaitingConfirm && Boolean(order.negotiation);
+  const canDeposit = awaitingConfirm && !negotiating;
 
   return (
     <section
@@ -50,6 +53,19 @@ export const QuoteSection = ({ order }: { order: Order }) => {
             <AutoCancelCountdown deadline={order.autoCancelDeadline} />
           )}
         </div>
+
+        {negotiating && order.negotiation && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
+            <MessageSquare className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <span>
+              <b>Đã gửi yêu cầu thương lượng</b> lúc{" "}
+              <span className="tabular-nums">{formatTime(order.negotiation.requestedAt)}</span>: “{order.negotiation.message}”
+              <span className="mt-0.5 block text-amber-800/80">
+                Điều phối viên đang xem xét và sẽ gửi lại báo giá. Thời hạn 24h tạm dừng trong lúc chờ.
+              </span>
+            </span>
+          </div>
+        )}
 
         {discountLog && (
           <div className="flex items-start gap-2.5 rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-900">
@@ -170,7 +186,18 @@ export const QuoteSection = ({ order }: { order: Order }) => {
 
       {/* Action panel */}
       <div className="lg:sticky lg:top-24">
-        {canDeposit ? (
+        {negotiating ? (
+          <Card>
+            <p className="text-sm font-semibold text-slate-900">Chờ báo giá mới</p>
+            <p className="mt-1 text-xs text-slate-500">Bạn có thể đặt cọc sau khi nhận báo giá đã điều chỉnh.</p>
+            <a
+              href="tel:19006868"
+              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:border-slate-300"
+            >
+              <Phone className="size-4" /> Gọi 1900 6868
+            </a>
+          </Card>
+        ) : canDeposit ? (
           <StickyActionBar className="lg:mt-0">
             <div className="flex items-center gap-3 md:flex-col md:items-stretch">
               <div className="min-w-0 flex-1 md:mb-1">
@@ -185,9 +212,9 @@ export const QuoteSection = ({ order }: { order: Order }) => {
                 icon={MessageSquare}
                 onClick={() => setNegotiateOpen(true)}
                 className="px-3 md:order-last"
-                aria-label="Liên hệ thương lượng"
+                aria-label="Thương lượng báo giá"
               >
-                <span className="hidden md:inline">Liên hệ thương lượng</span>
+                <span className="hidden md:inline">Thương lượng báo giá</span>
               </Button>
               <Button size="lg" icon={QrCode} onClick={() => setQrOpen(true)}>
                 Đồng ý & Đặt cọc
@@ -269,7 +296,7 @@ export const QuoteSection = ({ order }: { order: Order }) => {
       <Modal
         open={negotiateOpen}
         onClose={() => setNegotiateOpen(false)}
-        title="Liên hệ thương lượng"
+        title={canDeposit ? "Thương lượng báo giá" : "Liên hệ CSKH"}
         footer={
           <>
             <a
@@ -282,11 +309,11 @@ export const QuoteSection = ({ order }: { order: Order }) => {
               icon={MessageSquare}
               disabled={!message.trim()}
               onClick={() => {
-                dispatch({
-                  type: "PUSH_TOAST",
-                  tone: "success",
-                  message: "Đã gửi yêu cầu. CSKH sẽ phản hồi trong 30 phút.",
-                });
+                dispatch(
+                  canDeposit
+                    ? { type: "CUSTOMER_REQUEST_NEGOTIATION", orderId: order.id, message }
+                    : { type: "PUSH_TOAST", tone: "success", message: "Đã gửi yêu cầu. CSKH sẽ phản hồi trong 30 phút." },
+                );
                 setMessage("");
                 setNegotiateOpen(false);
               }}
@@ -296,7 +323,12 @@ export const QuoteSection = ({ order }: { order: Order }) => {
           </>
         }
       >
-        <Field label="Bạn muốn trao đổi điều gì?">
+        {canDeposit && (
+          <p className="mb-3 text-sm text-slate-600">
+            Cho điều phối viên biết bạn muốn điều chỉnh gì — VD bớt nhân viên, tự đóng gói, bỏ một dịch vụ. Báo giá mới sẽ được gửi lại để bạn xác nhận.
+          </p>
+        )}
+        <Field label={canDeposit ? "Bạn muốn điều chỉnh điều gì?" : "Bạn muốn trao đổi điều gì?"}>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}

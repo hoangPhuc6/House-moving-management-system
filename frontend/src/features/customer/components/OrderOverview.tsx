@@ -5,18 +5,18 @@ import {
   Phone,
   Truck,
 } from 'lucide-react';
-import { Alert, Button, Card, Divider, KeyValue } from '@/components/ui';
-import { CUSTOMER_STATUS_COPY, HOUSE_TYPE_META } from '@/constants/order';
+import { Alert, Button, Card } from '@/components/ui';
+import { CUSTOMER_STATUS_COPY } from '@/constants/order';
 import { CompactProgress } from '@/features/customer/components/CompactProgress';
 import { FieldAdjustmentBanner } from '@/features/customer/components/FieldAdjustmentBanner';
 import { LiveProgressCard } from '@/features/customer/components/LiveProgressCard';
+import { RequestSummaryCard } from '@/features/customer/components/RequestSummaryCard';
 import { ScheduleCard } from '@/features/customer/components/ScheduleCard';
 import { SurveyStageCard } from '@/features/customer/components/SurveyStageCard';
 import { WaitTimerCard } from '@/features/customer/components/WaitTimerCard';
 import { customerStepMeta, surveyHeroCopy } from '@/features/customer/surveyStage';
 import { customerActionOf, scrollToSection } from '@/features/customer/utils';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
-import { OrderRequestDetails } from '@/features/order/components/OrderRequestDetails';
 import { ProcessStepper } from '@/features/order/components/ProcessStepper';
 import { ReferenceQuoteCard } from '@/features/order/components/ReferenceQuoteCard';
 import { formatDateVN } from '@/services/format';
@@ -148,46 +148,22 @@ export const OrderOverview = ({ order }: { order: Order }) => {
         )}
         {(order.status === "PAUSED_WAITING_CUSTOMER" ||
           order.flags.waitingMinutes > 0) && <WaitTimerCard order={order} />}
-        {order.referenceQuote && order.quoteItems.length === 0 && (
-          <ReferenceQuoteCard quote={order.referenceQuote} />
-        )}
+        {/* Trọn gói: chưa khảo sát thì chưa có giá — chỉ gói chỉ thuê xe (giá theo xe & km khách chọn) mới hiện giá tham khảo. */}
+        {order.bookingDetails?.serviceMode === "TRUCK_ONLY" &&
+          order.referenceQuote &&
+          order.quoteItems.length === 0 && (
+            <ReferenceQuoteCard quote={order.referenceQuote} />
+          )}
         <ScheduleCard order={order} />
-        <Card className="lg:col-span-2">
-          <h3 className="mb-3 text-[15px] font-semibold text-slate-900">
-            Thông tin bạn đã đặt
-          </h3>
-          <div className="grid gap-x-8 sm:grid-cols-2">
-            <KeyValue label="Họ tên" value={order.customerName} />
-            <KeyValue label="Số điện thoại" value={order.phone} />
-            <KeyValue label="Loại nhà" value={HOUSE_TYPE_META[order.houseType].label} />
-            <KeyValue
-              label="Lịch chuyển"
-              value={`${formatDateVN(order.scheduledDate)} · ${order.timeSlot}`}
-            />
-            <KeyValue label="Địa chỉ đi" value={order.fromAddress} />
-            <KeyValue label="Địa chỉ đến" value={order.toAddress} />
-          </div>
-          <Divider className="my-4" />
-          <OrderRequestDetails order={order} />
-        </Card>
-        <Card className="flex items-center gap-4">
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-orange-50 text-brand">
-            <Headphones className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Cần hỗ trợ?</p>
-            <p className="text-xs text-slate-500">
-              Tổng đài 24/7 · phản hồi trong 2 phút
-            </p>
-          </div>
-          <a
-            href="tel:19006868"
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white"
-          >
-            <Phone className="size-4" /> Gọi
-          </a>
-        </Card>
+        <RequestSummaryCard order={order} />
       </div>
+
+      <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+        <Headphones className="size-3.5" /> Cần hỗ trợ? Tổng đài 24/7{" "}
+        <a href="tel:19006868" className="inline-flex items-center gap-1 font-semibold text-slate-900 hover:text-brand">
+          <Phone className="size-3.5" /> 1900 6868
+        </a>
+      </p>
     </div>
   );
 };

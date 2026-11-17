@@ -25,7 +25,7 @@ export const STATUS_ORDER: OrderStatus[] = [
 ];
 
 export const PROCESS_STEPS: { title: string; short: string; detail: string; statuses: OrderStatus[] }[] = [
-  { title: 'Đặt lịch', short: 'Booking', detail: 'Khách gửi yêu cầu, chọn khung giờ còn trống công suất và tải ảnh đồ đạc.', statuses: ['NEW_PENDING_SURVEY'] },
+  { title: 'Đặt lịch', short: 'Booking', detail: 'Khách gửi yêu cầu, chọn ngày Khách gửi yêu cầu, chọn khung giờ còn trống công suất và tải ảnh đồ đạc. giờ bắt đầu vận chuyển và tải ảnh đồ đạc.', statuses: ['NEW_PENDING_SURVEY'] },
   { title: 'Khảo sát', short: 'Survey', detail: 'Điều phối viên lập báo giá dựa trên ảnh khách gửi. Khi cần, Điều phối cử nhân viên vận chuyển đến khảo sát trực tiếp.', statuses: ['SURVEYED_PENDING_CONFIRM'] },
   { title: 'Báo giá & Cọc', short: 'Quote', detail: 'Báo giá minh bạch từng dòng, có nhật ký chỉnh sửa. Khách đồng ý và đặt cọc qua QR.', statuses: ['QUOTED_PENDING_SCHEDULE'] },
   { title: 'Điều phối', short: 'Dispatch', detail: 'Điều phối viên gán xe & nhân sự, hệ thống chặn trùng lịch tự động.', statuses: ['ASSIGNED'] },

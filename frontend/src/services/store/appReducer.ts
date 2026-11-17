@@ -1,6 +1,6 @@
 import { FIELD_STAGE_ORDER, STATUS_META } from '@/constants/order';
 import { AUTO_CANCEL_MS, DEPOSIT_AMOUNT, RESCHEDULE_LOCK_HOURS } from '@/constants/pricing';
-import { PLATE_REGEX } from '@/constants/resources';
+import { PLATE_REGEX, shiftFromStart } from '@/constants/resources';
 import { getAssignmentRequirement, isDriverRole, validateAssignment } from '@/services/dispatch';
 import { formatVND, uid } from '@/services/format';
 import { canCloseOrder, canFileClaim, computeTotals, selectSettlement } from '@/services/pricing';
@@ -17,7 +17,7 @@ import {
   withLog,
 } from '@/services/store/helpers';
 import { createInitialState } from '@/services/store/initialState';
-import { appointmentLabel, isMediaSubmitted, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
+import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
 import type {
   AppAction,
   AppState,
@@ -92,7 +92,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
           resources: {
             ...next.resources,
             vehicles: next.resources.vehicles.map((v) =>
-              order.vehicleIds.includes(v.id) ? { ...v, status: 'BUSY', busyOrderId: shortId(order.id), currentShiftTime: order.timeSlot } : v,
+              order.vehicleIds.includes(v.id) ? { ...v, status: 'BUSY', busyOrderId: shortId(order.id), currentShiftTime: shiftFromStart(order.timeSlot) } : v,
             ),
           },
         };
@@ -116,7 +116,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         items: action.input.items,
         requestedServices: action.input.requestedServices,
         referenceQuote: action.input.referenceQuote,
-        onSiteSurveyRequest: null,
+        surveyAssignment: null,
+        surveyReport: null,
+        negotiation: null,
         surveyMethod: null,
         quoteItems: [],
         discountPercent: 0,
@@ -141,32 +143,67 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       return toast({ ...state, activeOrderId: id, orders: [order, ...state.orders] }, 'success', `Đã gửi yêu cầu ${id}. Báo giá tham khảo đã sẵn sàng; báo giá chính thức sẽ gửi sau khi khảo sát.`);
     }
 
-    case 'REQUEST_ONSITE_SURVEY': {
+    case 'ASSIGN_SURVEYOR': {
       const o = findOrder(state, action.orderId);
-      if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Chỉ yêu cầu khảo sát trực tiếp cho đơn đang chờ khảo sát.');
-      if (o.onSiteSurveyRequest) return toast(state, 'info', `${o.id} đã có yêu cầu khảo sát trực tiếp.`);
+      if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Chỉ phân người khảo sát cho đơn đang chờ khảo sát.');
       if (o.bookingDetails?.serviceMode === 'TRUCK_ONLY') return toast(state, 'warning', 'Gói chỉ thuê xe không cần khảo sát — gọi khách xác nhận xe rồi gửi báo giá.');
-      const appointment = appointmentLabel(o);
+      if (o.surveyReport) return toast(state, 'info', `${o.id} đã có kết quả khảo sát.`);
       const surveyor = state.resources.staff.find((s) => s.id === action.surveyorId);
-      if (!surveyor) return toast(state, 'warning', 'Cần chọn nhân viên khảo sát trước khi gửi yêu cầu.');
-      if (!surveyor.isAvailable) return toast(state, 'warning', `${surveyor.name} đang nghỉ ca, hãy chọn nhân viên khác.`);
+      if (!surveyor) return toast(state, 'warning', 'Cần chọn người khảo sát.');
+      if (!surveyor.isAvailable) return toast(state, 'warning', `${surveyor.name} đang nghỉ ca, hãy chọn người khác.`);
+      const appointment = appointmentLabel(o);
       const note = action.note.trim();
+      const kind = SURVEY_STAGE_META[surveyStageOf(o)].label.toLowerCase();
+      const reassign = o.surveyAssignment && o.surveyAssignment.surveyorId !== surveyor.id;
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
-          { ...ord, onSiteSurveyRequest: { requestedAt: Date.now(), note, surveyorId: surveyor.id } },
-          audit('COORDINATOR', 'Yêu cầu khảo sát trực tiếp', `Cử ${surveyor.name} (${surveyor.code}) khảo sát${appointment ? ` theo lịch khách hẹn ${appointment}` : ''}. ${note ? `Lý do: ${note}.` : 'Chuyển đơn sang khảo sát trực tiếp tại nhà khách.'}`),
+          { ...ord, surveyAssignment: { assignedAt: Date.now(), note, surveyorId: surveyor.id } },
+          audit(
+            'COORDINATOR',
+            reassign ? 'Đổi người khảo sát' : 'Phân người khảo sát',
+            `Phân ${surveyor.name} (${surveyor.code}) — ${kind}${appointment ? `, lịch khách hẹn ${appointment}` : ''}.${note ? ` Ghi chú: ${note}.` : ''}`,
+          ),
         ),
       );
-      return toast(next, 'success', `Đã cử ${surveyor.name} khảo sát trực tiếp ${o.id}.`);
+      return toast(next, 'success', `Đã phân ${surveyor.name} khảo sát ${o.id}.`);
     }
 
-    case 'CANCEL_ONSITE_SURVEY': {
+    case 'UNASSIGN_SURVEYOR': {
       const o = findOrder(state, action.orderId);
-      if (!o?.onSiteSurveyRequest || o.status !== 'NEW_PENDING_SURVEY') return state;
+      if (!o?.surveyAssignment || o.status !== 'NEW_PENDING_SURVEY' || o.surveyReport) return state;
       const next = patchOrder(state, action.orderId, (ord) =>
-        withLog({ ...ord, onSiteSurveyRequest: null }, audit('COORDINATOR', 'Hủy yêu cầu khảo sát trực tiếp', 'Đơn quay lại khảo sát qua ảnh khách cung cấp.')),
+        withLog({ ...ord, surveyAssignment: null }, audit('COORDINATOR', 'Hủy phân công khảo sát', 'Đơn quay lại chờ phân người khảo sát.')),
       );
-      return toast(next, 'info', `${o.id}: đã hủy yêu cầu khảo sát trực tiếp.`);
+      return toast(next, 'info', `${o.id}: đã hủy phân công khảo sát.`);
+    }
+
+    case 'SUBMIT_SURVEY_REPORT': {
+      const o = findOrder(state, action.orderId);
+      if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
+      if (!o.surveyAssignment) return toast(state, 'warning', 'Đơn chưa được phân người khảo sát.');
+      if (surveyStageOf(o) === 'PHOTOS' && !isMediaSubmitted(o)) return toast(state, 'warning', 'Khách chưa gửi ảnh / video — chưa thể gửi kết quả khảo sát.');
+      const surveyor = state.resources.staff.find((s) => s.id === o.surveyAssignment?.surveyorId);
+      const p = action.proposal;
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          {
+            ...ord,
+            surveyReport: {
+              submittedAt: Date.now(),
+              surveyorId: ord.surveyAssignment!.surveyorId,
+              itemsNote: action.itemsNote.trim(),
+              note: action.note.trim(),
+              proposal: p,
+            },
+          },
+          audit(
+            'STAFF',
+            'Gửi kết quả khảo sát',
+            `${surveyor?.name ?? 'Người khảo sát'} đề xuất ${p.vehicleQty} × xe ${String(p.vehicleCapacity).replace('.', ',')} tấn, ${p.workers} người, ${p.distanceKm} km.`,
+          ),
+        ),
+      );
+      return toast(next, 'success', `Đã gửi kết quả khảo sát ${o.id} cho Điều phối lập báo giá.`);
     }
 
     case 'CUSTOMER_ADD_SURVEY_MEDIA': {
@@ -213,13 +250,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
     case 'SUBMIT_SURVEY': {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
-      // Ảnh / video call / thuê xe: Điều phối lập báo giá. Trực tiếp: chỉ nhân viên vận chuyển được cử đi khảo sát mới gửi.
       const kind = surveyStageOf(o);
-      if (kind === 'ON_SITE' && !o.onSiteSurveyRequest) return toast(state, 'warning', 'Khách chọn khảo sát tận nơi — hãy cử nhân viên đi khảo sát trước.');
-      if (kind === 'PHOTOS' && !isMediaSubmitted(o)) return toast(state, 'warning', 'Khách chưa gửi ảnh / video khảo sát.');
+      if (kind !== 'TRUCK_CONFIRM' && !o.surveyReport) return toast(state, 'warning', 'Chưa có kết quả khảo sát — chờ người khảo sát gửi về rồi mới lập báo giá.');
       const method = SURVEY_METHOD_OF[kind];
-      if (method !== 'ON_SITE' && action.by !== 'COORDINATOR') return toast(state, 'warning', 'Đơn này do Điều phối lập báo giá.');
-      if (method === 'ON_SITE' && action.by !== 'STAFF') return toast(state, 'warning', 'Đơn này đang chờ nhân viên vận chuyển khảo sát trực tiếp.');
       const methodLabel: Record<SurveyMethod, string> = {
         ON_SITE: 'Khảo sát trực tiếp',
         VIDEO_CALL: 'Khảo sát qua video call',
@@ -229,15 +262,40 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
           { ...ord, quoteItems: action.items, surveyMethod: method, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
-          audit(action.by, 'Tạo báo giá khảo sát', `${methodLabel[method]} —${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}.`),
+          audit('COORDINATOR', 'Gửi báo giá', `${methodLabel[method]} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}.`),
         ),
       );
-      return toast(next, 'success', `Đã gửi báo giá khảo sát cho ${action.orderId}. Bộ đếm tự hủy 24h bắt đầu chạy.`);
+      return toast(next, 'success', `Đã gửi báo giá cho ${action.orderId}. Bộ đếm tự hủy 24h bắt đầu chạy.`);
+    }
+
+    case 'CUSTOMER_REQUEST_NEGOTIATION': {
+      const o = findOrder(state, action.orderId);
+      const message = action.message.trim();
+      if (!o || o.status !== 'SURVEYED_PENDING_CONFIRM' || !message) return state;
+      // Tạm dừng đếm ngược 24h trong lúc Điều phối xem xét — khởi động lại khi gửi lại báo giá.
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog({ ...ord, negotiation: { requestedAt: Date.now(), message }, autoCancelDeadline: null }, audit('CUSTOMER', 'Yêu cầu thương lượng báo giá', message)),
+      );
+      return toast(next, 'success', 'Đã gửi yêu cầu thương lượng. Điều phối sẽ gửi lại báo giá cho bạn.');
+    }
+
+    case 'RESEND_QUOTE': {
+      const o = findOrder(state, action.orderId);
+      if (!o || o.status !== 'SURVEYED_PENDING_CONFIRM') return state;
+      const note = action.note.trim();
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, negotiation: null, autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
+          audit('COORDINATOR', 'Gửi lại báo giá', `${o.negotiation ? 'Phản hồi yêu cầu thương lượng' : 'Cập nhật báo giá'} — tổng ${formatVND(computeTotals(ord).grandTotal)}.${note ? ` ${note}` : ''}`),
+        ),
+      );
+      return toast(next, 'success', `Đã gửi lại báo giá ${o.id}. Bộ đếm 24h bắt đầu lại.`);
     }
 
     case 'PAY_DEPOSIT': {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'SURVEYED_PENDING_CONFIRM') return toast(state, 'warning', 'Đơn hiện không ở trạng thái chờ chốt báo giá.');
+      if (o.negotiation) return toast(state, 'info', 'Yêu cầu thương lượng đang chờ Điều phối phản hồi — hãy đợi báo giá mới.');
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
           { ...ord, depositPaid: ord.depositRequired, status: 'QUOTED_PENDING_SCHEDULE', autoCancelDeadline: null },
@@ -351,12 +409,12 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         plateNumber: action.plateNumber,
         capacityTons: 2,
         status: 'BUSY',
-        currentShiftTime: o.timeSlot,
+        currentShiftTime: shiftFromStart(o.timeSlot),
         busyOrderId: shortId(o.id),
       };
       let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleId ? [o.vehicleId] : [], 'MAINTENANCE');
       vehicles = existing
-        ? vehicles.map((v) => (v.id === existing.id ? { ...v, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: o.timeSlot } : v))
+        ? vehicles.map((v) => (v.id === existing.id ? { ...v, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: shiftFromStart(o.timeSlot) } : v))
         : [...vehicles, replacement];
       const driver = state.resources.staff.find((s) => s.name === action.driverName);
       const oldPlate = state.resources.vehicles.find((v) => v.id === o.vehicleId)?.plateNumber ?? '—';
@@ -417,7 +475,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       );
       if (mismatch) return toast(state, 'danger', `Không khớp báo giá: ${mismatch}`);
       let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleIds);
-      vehicles = vehicles.map((x) => (action.vehicleIds.includes(x.id) ? { ...x, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: o.timeSlot } : x));
+      vehicles = vehicles.map((x) => (action.vehicleIds.includes(x.id) ? { ...x, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: shiftFromStart(o.timeSlot) } : x));
       const crewNames = state.resources.staff.filter((s) => action.crewIds.includes(s.id)).map((s) => s.name);
       const plates = picked.map((v) => v.plateNumber).join(', ');
       const next = patchOrder({ ...state, resources: { ...state.resources, vehicles } }, action.orderId, (ord) =>

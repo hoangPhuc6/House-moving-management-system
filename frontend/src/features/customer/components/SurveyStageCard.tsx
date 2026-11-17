@@ -35,7 +35,7 @@ const prevDay = (iso: string): string => {
 };
 
 /** Tải ảnh / video theo danh mục gợi ý. Bản demo chỉ lưu tên tệp vào order.customerPhotos. */
-const MediaUploader = ({ order, compact = false }: { order: Order; compact?: boolean }) => {
+const MediaUploader = ({ order }: { order: Order }) => {
   const { dispatch } = useApp();
   const add = (c: SurveyMediaCategory, files: FileList | null) => {
     const names = Array.from(files ?? [])
@@ -70,7 +70,7 @@ const MediaUploader = ({ order, compact = false }: { order: Order; compact?: boo
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-900">{c.label}</p>
-                {!compact && <p className="text-xs text-slate-500">{c.hint}</p>}
+                <p className="text-xs text-slate-500">{c.hint}</p>
               </div>
               {done && <Badge tone="success">{files.length} tệp</Badge>}
               <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-brand/50 hover:text-brand">
@@ -200,11 +200,11 @@ const SurveyScheduleModal = ({ order, open, onClose, initial }: { order: Order; 
 export const SurveyStageCard = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
   const [modal, setModal] = useState<{ open: boolean; initial?: SurveyPreference }>({ open: false });
-  const [showOptionalUpload, setShowOptionalUpload] = useState(false);
   const kind = surveyStageOf(order);
   const d = order.bookingDetails;
-  const coordinatorOnSite = Boolean(order.onSiteSurveyRequest);
-  const canChange = Boolean(d) && !coordinatorOnSite;
+  // Đổi hình thức / lịch hẹn được cho tới khi khảo sát xong.
+  const surveyed = Boolean(order.surveyReport);
+  const canChange = Boolean(d) && !surveyed;
   const openModal = (initial?: SurveyPreference) => setModal({ open: true, initial });
 
   if (kind === 'TRUCK_CONFIRM') {
@@ -302,7 +302,7 @@ export const SurveyStageCard = ({ order }: { order: Order }) => {
   }
 
   // VIDEO_CALL / ON_SITE
-  const surveyor = order.onSiteSurveyRequest ? state.resources.staff.find((s) => s.id === order.onSiteSurveyRequest?.surveyorId) : undefined;
+  const surveyor = order.surveyAssignment ? state.resources.staff.find((s) => s.id === order.surveyAssignment?.surveyorId) : undefined;
   const confirmed = Boolean(surveyor);
   const tips = PREP_TIPS[kind];
   const title = kind === 'VIDEO_CALL' ? 'Lịch khảo sát qua video call' : 'Lịch khảo sát trực tiếp tận nơi';
@@ -317,8 +317,8 @@ export const SurveyStageCard = ({ order }: { order: Order }) => {
           <p className="text-[15px] font-semibold text-slate-900">{title}</p>
           <p className="text-sm text-slate-500">{kind === 'VIDEO_CALL' ? 'Khoảng 10 phút qua Zalo / Messenger.' : 'Khoảng 30 phút tại nhà bạn.'}</p>
         </div>
-        <Badge tone={confirmed ? 'success' : 'warning'} dot pulse={!confirmed}>
-          {confirmed ? 'Đã xác nhận' : 'Chờ xác nhận'}
+        <Badge tone={surveyed || confirmed ? 'success' : 'warning'} dot pulse={!confirmed && !surveyed}>
+          {surveyed ? 'Đã khảo sát' : confirmed ? 'Đã xác nhận' : 'Chờ xác nhận'}
         </Badge>
       </div>
 
@@ -352,20 +352,6 @@ export const SurveyStageCard = ({ order }: { order: Order }) => {
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="rounded-xl border border-dashed border-slate-300 p-3">
-        <button type="button" onClick={() => setShowOptionalUpload((v) => !v)} className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold text-slate-700">
-          <span className="flex items-center gap-2">
-            <ImagePlus className="size-4 text-brand" /> Gửi trước ảnh / video (không bắt buộc)
-          </span>
-          <span className="text-xs font-medium text-slate-500">{order.customerPhotos.length > 0 ? `${order.customerPhotos.length} tệp` : showOptionalUpload ? 'Thu gọn' : 'Mở'}</span>
-        </button>
-        {showOptionalUpload && (
-          <div className="mt-3">
-            <MediaUploader order={order} compact />
-          </div>
-        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

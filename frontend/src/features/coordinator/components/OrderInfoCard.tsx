@@ -41,7 +41,7 @@ export const OrderInfoCard = ({ order }: { order: Order }) => {
         value={HOUSE_TYPE_META[order.houseType].label}
       />
       <KeyValue label="Ngày thực hiện" value={order.scheduledDate} />
-      <KeyValue label="Khung giờ" value={order.timeSlot} />
+      <KeyValue label="Giờ bắt đầu" value={order.timeSlot} />
       <div className="my-3 rounded-xl bg-slate-50/70 p-3">
         <OrderRequestDetails order={order} />
       </div>

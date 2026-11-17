@@ -77,8 +77,6 @@ export const CreateRequest = () => {
         : { type: 'PUSH_TOAST', tone: 'warning', message: 'Trình duyệt không cho phép lưu nháp.' },
     );
 
-  const nav = { step, onNext: next, onBack: back };
-
   return (
     <div className="pb-24 md:pb-4">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4 px-1">
@@ -135,8 +133,11 @@ export const CreateRequest = () => {
           {step === 1 && <StepServices wizard={wizard} errors={errors} />}
           {step === 2 && <StepReview wizard={wizard} errors={errors} onEdit={goTo} />}
 
-          {/* Tablet (md → lg): điều hướng cuối form. Desktop dùng nút trong sidebar, mobile dùng thanh dính đáy. */}
-          <div className="mt-4 hidden items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 md:flex lg:hidden">
+          {/*
+            Tablet & desktop: thanh điều hướng dính đáy cột form — luôn trong tầm tay dù cuộn tới đâu
+            (sidebar cao hơn màn hình nên nút đặt ở sidebar sẽ trôi mất khi cuộn xuống cuối). Mobile dùng StickyActionBar.
+          */}
+          <div className="sticky bottom-4 z-20 mt-4 hidden items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-5 py-3.5 shadow-[0_8px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl md:flex">
             <p className="text-xs text-slate-500">
               {last ? 'Bước cuối cùng: miễn phí hủy lịch trước 24 giờ so với thời điểm vận chuyển.' : `Bước ${step + 1}/${WIZARD_STEPS.length} — thông tin được giữ lại khi chuyển bước.`}
             </p>
@@ -155,7 +156,7 @@ export const CreateRequest = () => {
         </div>
 
         <aside className="lg:sticky lg:top-20">
-          <WizardSidebar wizard={wizard} nav={nav} onEdit={goTo} />
+          <WizardSidebar wizard={wizard} step={step} onEdit={goTo} />
         </aside>
 
         {/* pb-7: chừa chỗ cho nút "Đặt mới" nổi của thanh điều hướng dưới, tránh đè lên nút. */}

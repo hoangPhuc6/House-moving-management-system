@@ -10,7 +10,6 @@ const SURVEY_LABEL: Record<SurveyPreference, string> = { VIDEO_CALL: 'Video Call
 const BookingDetailsBlock = ({ details: d }: { details: BookingDetails }) => {
   const rows: [string, string][] = [
     ['Hình thức', MODE_LABEL[d.serviceMode]],
-    ...(d.homeScale ? ([['Quy mô nhà', d.homeScale]] as [string, string][]) : []),
     ['Điểm đi', [d.from.propertyType, d.from.floor, d.from.note].filter(Boolean).join(' • ')],
     ['Điểm đến', [d.to.propertyType, d.to.floor, d.to.note].filter(Boolean).join(' • ')],
     ...(d.surveyPreference

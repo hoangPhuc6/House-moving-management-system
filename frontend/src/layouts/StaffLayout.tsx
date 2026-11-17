@@ -12,7 +12,7 @@ export const StaffLayout = () => {
   const { state } = useApp();
   const navigate = useNavigate();
   const jobs = selectStaffJobs(state.orders);
-  const surveyCount = state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && o.onSiteSurveyRequest).length;
+  const surveyCount = state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && o.surveyAssignment && !o.surveyReport).length;
   const runningCount = jobs.filter((j) => RUNNING.includes(j.status)).length;
 
   const nav: MobileNavItem[] = [

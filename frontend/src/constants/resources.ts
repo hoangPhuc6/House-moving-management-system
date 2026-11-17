@@ -1,19 +1,43 @@
 import type {
   StaffMember,
   StaffRole,
-  TimeSlot,
   ToastTone,
   Vehicle,
   VehicleStatus,
 } from "@/types";
 
-export const TIME_SLOTS: TimeSlot[] = [
-  { id: "s1", label: "07:00 - 09:00" },
-  { id: "s2", label: "09:00 - 11:00" },
-  { id: "s3", label: "13:00 - 15:00" },
-  { id: "s4", label: "15:00 - 17:00" },
-  { id: "s5", label: "18:00 - 20:00" },
-];
+/** Giờ hoạt động: xe có thể bắt đầu từ OPEN_TIME đến LAST_START_TIME (định dạng HH:MM, so sánh chuỗi được). */
+export const OPEN_TIME = "06:00";
+export const LAST_START_TIME = "20:00";
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Các giờ bắt đầu hay được chọn — hiện sẵn dạng nút; giờ khác khách tự nhập. */
+export const POPULAR_START_TIMES = ["07:00", "08:00", "09:00", "13:00", "15:00"];
+
+export const DEFAULT_START_TIME = "08:00";
+
+/** Giờ bắt đầu hợp lệ: đúng HH:MM và nằm trong giờ hoạt động. */
+export const isValidStartTime = (value: string): boolean =>
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(value) && value >= OPEN_TIME && value <= LAST_START_TIME;
+
+/** Thời lượng ước tính 1 ca chuyển nhà — dùng để giữ chỗ xe trên bảng điều phối. */
+export const ESTIMATED_JOB_HOURS = 4;
+
+/**
+ * Ca làm của xe suy ra từ giờ bắt đầu: "08:30" → "08:30 - 12:30".
+ * Giá trị cũ dạng khung "07:00 - 09:00" được giữ nguyên.
+ */
+export const shiftFromStart = (start: string): string => {
+  const m = start.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return start;
+  return `${start} - ${pad2((Number(m[1]) + ESTIMATED_JOB_HOURS) % 24)}:${m[2]}`;
+};
+
+/** Chuẩn hoá giờ bắt đầu (VD nháp cũ lưu khung "07:00 - 09:00" → "07:00"). */
+export const toStartTime = (value: string): string => {
+  const first = value.match(/\d{2}:\d{2}/)?.[0];
+  return first && isValidStartTime(first) ? first : DEFAULT_START_TIME;
+};
 
 export const seedVehicles = (): Vehicle[] => [
   {

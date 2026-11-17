@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { CalendarClock, Lock, ShieldCheck, XCircle } from 'lucide-react';
-import { Button, Card, cx, Field, Input, Modal, Select } from '@/components/ui';
+import { Button, Card, cx, Field, Input, Modal } from '@/components/ui';
 import { RESCHEDULE_LOCK_HOURS } from '@/constants/pricing';
-import { TIME_SLOTS } from '@/constants/resources';
+import { isValidStartTime, toStartTime } from '@/constants/resources';
+import { StartTimePicker } from '@/features/customer/components/StartTimePicker';
 import { formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
@@ -14,7 +15,7 @@ export const ScheduleCard = ({ order }: { order: Order }) => {
   const [cancelReason, setCancelReason] = useState("");
   const reasonOk = cancelReason.trim().length >= 5;
   const [newDate, setNewDate] = useState("2026-11-03");
-  const [newSlot, setNewSlot] = useState("07:00 - 09:00");
+  const [newSlot, setNewSlot] = useState(() => toStartTime(order.timeSlot));
   const late = order.flags.hoursUntilDeparture < RESCHEDULE_LOCK_HOURS;
   const preDeparture =
     [
@@ -71,7 +72,7 @@ export const ScheduleCard = ({ order }: { order: Order }) => {
           disabled={late}
           onClick={() => setRescheduleOpen(true)}
         >
-          Xin dời lịch
+          Dời lịch
         </Button>
         <Button
           variant="secondary"
@@ -103,6 +104,7 @@ export const ScheduleCard = ({ order }: { order: Order }) => {
               Hủy bỏ
             </Button>
             <Button
+              disabled={!isValidStartTime(newSlot)}
               onClick={() => {
                 dispatch({
                   type: "RESCHEDULE",
@@ -129,21 +131,10 @@ export const ScheduleCard = ({ order }: { order: Order }) => {
               onChange={(e) => setNewDate(e.target.value)}
             />
           </Field>
-          <Field label="Khung giờ">
-            <Select
-              value={newSlot}
-              onChange={(e) => setNewSlot(e.target.value)}
-            >
-              {TIME_SLOTS.map((s) => (
-                <option
-                  key={s.id}
-                  value={s.label}
-                >
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 text-[13px] font-semibold text-slate-700">Giờ bắt đầu đi</p>
+            <StartTimePicker value={newSlot} onChange={setNewSlot} />
+          </div>
         </div>
       </Modal>
 

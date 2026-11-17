@@ -6,6 +6,7 @@ import {
   Headset,
   KeyRound,
   type LucideIcon,
+  PlayCircle,
   RotateCcw,
   ShieldCheck,
   Truck,
@@ -49,6 +50,8 @@ export const DevToolbar = () => {
   const activeCount = order
     ? Number(order.flags.hasFieldDiscrepancyLock) + Number(order.flags.isVehicleIncident) + Number(order.flags.waitingMinutes > 30) + Number(order.flags.hoursUntilDeparture < 12)
     : 0;
+  // Mô phỏng cron tự hủy đơn chưa chốt sau 24h (Mã 1.1.3).
+  const expiredCount = state.orders.filter((o) => o.status === 'SURVEYED_PENDING_CONFIRM' && o.autoCancelDeadline !== null && o.autoCancelDeadline <= Date.now()).length;
   const currentRole = roleFromPath(pathname);
   const current = ROLES.find((r) => r.id === currentRole);
   const tag = (code: string) => <span className="mr-2 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/60">{code}</span>;
@@ -130,6 +133,14 @@ export const DevToolbar = () => {
           ) : (
             <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/60">Chưa có đơn hàng. Hãy tạo đơn bằng tài khoản khách hàng để mô phỏng ngoại lệ.</p>
           )}
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'RUN_AUTO_CANCEL_CRON' })}
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/10 text-[13px] font-semibold text-white/70 hover:bg-white/5 hover:text-white"
+          >
+            <PlayCircle className="size-4" /> {tag('1.1.3')}Quét đơn quá hạn 24h
+            {expiredCount > 0 && <span className="rounded-full bg-rose-500 px-1.5 text-[11px] text-white tabular-nums">{expiredCount}</span>}
+          </button>
           <button type="button" onClick={() => dispatch({ type: 'RESET_DEMO' })} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/10 text-[13px] font-semibold text-white/70 hover:bg-white/5 hover:text-white">
             <RotateCcw className="size-4" /> Xóa toàn bộ dữ liệu phiên
           </button>

@@ -1,8 +1,7 @@
-import { CalendarDays, CloudUpload, Headset, Home, Info } from "lucide-react";
+import { CalendarDays, CloudUpload, Headset, Info } from "lucide-react";
 import { Badge, Field, Input, cx } from "@/components/ui";
 import type { SurveyPreference } from "@/types";
 import {
-  HOME_SCALES,
   SURVEY_PREFERENCES,
   SURVEY_TIME_SLOTS,
   needsSurveyAppointment,
@@ -13,71 +12,6 @@ import {
   type StepErrors,
   todayISO,
 } from "./useBookingWizard";
-
-/** Quy mô nhà — chỉ để ước lượng giá tham khảo; danh mục chính thức được chốt khi khảo sát. */
-export const HomeScaleSection = ({
-  wizard,
-  errors,
-}: {
-  wizard: BookingWizard;
-  errors: StepErrors;
-}) => {
-  const { draft, update, homeScale } = wizard;
-  return (
-    <SectionCard
-      id="home-scale"
-      icon={Home}
-      tone="brand"
-      title="Quy mô nhà hiện tại"
-      subtitle="Chọn mức gần đúng nhất — danh mục đồ chi tiết sẽ được chốt khi khảo sát"
-      action={
-        homeScale ? (
-          <Badge tone="brand">
-            Ước lượng: xe {homeScale.vehicleTons} tấn · {homeScale.labor} người
-          </Badge>
-        ) : (
-          <Badge tone="neutral">Bắt buộc</Badge>
-        )
-      }
-    >
-      <div
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
-        role="radiogroup"
-        aria-label="Quy mô nhà ở"
-      >
-        {HOME_SCALES.map((s) => {
-          const sel = draft.homeScale === s.label;
-          return (
-            <button
-              key={s.label}
-              type="button"
-              role="radio"
-              aria-checked={sel}
-              onClick={() => update("homeScale", s.label)}
-              className={cx(choiceClass(sel), "p-3")}
-            >
-              <span
-                className={cx(
-                  "block text-sm font-semibold",
-                  sel ? "text-slate-900" : "text-slate-800",
-                )}
-              >
-                {s.label}
-              </span>
-              <span className="block text-xs text-slate-500">{s.hint}</span>
-            </button>
-          );
-        })}
-      </div>
-      <FieldError message={errors.homeScale} />
-      <p className="flex items-start gap-1.5 text-xs text-slate-500">
-        <Info className="mt-0.5 size-3.5 shrink-0" /> Có đồ đặc biệt (đàn piano,
-        két sắt, gương lớn…)? Ghi chú ở bước Xác nhận hoặc báo chuyên viên khi
-        khảo sát.
-      </p>
-    </SectionCard>
-  );
-};
 
 const prevDay = (iso: string): string => {
   const [y, m, d] = iso.split("-").map(Number);
@@ -221,6 +155,11 @@ export const SurveySection = ({
           đồ lớn và lối đi. Chuyên viên lập báo giá dựa trên nội dung bạn gửi.
         </p>
       )}
+      <p className="flex items-start gap-1.5 text-xs text-slate-500">
+        <Info className="mt-0.5 size-3.5 shrink-0" /> Có đồ đặc biệt (đàn piano,
+        két sắt, gương lớn…)? Ghi chú ở bước Xác nhận hoặc báo chuyên viên khi
+        khảo sát.
+      </p>
     </SectionCard>
   );
 };

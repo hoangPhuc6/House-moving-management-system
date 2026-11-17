@@ -136,19 +136,40 @@ export interface EquipmentItem {
 }
 
 /**
- * PHOTO         — Điều phối viên lập báo giá dựa trên ảnh / video khách gửi (mặc định).
- * VIDEO_CALL    — Điều phối viên khảo sát qua cuộc gọi video theo lịch khách hẹn.
+ * Hình thức khảo sát đã dùng. Với PHOTO / VIDEO_CALL / ON_SITE: Điều phối phân người khảo sát →
+ * người khảo sát gửi kết quả (đồ đạc, ghi chú, đề xuất xe & nhân sự) → Điều phối lập báo giá.
+ * PHOTO         — Người khảo sát kiểm tra ảnh / video khách gửi.
+ * VIDEO_CALL    — Người khảo sát gọi video theo lịch khách hẹn.
  * TRUCK_CONFIRM — Gói chỉ thuê xe: Điều phối gọi xác nhận xe & bốc vác, không khảo sát.
- * ON_SITE       — Nhân viên vận chuyển khảo sát trực tiếp, CHỈ khi Điều phối yêu cầu.
+ * ON_SITE       — Người khảo sát đến tận nơi.
  */
 export type SurveyMethod = 'PHOTO' | 'VIDEO_CALL' | 'TRUCK_CONFIRM' | 'ON_SITE';
 
-export interface OnSiteSurveyRequest {
-  requestedAt: number;
-  /** Lý do / ghi chú của Điều phối gửi cho nhân viên đi khảo sát. */
+/** Điều phối phân người khảo sát — áp dụng cho cả video call, tận nơi và khách gửi ảnh. */
+export interface SurveyAssignment {
+  assignedAt: number;
+  /** Ghi chú của Điều phối gửi cho người khảo sát. */
   note: string;
-  /** Nhân viên được Điều phối cử đi khảo sát (StaffMember.id). */
+  /** Nhân viên được phân khảo sát (StaffMember.id). */
   surveyorId: string;
+}
+
+/** Kết quả người khảo sát gửi về — Điều phối dựa vào đây để lập báo giá (người khảo sát không định giá). */
+export interface SurveyReport {
+  submittedAt: number;
+  surveyorId: string;
+  /** Danh sách đồ đạc / khối lượng ghi nhận khi khảo sát. */
+  itemsNote: string;
+  /** Ghi chú hiện trường: lối đi, đồ đặc biệt, lưu ý cho đội chuyển… */
+  note: string;
+  /** Đề xuất nguồn lực: xe, số người, vật tư, lầu, hẻm. */
+  proposal: SurveyInput;
+}
+
+/** Yêu cầu thương lượng của khách trên báo giá đang chờ xác nhận. */
+export interface QuoteNegotiation {
+  requestedAt: number;
+  message: string;
 }
 
 /** Một dòng trong bảng phân rã báo giá tham khảo. */
@@ -218,8 +239,6 @@ export interface BookingDetails {
   from: AddressDetail;
   to: AddressDetail;
   serviceMode: ServiceMode;
-  /** Quy mô nhà ở (VD: "2 phòng ngủ") — chỉ thu thập với gói trọn gói. */
-  homeScale: string;
   /** null với gói chỉ thuê xe — không khảo sát. */
   surveyPreference: SurveyPreference | null;
   /** Gói chỉ thuê xe: số nhân viên bốc vác khách thuê thêm (0 = không thuê). */
@@ -243,6 +262,7 @@ export interface Order {
   toAddress: string;
   houseType: HouseType;
   scheduledDate: string;
+  /** Giờ xe bắt đầu đi (HH:MM) — đơn cũ có thể là khung "07:00 - 09:00". */
   timeSlot: string;
   status: OrderStatus;
   /** Tên các ảnh đồ đạc khách tải lên khi đặt lịch — căn cứ khảo sát qua ảnh. */
@@ -253,8 +273,12 @@ export interface Order {
   requestedServices: string[];
   /** Báo giá tham khảo do hệ thống trả về ngay sau khi đặt đơn. */
   referenceQuote: ReferenceQuote | null;
-  /** Khác null khi Điều phối yêu cầu khảo sát trực tiếp. */
-  onSiteSurveyRequest: OnSiteSurveyRequest | null;
+  /** Người khảo sát được Điều phối phân công (null = chưa phân). */
+  surveyAssignment: SurveyAssignment | null;
+  /** Kết quả khảo sát người khảo sát gửi về (null = chưa khảo sát xong). */
+  surveyReport: SurveyReport | null;
+  /** Khách yêu cầu thương lượng báo giá — Điều phối sửa rồi gửi lại (null = không có yêu cầu đang chờ). */
+  negotiation: QuoteNegotiation | null;
   /** Phương thức đã dùng để lập báo giá khảo sát (null khi chưa khảo sát). */
   surveyMethod: SurveyMethod | null;
   quoteItems: QuoteItem[];
@@ -333,10 +357,6 @@ export interface LedgerEntry {
   createdAt: number;
 }
 
-export interface TimeSlot {
-  id: string;
-  label: string;
-}
 
 export interface AppState {
   activeOrderId: string;
@@ -377,6 +397,7 @@ export interface NewOrderInput {
   toAddress: string;
   houseType: HouseType;
   scheduledDate: string;
+  /** Giờ xe bắt đầu đi (HH:MM) — đơn cũ có thể là khung "07:00 - 09:00". */
   timeSlot: string;
   photoNames: string[];
   items: BookingItem[];
@@ -393,9 +414,12 @@ export type AppAction =
   | { type: 'SET_FLAGS'; orderId: string; patch: Partial<ExceptionFlags> }
   | { type: 'JUMP_STATUS'; orderId: string; status: OrderStatus }
   | { type: 'CREATE_ORDER'; input: NewOrderInput }
-  | { type: 'REQUEST_ONSITE_SURVEY'; orderId: string; note: string; surveyorId: string }
-  | { type: 'CANCEL_ONSITE_SURVEY'; orderId: string }
-  | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[]; by: 'COORDINATOR' | 'STAFF' }
+  | { type: 'ASSIGN_SURVEYOR'; orderId: string; note: string; surveyorId: string }
+  | { type: 'UNASSIGN_SURVEYOR'; orderId: string }
+  | { type: 'SUBMIT_SURVEY_REPORT'; orderId: string; itemsNote: string; note: string; proposal: SurveyInput }
+  | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[] }
+  | { type: 'CUSTOMER_REQUEST_NEGOTIATION'; orderId: string; message: string }
+  | { type: 'RESEND_QUOTE'; orderId: string; note: string }
   | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; names: string[] }
   | { type: 'CUSTOMER_SUBMIT_SURVEY_MEDIA'; orderId: string }
   | { type: 'CUSTOMER_UPDATE_SURVEY'; orderId: string; preference: SurveyPreference; date: string; slot: string }

@@ -461,4 +461,67 @@ class MaterialAllocationServiceTest {
 
         assertError(catchThrowable(() -> service.cancel(404, null, ACTOR_ID)), ErrorCode.ERR_ALLOCATION_NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("Xem cấp phát: trả mọi dòng (mọi trạng thái) theo thứ tự, tổng dự kiến chỉ tính CONSUMABLE ALLOCATED, "
+            + "không khóa và không ghi gì")
+    void getScheduleMaterials_listsAllStatuses() {
+        givenSchedule(MovingScheduleStatus.COMPLETED);
+        Material box = givenMaterial(1, MaterialCategory.CONSUMABLE, 80, "15000");
+        Material tape = givenMaterial(2, MaterialCategory.CONSUMABLE, 30, "20000");
+        Material trolley = givenMaterial(3, MaterialCategory.TOOL, 3, "50000");
+        Material wrap = givenMaterial(4, MaterialCategory.CONSUMABLE, 10, "30000");
+        existingAllocation(box, 20, "15000");
+        existingAllocation(trolley, 1, "50000");
+        MaterialAllocation settled = existingAllocation(tape, 5, "20000");
+        settled.setStatus(AllocationStatus.SETTLED);
+        settled.setQuantityUsed(4);
+        settled.setQuantityReturned(1);
+        settled.setChargedAmount(new BigDecimal("80000"));
+        MaterialAllocation cancelled = existingAllocation(wrap, 2, "30000");
+        cancelled.setStatus(AllocationStatus.CANCELLED);
+
+        ScheduleMaterialsResponse response = service.getScheduleMaterials(SCHEDULE_ID);
+
+        assertThat(response.scheduleId()).isEqualTo(SCHEDULE_ID);
+        assertThat(response.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(response.scheduleStatus()).isEqualTo(MovingScheduleStatus.COMPLETED);
+        assertThat(response.allocations())
+                .extracting(MaterialAllocationResponse::materialId, MaterialAllocationResponse::status)
+                .containsExactly(
+                        tuple(1, AllocationStatus.ALLOCATED),
+                        tuple(3, AllocationStatus.ALLOCATED),
+                        tuple(2, AllocationStatus.SETTLED),
+                        tuple(4, AllocationStatus.CANCELLED));
+        // Dự kiến: chỉ carton (CONSUMABLE, ALLOCATED) 20 × 15000; TOOL / SETTLED / CANCELLED không tính
+        assertThat(response.estimatedTotal()).isEqualByComparingTo("300000");
+        assertThat(response.chargedTotal()).isEqualByComparingTo("80000");
+
+        verify(movingScheduleLookupService, never()).lockForUpdate(anyInt());
+        verify(allocationRepository, never()).findAllByScheduleIdAndStatusForUpdate(anyInt(), any());
+        verify(allocationRepository, never()).save(any());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Xem cấp phát chuyến chưa có dòng nào → danh sách rỗng, tổng 0")
+    void getScheduleMaterials_empty() {
+        givenSchedule(MovingScheduleStatus.PLANNED);
+
+        ScheduleMaterialsResponse response = service.getScheduleMaterials(SCHEDULE_ID);
+
+        assertThat(response.allocations()).isEmpty();
+        assertThat(response.estimatedTotal()).isEqualByComparingTo("0");
+        assertThat(response.chargedTotal()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("Xem cấp phát chuyến không tồn tại → ERR_MOVING_SCHEDULE_NOT_FOUND, không truy vấn dòng cấp phát")
+    void getScheduleMaterials_scheduleNotFound() {
+        when(movingScheduleLookupService.getSnapshot(404))
+                .thenThrow(new AppException(ErrorCode.ERR_MOVING_SCHEDULE_NOT_FOUND, 404));
+
+        assertError(catchThrowable(() -> service.getScheduleMaterials(404)), ErrorCode.ERR_MOVING_SCHEDULE_NOT_FOUND);
+        verify(allocationRepository, never()).findAllByScheduleIdOrderByIdAsc(anyInt());
+    }
 }

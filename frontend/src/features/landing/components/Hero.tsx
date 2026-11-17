@@ -2,7 +2,7 @@ import { ArrowRight } from 'lucide-react';
 import { QuickQuote } from '@/features/landing/components/QuickQuote';
 
 export const Hero = ({ onBook }: { onBook: () => void }) => (
-  <section className="relative overflow-hidden bg-obsidian pt-16 text-white">
+  <section id="top" className="relative overflow-hidden bg-obsidian pt-16 text-white">
     <div className="bg-grid-dark absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
     <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-brand/20 blur-[120px]" />
     <div className="pointer-events-none absolute right-[-10%] bottom-[-20%] h-[420px] w-[520px] rounded-full bg-blue-500/10 blur-[120px]" />
@@ -10,13 +10,13 @@ export const Hero = ({ onBook }: { onBook: () => void }) => (
     <div className="relative mx-auto grid max-w-7xl gap-12 px-4 pt-10 pb-20 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pt-16 lg:pb-28">
       <div className="flex flex-col justify-center">
         <a
-          href="#process"
+          href="#roles"
           className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pr-3 pl-1 text-xs font-medium text-white/70 backdrop-blur hover:border-white/20"
         >
           <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">
             Mới
           </span>
-          Điều phối thời gian thực cho 120+ đội xe
+          Một hệ thống cho khách hàng, đội xe, điều phối & admin
           <ArrowRight className="size-3.5" />
         </a>
         <h1 className="text-[40px] leading-[1.05] font-bold tracking-tight sm:text-5xl lg:text-[58px]">
@@ -27,9 +27,9 @@ export const Hero = ({ onBook }: { onBook: () => void }) => (
           Điều Phối <span className="text-brand">Thời Gian Thực.</span>
         </h1>
         <p className="mt-6 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg">
-          MoveFlow kết nối khách hàng, đội vận chuyển, điều phối viên và kế toán
-          trên một nguồn dữ liệu duy nhất — từ khảo sát video đến biên bản bàn
-          giao.
+          MoveFlow kết nối khách hàng, nhân viên vận chuyển, điều phối viên và
+          admin kho & tài chính trên một nguồn dữ liệu duy nhất — từ khảo sát
+          video call đến biên bản bàn giao.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <button
@@ -48,9 +48,9 @@ export const Hero = ({ onBook }: { onBook: () => void }) => (
         </div>
         <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/10 pt-6">
           {[
-            ["18.400+", "Đơn hoàn tất"],
-            ["4,9/5", "Đánh giá khách hàng"],
-            ["< 15′", "Ra báo giá"],
+            ["3 bước", "Đặt lịch trực tuyến"],
+            ["24h", "Giữ báo giá để chốt"],
+            ["12h", "Dời lịch miễn phí trước giờ đi"],
           ].map(([v, l]) => (
             <div key={l}>
               <dt className="text-2xl font-bold tracking-tight tabular-nums">

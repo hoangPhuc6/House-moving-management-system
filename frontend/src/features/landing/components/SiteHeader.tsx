@@ -50,7 +50,7 @@ export const SiteHeader = ({ onLogin, onBook }: { onLogin: () => void; onBook: (
             <button type="button" onClick={onBook} className="h-12 rounded-xl bg-brand font-semibold text-white">Đặt lịch chuyển nhà</button>
             <button type="button" onClick={onLogin} className="h-12 rounded-xl border border-white/15 font-semibold text-white">Đăng nhập</button>
           </div>
-          <a href="tel:19006868" className="mt-8 flex items-center gap-2 text-sm text-white/60"><Phone className="size-4" /> Hotline 1900 6868 (24/7)</a>
+          <a href="tel:19006868" className="mt-8 flex items-center gap-2 text-sm text-white/60"><Phone className="size-4" /> Hotline 1900 6868</a>
         </div>
       )}
     </header>

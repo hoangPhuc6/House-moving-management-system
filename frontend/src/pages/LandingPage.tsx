@@ -5,9 +5,9 @@ import { Faq } from '@/features/landing/components/Faq';
 import { Hero } from '@/features/landing/components/Hero';
 import { Pricing } from '@/features/landing/components/Pricing';
 import { ProcessTimeline } from '@/features/landing/components/ProcessTimeline';
+import { RoleFlows } from '@/features/landing/components/RoleFlows';
 import { SiteFooter } from '@/features/landing/components/SiteFooter';
 import { SiteHeader } from '@/features/landing/components/SiteHeader';
-import { Testimonials } from '@/features/landing/components/Testimonials';
 import { TrustStrip } from '@/features/landing/components/TrustStrip';
 import { ROUTES } from '@/routes/paths';
 
@@ -23,8 +23,8 @@ export const LandingPage = () => {
       <TrustStrip />
       <BentoFeatures />
       <ProcessTimeline />
+      <RoleFlows />
       <Pricing onBook={book} />
-      <Testimonials />
       <Faq />
       <CtaBand onBook={book} />
       <SiteFooter />

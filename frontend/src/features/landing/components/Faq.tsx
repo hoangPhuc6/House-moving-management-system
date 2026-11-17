@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cx } from '@/components/ui';
+import { HOTLINE } from '@/features/customer/booking/constants';
 import { FAQS } from '@/features/landing/constants';
 
 export const Faq = () => {
@@ -11,7 +12,7 @@ export const Faq = () => {
         <div>
           <p className="text-sm font-semibold text-brand">Hỏi đáp</p>
           <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Câu hỏi thường gặp</h2>
-          <p className="mt-4 text-slate-500">Chưa tìm thấy câu trả lời? Gọi <a href="tel:19006868" className="font-semibold text-slate-900 underline">1900 6868</a>, chúng tôi hỗ trợ 24/7.</p>
+          <p className="mt-4 text-slate-500">Chưa tìm thấy câu trả lời? Gọi hotline <a href={HOTLINE.tel} className="font-semibold text-slate-900 underline">{HOTLINE.display}</a> để được điều phối viên hỗ trợ.</p>
         </div>
         <div className="divide-y divide-slate-200 rounded-3xl border border-slate-200 bg-white">
           {FAQS.map(([q, a], i) => (

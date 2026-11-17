@@ -24,7 +24,7 @@ export const CtaBand = ({ onBook }: { onBook: () => void }) => (
             </button>
           </div>
           <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-white/60">
-            {["Không phí ẩn", "Bảo hiểm đồ đạc", "Hỗ trợ 24/7"].map((t) => (
+            {["Báo giá từng dòng", "Bồi thường theo biên bản", "Hotline 1900 6868"].map((t) => (
               <li key={t} className="flex items-center gap-1.5">
                 <Check className="size-4 text-brand" /> {t}
               </li>

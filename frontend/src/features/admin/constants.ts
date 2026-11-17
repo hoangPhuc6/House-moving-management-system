@@ -50,6 +50,7 @@ export const CLAIM_STATUS: Record<
 > = {
   OPEN: { label: "Mới tiếp nhận", tone: "warning" },
   INVESTIGATING: { label: "Đang đối chiếu", tone: "info" },
+  PENDING_APPROVAL: { label: "Chờ duyệt chi", tone: "warning" },
   APPROVED: { label: "Đã duyệt bồi thường", tone: "success" },
   REJECTED: { label: "Từ chối", tone: "danger" },
 };

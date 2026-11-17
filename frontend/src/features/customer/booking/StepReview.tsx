@@ -178,7 +178,9 @@ export const StepReview = ({
               <Badge key={s} tone="brand">
                 {truckOnly && s === laborService?.name
                   ? `${s} ×${draft.laborCount}`
-                  : s}
+                  : truckOnly && (draft.vehicleQty[s] ?? 0) > 1
+                    ? `${s} ×${draft.vehicleQty[s]}`
+                    : s}
               </Badge>
             ))}
           </div>

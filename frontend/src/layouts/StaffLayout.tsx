@@ -1,6 +1,6 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import { CalendarDays, CircleHelp, ClipboardList, LogOut, Ruler, UserRound } from 'lucide-react';
-import { RUNNING, STAFF_USER } from '@/features/staff/constants';
+import { isOpenJob, STAFF_USER } from '@/features/staff/constants';
 import { selectStaffJobs } from '@/features/staff/utils';
 import { type MobileNavItem, MobileShell } from '@/layouts/MobileShell';
 import type { UserMenuItem } from '@/layouts/shell';
@@ -13,7 +13,7 @@ export const StaffLayout = () => {
   const navigate = useNavigate();
   const jobs = selectStaffJobs(state.orders);
   const surveyCount = state.orders.filter((o) => o.status === 'NEW_PENDING_SURVEY' && o.surveyAssignment && !o.surveyReport).length;
-  const runningCount = jobs.filter((j) => RUNNING.includes(j.status)).length;
+  const runningCount = jobs.filter(isOpenJob).length;
 
   const nav: MobileNavItem[] = [
     { to: ROUTES.staff.jobs, label: 'Lệnh việc', icon: ClipboardList, badge: runningCount || undefined },

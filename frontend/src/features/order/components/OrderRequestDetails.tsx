@@ -10,8 +10,6 @@ const SURVEY_LABEL: Record<SurveyPreference, string> = { VIDEO_CALL: 'Video Call
 const BookingDetailsBlock = ({ details: d }: { details: BookingDetails }) => {
   const rows: [string, string][] = [
     ['Hình thức', MODE_LABEL[d.serviceMode]],
-    ['Điểm đi', [d.from.propertyType, d.from.floor, d.from.note].filter(Boolean).join(' • ')],
-    ['Điểm đến', [d.to.propertyType, d.to.floor, d.to.note].filter(Boolean).join(' • ')],
     ...(d.surveyPreference
       ? ([['Khảo sát mong muốn', SURVEY_LABEL[d.surveyPreference] + (d.surveyDate ? ` — ${formatDateVN(d.surveyDate)}` : '') + (d.surveyContactSlot ? ` (${d.surveyContactSlot})` : '')]] as [string, string][])
       : ([['Bốc vác thuê thêm', d.laborCount > 0 ? `${d.laborCount} người` : 'Không thuê (khách tự khiêng vác)']] as [string, string][])),
@@ -39,6 +37,8 @@ export const OrderRequestDetails = ({ order }: { order: Order }) => {
   const volume = order.items.reduce((s, i) => s + (i.volumeM3 ?? 0) * i.quantity, 0);
   return (
     <div className="space-y-4 text-sm">
+      {/* Danh mục đồ do người khảo sát ghi nhận — chỉ hiện khi đơn có khai báo đồ đạc. */}
+      {order.items.length > 0 && (
       <div>
         <p className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
           <Package className="size-4 text-slate-500" /> Đồ đạc cần vận chuyển ({order.items.length})
@@ -59,6 +59,7 @@ export const OrderRequestDetails = ({ order }: { order: Order }) => {
           </ul>
         )}
       </div>
+      )}
       <div>
         <p className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><Wrench className="size-4 text-slate-500" /> Dịch vụ đã chọn</p>
         {order.requestedServices.length === 0 ? (

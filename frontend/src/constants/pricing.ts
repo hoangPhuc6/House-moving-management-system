@@ -1,4 +1,4 @@
-import type { SurveyInput } from '@/types';
+import type { CartonSize, SurveyInput, VehicleLine } from '@/types';
 
 export const WAIT_FREE_MINUTES = 30;
 
@@ -25,15 +25,56 @@ export const LABOR_PER_PERSON = 350_000;
 /** Giá trị khởi tạo thấp nhất cho biểu mẫu báo giá — người lập báo giá tự tăng theo thực tế. */
 export const MIN_SURVEY_INPUT: SurveyInput = {
   distanceKm: 1,
-  vehicleCapacity: Math.min(...Object.keys(VEHICLE_PRICING).map(Number)),
-  vehicleQty: 1,
+  vehicles: [{ capacity: Math.min(...Object.keys(VEHICLE_PRICING).map(Number)), qty: 1 }],
   workers: 0,
-  cartons: 0,
+  cartons: { S: 0, M: 0, L: 0 },
   tapeRolls: 0,
   peFilmRolls: 0,
   floors: 0,
   alleyMeters: 0,
+  estimatedHours: 0,
 };
+
+/** Các tải trọng xe có trong bảng giá, nhỏ → lớn. */
+export const VEHICLE_CAPACITIES = Object.keys(VEHICLE_PRICING)
+  .map(Number)
+  .sort((a, b) => a - b);
+
+/** "xe 1,25 tấn" */
+export const capacityLabel = (cap: number) => `xe ${String(cap).replace('.', ',')} tấn`;
+
+/** "1 × xe 5 tấn + 1 × xe 1,25 tấn" — bỏ loại có số lượng 0, lớn trước. */
+export const vehicleLinesLabel = (lines: VehicleLine[]) =>
+  lines
+    .filter((l) => l.qty > 0)
+    .sort((a, b) => b.capacity - a.capacity)
+    .map((l) => `${l.qty} × ${capacityLabel(l.capacity)}`)
+    .join(' + ') || 'chưa chọn xe';
+
+export const totalVehicles = (lines: VehicleLine[]) => lines.reduce((n, l) => n + l.qty, 0);
+
+/** Đổi số lượng một loại xe; về 0 thì bỏ khỏi danh sách. */
+export const setVehicleQty = (lines: VehicleLine[], capacity: number, qty: number): VehicleLine[] => {
+  const rest = lines.filter((l) => l.capacity !== capacity);
+  return (qty > 0 ? [...rest, { capacity, qty }] : rest).sort((a, b) => a.capacity - b.capacity);
+};
+
+export const qtyOf = (lines: VehicleLine[], capacity: number) => lines.find((l) => l.capacity === capacity)?.qty ?? 0;
+
+/** Số người tối đa các xe đã chọn chở được (gói chỉ thuê xe — bốc vác đi cùng xe). */
+export const maxLaborOf = (lines: VehicleLine[]) => lines.reduce((n, l) => n + (VEHICLE_PRICING[l.capacity]?.maxLabor ?? 0) * l.qty, 0);
+
+/**
+ * Cỡ thùng carton hay dùng khi chuyển nhà: thùng nhỏ cho đồ nặng (sách, chén bát) để không quá tải,
+ * thùng lớn cho đồ nhẹ cồng kềnh (quần áo, chăn gối).
+ */
+export const CARTON_SIZES: Record<CartonSize, { label: string; dims: string; use: string; price: number }> = {
+  S: { label: 'Thùng nhỏ', dims: '40x30x30', use: 'sách, chén bát, đồ nặng', price: 18_000 },
+  M: { label: 'Thùng vừa', dims: '60x40x40', use: 'đồ dùng chung', price: 25_000 },
+  L: { label: 'Thùng lớn', dims: '60x50x50', use: 'quần áo, chăn gối, đồ nhẹ', price: 32_000 },
+};
+export const CARTON_ORDER: CartonSize[] = ['S', 'M', 'L'];
+export const totalCartons = (c: Record<CartonSize, number>) => c.S + c.M + c.L;
 
 /** Số km đã gồm trong giá xe. */
 export const INCLUDED_KM = 10;

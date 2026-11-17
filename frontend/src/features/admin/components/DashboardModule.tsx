@@ -96,7 +96,7 @@ export const DashboardModule = () => {
       avgRating,
       ratingCount: fbs.length,
       claimCount: claims.length,
-      openClaims: claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length,
+      openClaims: claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING' || c.status === 'PENDING_APPROVAL').length,
       empty: rows.length === 0 && orders.length === 0,
     };
   }, [range, group, state.orders, state.claims, catalog.history, catalog.payments, catalog.feedbacks]);

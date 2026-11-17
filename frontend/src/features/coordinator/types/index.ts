@@ -1,13 +1,13 @@
-import type { Order } from '@/types';
+/** Các mục trong trang chi tiết đơn của Điều phối. */
+export type OrderSection = 'overview' | 'quote' | 'dispatch' | 'incident' | 'log';
 
-export type CoordTab = 'queue' | 'editor' | 'dispatch' | 'incident';
+/** @deprecated Giữ tên cũ cho các chỗ gọi `open(id, tab)` — nay là mục của trang chi tiết đơn. */
+export type CoordTab = OrderSection;
 
 /** Trạng thái dùng chung giữa các trang con của Điều phối (qua <Outlet context>). */
 export interface CoordinatorOutletContext {
-  /** Đơn đang được chọn để báo giá / điều phối / xử lý sự cố. */
-  selected: Order | null;
-  setSelectedId: (id: string) => void;
+  /** Từ khóa ở ô tìm kiếm trên thanh trên cùng. */
   query: string;
-  /** Mở một đơn ở tab chỉ định. */
-  open: (id: string, tab: CoordTab) => void;
+  /** Mở trang chi tiết một đơn (mặc định: mục phù hợp với trạng thái đơn). */
+  open: (id: string, section?: OrderSection) => void;
 }

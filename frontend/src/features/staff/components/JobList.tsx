@@ -2,15 +2,15 @@ import { Link } from 'react-router-dom';
 import { AlertOctagon, ChevronRight, ClipboardList, Truck } from 'lucide-react';
 import { cx, EmptyState, StatusBadge } from '@/components/ui';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
-import { RUNNING } from '@/features/staff/constants';
+import { isOpenJob, needsToolReturn } from '@/features/staff/constants';
 import { ROUTES } from '@/routes/paths';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
 export const JobList = ({ jobs }: { jobs: Order[] }) => {
   const { state } = useApp();
-  const running = jobs.filter((j) => RUNNING.includes(j.status));
-  const done = jobs.filter((j) => !RUNNING.includes(j.status));
+  const running = jobs.filter(isOpenJob);
+  const done = jobs.filter((j) => !isOpenJob(j));
 
   const row = (o: Order) => {
     const v = state.resources.vehicles.find((x) => x.id === o.vehicleId);
@@ -27,7 +27,7 @@ export const JobList = ({ jobs }: { jobs: Order[] }) => {
           <span
             className={cx(
               "grid size-12 shrink-0 place-items-center rounded-2xl",
-              RUNNING.includes(o.status)
+              isOpenJob(o)
                 ? "bg-brand text-white"
                 : "bg-slate-100 text-slate-500",
             )}
@@ -51,6 +51,9 @@ export const JobList = ({ jobs }: { jobs: Order[] }) => {
             <p className="truncate text-sm text-slate-600">{o.toAddress}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={o.status} />
+              {needsToolReturn(o) && (
+                <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">Chờ trả dụng cụ</span>
+              )}
               {v && (
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600">
                   {v.plateNumber}

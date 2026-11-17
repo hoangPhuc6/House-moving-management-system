@@ -1,8 +1,11 @@
+import { addDaysISO, todayLocalISO } from "@/services/downtime";
 import type {
+  ResourceDowntime,
   StaffMember,
   StaffRole,
   ToastTone,
   Vehicle,
+  VehicleIncidentKind,
   VehicleStatus,
 } from "@/types";
 
@@ -27,10 +30,26 @@ export const ESTIMATED_JOB_HOURS = 4;
  * Ca làm của xe suy ra từ giờ bắt đầu: "08:30" → "08:30 - 12:30".
  * Giá trị cũ dạng khung "07:00 - 09:00" được giữ nguyên.
  */
-export const shiftFromStart = (start: string): string => {
+export const shiftFromStart = (start: string, hours: number = ESTIMATED_JOB_HOURS): string => {
   const m = start.match(/^(\d{2}):(\d{2})$/);
   if (!m) return start;
-  return `${start} - ${pad2((Number(m[1]) + ESTIMATED_JOB_HOURS) % 24)}:${m[2]}`;
+  const end = (Number(m[1]) * 60 + Number(m[2]) + Math.round(hours * 60)) % (24 * 60);
+  return `${start} - ${pad2(Math.floor(end / 60))}:${pad2(end % 60)}`;
+};
+
+/** Ca của một đơn theo thời gian dự kiến khảo sát chốt (chưa có thì mặc định ESTIMATED_JOB_HOURS). */
+export const orderShift = (o: { timeSlot: string; estimatedHours: number | null }) => shiftFromStart(o.timeSlot, o.estimatedHours ?? ESTIMATED_JOB_HOURS);
+
+/** "4,5 giờ" */
+export const hoursLabel = (h: number) => `${String(h).replace('.', ',')} giờ`;
+
+export const VEHICLE_INCIDENT_KINDS: Record<VehicleIncidentKind, string> = {
+  ENGINE: 'Chết máy / không nổ máy',
+  TIRE: 'Thủng / nổ lốp',
+  ELECTRIC: 'Hỏng điện / ắc quy',
+  BRAKE: 'Hỏng phanh / hộp số',
+  ACCIDENT: 'Va chạm / tai nạn',
+  OTHER: 'Khác',
 };
 
 /** Chuẩn hoá giờ bắt đầu (VD nháp cũ lưu khung "07:00 - 09:00" → "07:00"). */
@@ -68,7 +87,7 @@ export const seedVehicles = (): Vehicle[] => [
     id: "veh-4",
     plateNumber: "51C-777.01",
     capacityTons: 1.25,
-    status: "MAINTENANCE",
+    status: "AVAILABLE",
     currentShiftTime: null,
     busyOrderId: null,
   },
@@ -88,58 +107,70 @@ export const seedStaff = (): StaffMember[] => [
     code: "NV-014",
     name: "Trần Văn Hùng",
     role: "DRIVER",
-    isAvailable: true,
   },
   {
     id: "st-2",
     code: "NV-021",
     name: "Lê Hoàng Phúc",
     role: "DRIVER",
-    isAvailable: true,
   },
   {
     id: "st-3",
     code: "NV-033",
     name: "Nguyễn Đức Thịnh",
     role: "MOVER",
-    isAvailable: true,
   },
   {
     id: "st-4",
     code: "NV-037",
     name: "Phan Minh Khôi",
     role: "MOVER",
-    isAvailable: true,
   },
   {
     id: "st-5",
     code: "NV-042",
     name: "Đỗ Quang Vinh",
     role: "TECHNICIAN",
-    isAvailable: true,
   },
   {
     id: "st-6",
     code: "NV-045",
     name: "Huỳnh Tấn Lộc",
     role: "MOVER",
-    isAvailable: false,
   },
   {
     id: "st-7",
     code: "NV-051",
     name: "Vũ Thành Đạt",
     role: "DRIVER",
-    isAvailable: true,
   },
   {
     id: "st-8",
     code: "NV-058",
     name: "Cao Nhật Minh",
     role: "MOVER",
-    isAvailable: false,
   },
 ];
+
+/** Lịch nghỉ mẫu, tính theo ngày mở app để demo luôn có xe bảo dưỡng / người nghỉ. */
+export const seedDowntimes = (): ResourceDowntime[] => {
+  const today = todayLocalISO();
+  const mk = (id: string, target: ResourceDowntime["target"], resourceId: string, reason: ResourceDowntime["reason"], from: number, to: number, note: string): ResourceDowntime => ({
+    id,
+    target,
+    resourceId,
+    reason,
+    from: addDaysISO(today, from),
+    to: addDaysISO(today, to),
+    note,
+    createdAt: Date.now(),
+  });
+  return [
+    mk("dt-1", "VEHICLE", "veh-4", "MAINTENANCE", -1, 2, "Bảo dưỡng định kỳ 20.000 km"),
+    mk("dt-2", "STAFF", "st-6", "LEAVE", 0, 1, "Về quê"),
+    mk("dt-3", "STAFF", "st-8", "SICK", 0, 0, ""),
+  ];
+};
 
 export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
   TEAM_LEADER: "Trưởng nhóm",
@@ -154,7 +185,6 @@ export const VEHICLE_STATUS_META: Record<
 > = {
   AVAILABLE: { label: "Sẵn sàng", tone: "success" },
   BUSY: { label: "Đang kẹt ca", tone: "danger" },
-  MAINTENANCE: { label: "Bảo dưỡng", tone: "warning" },
 };
 
 export const PLATE_REGEX = /^\d{2}[A-Z]{1,2}-\d{3}\.\d{2}$/;

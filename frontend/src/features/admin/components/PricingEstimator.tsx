@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Calculator } from 'lucide-react';
-import { Card, CardHeader, cx, Field, NumberStepper, Select } from '@/components/ui';
-import { VEHICLE_PRICING } from '@/constants/pricing';
+import { Card, CardHeader, cx, Field, NumberStepper } from '@/components/ui';
+import { CARTON_ORDER, CARTON_SIZES, qtyOf, setVehicleQty, VEHICLE_CAPACITIES, VEHICLE_PRICING } from '@/constants/pricing';
 import { formatVND } from '@/services/format';
 import { buildSurveyQuote, lineTotal, quoteSubtotal } from '@/services/pricing';
 import { useCatalog } from '@/services/store/CatalogStore';
@@ -10,7 +10,7 @@ import type { SurveyInput } from '@/types';
 /** Bảng phân rã chi phí — dùng chung cho mô phỏng của Admin và bảng giá tham khảo của khách. */
 export const PricingEstimator = ({ reference = false }: { reference?: boolean }) => {
   const { catalog } = useCatalog();
-  const [input, setInput] = useState<SurveyInput>({ distanceKm: 10, vehicleCapacity: 2, vehicleQty: 1, workers: 3, cartons: 20, tapeRolls: 4, peFilmRolls: 2, floors: 0, alleyMeters: 0 });
+  const [input, setInput] = useState<SurveyInput>({ distanceKm: 10, vehicles: [{ capacity: 2, qty: 1 }], workers: 3, cartons: { S: 5, M: 15, L: 5 }, tapeRolls: 4, peFilmRolls: 2, floors: 0, alleyMeters: 0, estimatedHours: 4 });
   const [discount, setDiscount] = useState(0);
   const [extraIds, setExtraIds] = useState<string[]>([]);
   const set = <K extends keyof SurveyInput>(k: K, v: SurveyInput[K]) => setInput((p) => ({ ...p, [k]: v }));
@@ -35,14 +35,18 @@ export const PricingEstimator = ({ reference = false }: { reference?: boolean })
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Loại xe">
-              <Select value={input.vehicleCapacity} onChange={(e) => set('vehicleCapacity', Number(e.target.value))}>
-                {Object.entries(VEHICLE_PRICING).map(([cap, v]) => <option key={cap} value={cap}>{v.label}</option>)}
-              </Select>
-            </Field>
+            {VEHICLE_CAPACITIES.map((cap) => (
+              <Field key={cap} label={VEHICLE_PRICING[cap]!.label}>
+                <NumberStepper value={qtyOf(input.vehicles, cap)} onChange={(n) => set('vehicles', setVehicleQty(input.vehicles, cap, n))} max={5} suffix="xe" />
+              </Field>
+            ))}
             <Field label="Khoảng cách (km)"><NumberStepper value={input.distanceKm} onChange={(n) => set('distanceKm', n)} max={500} /></Field>
             <Field label="Nhân viên bốc xếp"><NumberStepper value={input.workers} onChange={(n) => set('workers', n)} max={20} /></Field>
-            <Field label="Thùng carton"><NumberStepper value={input.cartons} onChange={(n) => set('cartons', n)} max={300} /></Field>
+            {CARTON_ORDER.map((size) => (
+              <Field key={size} label={`${CARTON_SIZES[size].label} ${CARTON_SIZES[size].dims}`}>
+                <NumberStepper value={input.cartons[size]} onChange={(n) => set('cartons', { ...input.cartons, [size]: n })} max={300} />
+              </Field>
+            ))}
             <Field label="Số lầu khiêng bộ"><NumberStepper value={input.floors} onChange={(n) => set('floors', n)} max={20} /></Field>
             <Field label="Quãng hẻm (m)"><NumberStepper value={input.alleyMeters} onChange={(n) => set('alleyMeters', n)} step={50} max={500} /></Field>
           </div>

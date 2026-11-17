@@ -5,6 +5,7 @@ import type { AdminOutletContext } from '@/features/admin/types';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
 import { useApp } from '@/services/store/AppStore';
+import { claimsAwaiting } from '@/features/admin/components/ClaimsModule';
 
 /** Khung của khu vực Admin: sidebar + ô tìm kiếm chung, các trang con hiển thị qua <Outlet />. */
 export const AdminLayout = () => {
@@ -15,7 +16,7 @@ export const AdminLayout = () => {
     { to: ROUTES.admin.dashboard, label: 'Dashboard & báo cáo', icon: BarChart3 },
     {
       to: ROUTES.admin.settlement,
-      label: 'Vật tư & Đóng hồ sơ',
+      label: 'Theo dõi quyết toán',
       icon: Warehouse,
       badge: state.orders.filter((o) => o.status === 'PENDING_PAYMENT_OR_CLAIM').length || undefined,
     },
@@ -28,9 +29,9 @@ export const AdminLayout = () => {
     },
     {
       to: ROUTES.admin.claims,
-      label: 'Quản lý khiếu nại',
+      label: 'Duyệt chi bồi thường',
       icon: FileWarning,
-      badge: state.claims.filter((c) => c.status === 'OPEN' || c.status === 'INVESTIGATING').length || undefined,
+      badge: claimsAwaiting(state.claims, 'ADMIN') || undefined,
       badgeTone: 'danger',
     },
     { to: ROUTES.admin.inventory, label: 'Kho & dụng cụ', icon: Boxes },

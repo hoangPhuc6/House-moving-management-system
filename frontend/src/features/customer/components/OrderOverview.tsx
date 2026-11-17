@@ -12,6 +12,7 @@ import { FieldAdjustmentBanner } from '@/features/customer/components/FieldAdjus
 import { LiveProgressCard } from '@/features/customer/components/LiveProgressCard';
 import { RequestSummaryCard } from '@/features/customer/components/RequestSummaryCard';
 import { ScheduleCard } from '@/features/customer/components/ScheduleCard';
+import { SurveyedItemsCard } from '@/features/customer/components/SurveyedItemsCard';
 import { SurveyStageCard } from '@/features/customer/components/SurveyStageCard';
 import { WaitTimerCard } from '@/features/customer/components/WaitTimerCard';
 import { customerStepMeta, surveyHeroCopy } from '@/features/customer/surveyStage';
@@ -155,6 +156,7 @@ export const OrderOverview = ({ order }: { order: Order }) => {
             <ReferenceQuoteCard quote={order.referenceQuote} />
           )}
         <ScheduleCard order={order} />
+        <SurveyedItemsCard order={order} />
         <RequestSummaryCard order={order} />
       </div>
 

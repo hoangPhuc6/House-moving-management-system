@@ -1,16 +1,19 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { Camera, ClipboardList, Footprints, MapPin, Navigation, Phone, Send, Truck, Video } from 'lucide-react';
+import { Camera, CheckCircle2, ChevronDown, ClipboardList, Footprints, MapPin, Navigation, Phone, Plus, Send, Trash2, Truck, Video } from 'lucide-react';
 import { Alert, Badge, Button, cx, EmptyState, NumberStepper, Select } from '@/components/ui';
-import { VEHICLE_PRICING } from '@/constants/pricing';
+import { CARTON_ORDER, CARTON_SIZES, qtyOf, setVehicleQty, totalVehicles, VEHICLE_CAPACITIES, vehicleLinesLabel } from '@/constants/pricing';
+import { hoursLabel } from '@/constants/resources';
 import { surveyInputFromOrder } from '@/features/coordinator/utils';
+import { SurveyItemList } from '@/features/order/components/SurveyItemList';
 import { SurveyMediaGallery } from '@/features/order/components/SurveyMediaGallery';
+import { cleanSurveyItems, COMMON_SURVEY_ITEMS, emptySurveyItem, surveyItemsTotal } from '@/features/order/surveyItems';
 import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, surveyStageOf } from '@/features/order/surveyStage';
 import { Block } from '@/features/staff/components/Block';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { formatDateVN, formatTime } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
-import type { Order, SurveyInput } from '@/types';
+import type { Order, SurveyInput, SurveyItem } from '@/types';
 
 const KIND_ICON = { VIDEO_CALL: Video, ON_SITE: Footprints, PHOTOS: Camera, TRUCK_CONFIRM: Truck } as const;
 
@@ -20,7 +23,7 @@ const textareaCls =
 /** Biểu mẫu kết quả khảo sát của một đơn — người khảo sát ghi nhận & đề xuất, không định giá. */
 const ReportForm = ({ order }: { order: Order }) => {
   const { dispatch } = useApp();
-  const [itemsNote, setItemsNote] = useState('');
+  const [items, setItems] = useState<SurveyItem[]>([]);
   const [note, setNote] = useState('');
   const [p, setP] = useState<SurveyInput>(() => surveyInputFromOrder(order));
   const [tried, setTried] = useState(false);
@@ -28,7 +31,20 @@ const ReportForm = ({ order }: { order: Order }) => {
 
   const kind = surveyStageOf(order);
   const mediaMissing = kind === 'PHOTOS' && !isMediaSubmitted(order);
-  const itemsErr = tried && !itemsNote.trim();
+  const filled = cleanSurveyItems(items);
+  const itemsErr = tried && filled.length === 0;
+  const vehiclesErr = tried && totalVehicles(p.vehicles) === 0;
+  const hoursErr = tried && !(p.estimatedHours > 0);
+
+  const patchItem = (i: number, patch: Partial<SurveyItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const removeItem = (i: number) => setItems((xs) => xs.filter((_, j) => j !== i));
+  // Bấm món có sẵn: chưa có thì thêm, có rồi thì +1.
+  const quickAdd = (c: (typeof COMMON_SURVEY_ITEMS)[number]) =>
+    setItems((xs) => {
+      const i = xs.findIndex((x) => x.name.trim().toLowerCase() === c.name.toLowerCase());
+      if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, qty: x.qty + 1 } : x));
+      return [...xs, { ...emptySurveyItem(), name: c.name, fragile: !!c.fragile, disassemble: !!c.disassemble }];
+    });
 
   const row = (label: string, node: ReactNode) => (
     <div className="flex items-center justify-between gap-3 py-2.5">
@@ -39,21 +55,105 @@ const ReportForm = ({ order }: { order: Order }) => {
 
   const submit = () => {
     setTried(true);
-    if (!itemsNote.trim() || mediaMissing) return;
-    dispatch({ type: 'SUBMIT_SURVEY_REPORT', orderId: order.id, itemsNote, note, proposal: p });
+    if (filled.length === 0 || totalVehicles(p.vehicles) === 0 || !(p.estimatedHours > 0) || mediaMissing) return;
+    dispatch({ type: 'SUBMIT_SURVEY_REPORT', orderId: order.id, items: filled, note, proposal: p });
   };
+
+  const flagBtn = (on: boolean, label: string, onClick: () => void, tone: 'amber' | 'blue') => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cx(
+        'h-6 rounded-full px-2 text-[11px] font-semibold',
+        on ? (tone === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800') : 'text-slate-400 hover:text-slate-600',
+      )}
+    >
+      {on ? `✓ ${label}` : `+ ${label}`}
+    </button>
+  );
 
   return (
     <>
-      <Block title="Danh sách đồ đạc" icon={ClipboardList}>
-        <textarea
-          value={itemsNote}
-          onChange={(e) => setItemsNote(e.target.value)}
-          rows={5}
-          placeholder={'VD:\n- Tủ lạnh 2 cánh ×1\n- Giường 1m8 (cần tháo) ×1\n- Thùng đồ ~15 thùng'}
-          className={cx(textareaCls, itemsErr && 'border-rose-400')}
-        />
-        {itemsErr && <p className="mt-1 text-xs font-medium text-rose-600">Nhập danh sách đồ đạc đã khảo sát</p>}
+      <Block
+        title="Danh sách đồ đạc"
+        icon={ClipboardList}
+        right={filled.length > 0 && <Badge tone="neutral">{surveyItemsTotal(filled)} món</Badge>}
+      >
+        <p className="mb-1.5 text-xs text-slate-500">Bấm để thêm nhanh, bấm lại để tăng số lượng</p>
+        <div className="flex flex-wrap gap-1.5">
+          {COMMON_SURVEY_ITEMS.map((c) => (
+            <button
+              key={c.name}
+              type="button"
+              onClick={() => quickAdd(c)}
+              className="h-8 rounded-full border border-slate-200 px-2.5 text-xs font-medium text-slate-700 active:bg-slate-100"
+            >
+              + {c.name}
+            </button>
+          ))}
+        </div>
+
+        {items.length > 0 && (
+          <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {items.map((it, i) => (
+              <li key={i} className="px-2.5 py-2">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={it.name}
+                    onChange={(e) => patchItem(i, { name: e.target.value })}
+                    placeholder="Tên đồ (VD: Giường 1m8)"
+                    aria-invalid={tried && !it.name.trim()}
+                    className={cx(
+                      'h-9 min-w-0 flex-1 rounded-lg border px-2.5 text-base focus:border-brand focus:outline-none sm:text-sm',
+                      tried && !it.name.trim() ? 'border-rose-400' : 'border-transparent bg-slate-50',
+                    )}
+                  />
+                  <div className="flex h-9 shrink-0 items-center rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => patchItem(i, { qty: Math.max(1, it.qty - 1) })}
+                      disabled={it.qty <= 1}
+                      aria-label="Giảm"
+                      className="w-8 text-base font-semibold text-slate-600 disabled:text-slate-300"
+                    >
+                      −
+                    </button>
+                    <span className="w-7 text-center text-sm font-semibold tabular-nums">{it.qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => patchItem(i, { qty: Math.min(200, it.qty + 1) })}
+                      aria-label="Tăng"
+                      className="w-8 text-base font-semibold text-slate-600"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(i)}
+                    aria-label="Xóa món này"
+                    className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                <div className="mt-1 flex gap-1 pl-1">
+                  {flagBtn(it.fragile, 'Dễ vỡ', () => patchItem(i, { fragile: !it.fragile }), 'amber')}
+                  {flagBtn(it.disassemble, 'Tháo lắp', () => patchItem(i, { disassemble: !it.disassemble }), 'blue')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          onClick={() => setItems((xs) => [...xs, emptySurveyItem()])}
+          className="mt-2 inline-flex h-9 items-center gap-1 text-sm font-semibold text-brand"
+        >
+          <Plus className="size-4" /> Thêm món khác
+        </button>
+        {itemsErr && <p className="mt-1 text-xs font-medium text-rose-600">Thêm ít nhất một món đồ đã khảo sát</p>}
         <p className="mt-3 mb-1.5 text-sm font-medium text-slate-700">Ghi chú hiện trường</p>
         <textarea
           value={note}
@@ -67,30 +167,47 @@ const ReportForm = ({ order }: { order: Order }) => {
       <Block title="Đề xuất xe & nhân sự" icon={Truck}>
         <div className="divide-y divide-slate-100">
           {row('Quãng đường', <NumberStepper value={p.distanceKm} onChange={(v) => set('distanceKm', v)} min={1} max={200} suffix="km" />)}
+          <div>
+            {row('Thời gian dự kiến *', <NumberStepper value={p.estimatedHours} onChange={(v) => set('estimatedHours', v)} max={24} step={0.5} suffix="giờ" />)}
+            <p className={cx('-mt-1 pb-2 text-xs', hoursErr ? 'font-medium text-rose-600' : 'text-slate-500')}>
+              {hoursErr ? 'Bắt buộc — ' : ''}Tổng thời gian bốc xếp + di chuyển + dỡ đồ. Xe & người được giữ lịch trong khoảng này.
+            </p>
+          </div>
           <div className="py-2.5">
-            <span className="text-sm font-medium text-slate-700">Loại xe</span>
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              {Object.keys(VEHICLE_PRICING)
-                .map(Number)
-                .sort((a, b) => a - b)
-                .map((cap) => (
-                  <button
-                    key={cap}
-                    type="button"
-                    onClick={() => set('vehicleCapacity', cap)}
-                    className={cx(
-                      'h-12 rounded-xl border text-sm font-semibold tabular-nums',
-                      p.vehicleCapacity === cap ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600',
-                    )}
-                  >
-                    {String(cap).replace('.', ',')} tấn
-                  </button>
-                ))}
+            <span className="text-sm font-medium text-slate-700">Xe</span>
+            <span className="ml-1.5 text-xs text-slate-500">ghép nhiều loại được, VD 1 xe 5 tấn + 1 xe 1,25 tấn</span>
+            <div className="mt-1 divide-y divide-slate-50">
+              {VEHICLE_CAPACITIES.map((cap) => (
+                <div key={cap}>
+                  {row(
+                    `Xe ${String(cap).replace('.', ',')} tấn`,
+                    <NumberStepper value={qtyOf(p.vehicles, cap)} onChange={(v) => set('vehicles', setVehicleQty(p.vehicles, cap, v))} max={5} />,
+                  )}
+                </div>
+              ))}
+            </div>
+            {vehiclesErr && <p className="text-xs font-medium text-rose-600">Đề xuất ít nhất một xe</p>}
+          </div>
+          {row('Nhân viên bốc xếp', <NumberStepper value={p.workers} onChange={(v) => set('workers', v)} min={0} max={12} suffix="người" />)}
+          <div className="py-2.5">
+            <span className="text-sm font-medium text-slate-700">Thùng carton</span>
+            <div className="mt-1 divide-y divide-slate-50">
+              {CARTON_ORDER.map((size) => {
+                const c = CARTON_SIZES[size];
+                return (
+                  <div key={size} className="flex items-center justify-between gap-3 py-2">
+                    <span className="min-w-0 text-sm text-slate-700">
+                      {c.label} <span className="text-slate-400 tabular-nums">{c.dims}</span>
+                      <span className="block text-xs text-slate-500">{c.use}</span>
+                    </span>
+                    <div className="w-40 shrink-0">
+                      <NumberStepper value={p.cartons[size]} onChange={(v) => set('cartons', { ...p.cartons, [size]: v })} max={200} step={5} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          {row('Số lượng xe', <NumberStepper value={p.vehicleQty} onChange={(v) => set('vehicleQty', v)} min={1} max={5} />)}
-          {row('Nhân viên bốc xếp', <NumberStepper value={p.workers} onChange={(v) => set('workers', v)} min={0} max={12} suffix="người" />)}
-          {row('Thùng carton', <NumberStepper value={p.cartons} onChange={(v) => set('cartons', v)} max={200} step={5} />)}
           {row('Băng keo', <NumberStepper value={p.tapeRolls} onChange={(v) => set('tapeRolls', v)} max={50} suffix="cuộn" />)}
           {row('Màng PE', <NumberStepper value={p.peFilmRolls} onChange={(v) => set('peFilmRolls', v)} max={20} suffix="cuộn" />)}
           {row('Số lầu (thang bộ)', <NumberStepper value={p.floors} onChange={(v) => set('floors', v)} max={20} />)}
@@ -103,7 +220,7 @@ const ReportForm = ({ order }: { order: Order }) => {
           <div className="min-w-0 flex-1">
             <p className="text-xs text-slate-500">Đề xuất gửi Điều phối lập báo giá</p>
             <p className="truncate text-sm font-semibold text-slate-900 tabular-nums">
-              {p.vehicleQty} × xe {String(p.vehicleCapacity).replace('.', ',')} tấn · {p.workers} người · {p.distanceKm} km
+              {vehicleLinesLabel(p.vehicles)} · {p.workers} người · {p.distanceKm} km{p.estimatedHours > 0 ? ` · ${hoursLabel(p.estimatedHours)}` : ''}
             </p>
           </div>
           <Button size="lg" icon={Send} onClick={submit} disabled={mediaMissing}>
@@ -112,6 +229,52 @@ const ReportForm = ({ order }: { order: Order }) => {
         </div>
       </StickyActionBar>
     </>
+  );
+};
+
+/** Kết quả đã gửi — người khảo sát xem lại sau khi gửi (chỉ đọc), kèm tình trạng báo giá của Điều phối. */
+const SubmittedSurveys = () => {
+  const { state } = useApp();
+  const sent = state.orders
+    .filter((o) => o.surveyReport)
+    .sort((a, b) => b.surveyReport!.submittedAt - a.surveyReport!.submittedAt)
+    .slice(0, 10);
+  if (sent.length === 0) return null;
+  return (
+    <Block title="Đã gửi kết quả" icon={CheckCircle2} right={<Badge tone="neutral">{sent.length}</Badge>}>
+      <ul className="-mx-1 divide-y divide-slate-100">
+        {sent.map((o) => {
+          const r = o.surveyReport!;
+          const quoting = o.status === 'NEW_PENDING_SURVEY';
+          return (
+            <li key={o.id}>
+              <details className="group px-1 py-2.5">
+                <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold tabular-nums">
+                      #{o.id} · {o.customerName}
+                    </span>
+                    <span className="block text-xs text-slate-500 tabular-nums">Gửi lúc {formatTime(r.submittedAt)}</span>
+                  </span>
+                  <Badge tone={o.status === 'CANCELLED_EXPIRED' ? 'neutral' : quoting ? 'warning' : 'success'}>
+                    {o.status === 'CANCELLED_EXPIRED' ? 'Đơn đã hủy' : quoting ? 'Chờ Điều phối báo giá' : 'Đã báo giá khách'}
+                  </Badge>
+                  <ChevronDown className="size-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-2 space-y-2 text-sm">
+                  <SurveyItemList items={r.items} />
+                  <p className="text-slate-700">
+                    {vehicleLinesLabel(r.proposal.vehicles)} · {r.proposal.workers} người · {r.proposal.distanceKm} km
+                    {r.proposal.estimatedHours > 0 && ` · ${hoursLabel(r.proposal.estimatedHours)}`}
+                  </p>
+                  {r.note && <p className="rounded-lg bg-slate-50 p-2.5 text-slate-600">{r.note}</p>}
+                </div>
+              </details>
+            </li>
+          );
+        })}
+      </ul>
+    </Block>
   );
 };
 
@@ -129,9 +292,12 @@ export const SurveyTab = () => {
 
   if (!target?.surveyAssignment) {
     return (
-      <EmptyState icon={Footprints} title="Chưa có đơn cần khảo sát">
-        Đơn được Điều phối phân cho bạn sẽ hiện ở đây.
-      </EmptyState>
+      <div className="space-y-3">
+        <EmptyState icon={Footprints} title="Chưa có đơn cần khảo sát">
+          Đơn được Điều phối phân cho bạn sẽ hiện ở đây.
+        </EmptyState>
+        <SubmittedSurveys />
+      </div>
     );
   }
 
@@ -209,6 +375,8 @@ export const SurveyTab = () => {
       </Block>
 
       <ReportForm key={target.id} order={target} />
+
+      <SubmittedSurveys />
     </div>
   );
 };

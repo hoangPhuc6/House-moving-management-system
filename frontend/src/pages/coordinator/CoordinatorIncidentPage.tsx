@@ -1,10 +1,8 @@
-import { IncidentTab } from '@/features/coordinator/components/IncidentTab';
-import { NoOrdersState } from '@/features/coordinator/components/NoOrdersState';
+import { IncidentList } from '@/features/coordinator/components/IncidentList';
 import { useCoordinatorContext } from '@/features/coordinator/hooks';
 
-/** /coordinator/incident — xử lý sự cố phương tiện. */
+/** /coordinator/incident — sự cố & đơn đang chạy. */
 export const CoordinatorIncidentPage = () => {
-  const { selected, setSelectedId } = useCoordinatorContext();
-  if (!selected) return <NoOrdersState />;
-  return <IncidentTab order={selected} onSelect={setSelectedId} />;
+  const { open } = useCoordinatorContext();
+  return <IncidentList onOpen={open} />;
 };

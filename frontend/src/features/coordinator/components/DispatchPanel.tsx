@@ -17,25 +17,19 @@ import {
   CardHeader,
   cx,
   KeyValue,
-  PageHeader,
   StatusBadge,
   Tooltip,
 } from '@/components/ui';
-import { STAFF_ROLE_LABEL, VEHICLE_STATUS_META } from '@/constants/resources';
-import { OrderPicker } from '@/features/coordinator/components/OrderPicker';
+import { hoursLabel, orderShift, STAFF_ROLE_LABEL, VEHICLE_STATUS_META } from '@/constants/resources';
 import { HOURS } from '@/features/coordinator/constants';
 import { parseShift } from '@/features/coordinator/utils';
 import { getAssignmentRequirement, isDriverRole, validateAssignment } from '@/services/dispatch';
+import { DOWNTIME_REASON_META, downtimeLabel, downtimeOn } from '@/services/downtime';
 import { useApp } from '@/services/store/AppStore';
 import type { Order, Vehicle } from '@/types';
 
-export const DispatchTab = ({
-  order,
-  onSelect,
-}: {
-  order: Order;
-  onSelect: (id: string) => void;
-}) => {
+/** Mục "Điều phối xe" của trang chi tiết đơn: chọn xe, tài xế, bốc xếp theo báo giá. */
+export const DispatchPanel = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
   const req = useMemo(() => getAssignmentRequirement(order), [order]);
   const ownTag = order.id.replace("ORD-2026-", "ORD-");
@@ -45,8 +39,11 @@ export const DispatchTab = ({
     vehicleIds.includes(v.id),
   );
   const isOwn = (v: Vehicle) => v.busyOrderId === ownTag;
+  // Xe / người nghỉ (bảo dưỡng, nghỉ phép…) vào đúng ngày chuyển của đơn này.
+  const vehicleOff = (v: Vehicle) => downtimeOn(state.resources.downtimes, 'VEHICLE', v.id, order.scheduledDate);
+  const staffOff = (id: string) => downtimeOn(state.resources.downtimes, 'STAFF', id, order.scheduledDate);
   const conflict = selectedVehicles.find((v) => v.status === "BUSY" && !isOwn(v));
-  const maintenance = selectedVehicles.some((v) => v.status === "MAINTENANCE");
+  const maintenance = selectedVehicles.some((v) => vehicleOff(v));
   const assignable =
     order.status === "QUOTED_PENDING_SCHEDULE" || order.status === "ASSIGNED";
   const lateShift = state.resources.vehicles.find(
@@ -68,7 +65,8 @@ export const DispatchTab = ({
   /** Lý do một xe không thể chọn (null = chọn được). */
   const vehicleBlockReason = (v: Vehicle): string | null => {
     if (vehicleIds.includes(v.id)) return null;
-    if (v.status === "MAINTENANCE") return "Đang bảo dưỡng";
+    const off = vehicleOff(v);
+    if (off) return downtimeLabel(off);
     if (v.status === "BUSY" && !isOwn(v)) return "Đang kẹt ca khác";
     const types = req.vehicles.filter((r) => r.capacity !== null);
     if (types.length > 0) {
@@ -94,7 +92,7 @@ export const DispatchTab = ({
   /** Chọn sẵn xe đúng loại & đủ nhân viên bốc xếp còn rảnh theo báo giá. */
   const autoPick = () => {
     const usable = state.resources.vehicles.filter(
-      (v) => v.status === "AVAILABLE" || isOwn(v),
+      (v) => (v.status === "AVAILABLE" || isOwn(v)) && !vehicleOff(v),
     );
     const picked: string[] = [];
     req.vehicles.forEach((r) => {
@@ -104,7 +102,7 @@ export const DispatchTab = ({
         .forEach((v) => picked.push(v.id));
     });
     setVehicleIds(picked);
-    const free = state.resources.staff.filter((s) => s.isAvailable);
+    const free = state.resources.staff.filter((s) => !staffOff(s.id));
     setCrewIds([
       ...free.filter((s) => isDriverRole(s.role)).slice(0, req.vehicleTotal),
       ...free.filter((s) => !isDriverRole(s.role)).slice(0, req.workers),
@@ -118,37 +116,25 @@ export const DispatchTab = ({
     vehicleIds.length === 0 ||
     !!mismatch;
 
-  const slotBlocks = useMemo(
-    () =>
-      state.resources.vehicles.map((v) => ({
-        v,
-        range: parseShift(v.currentShiftTime),
-      })),
-    [state.resources.vehicles],
+  // Chỉ hiện xe đúng loại báo giá yêu cầu (VD cần xe 2 tấn → chỉ xe 2 tấn). Báo giá không ghi loại xe thì hiện tất cả.
+  // Xe đã gán sẵn cho đơn vẫn giữ lại để thấy và bỏ chọn được.
+  const neededCaps = req.vehicles.map((r) => r.capacity).filter((c): c is number => c !== null);
+  const fleet = useMemo(
+    () => state.resources.vehicles.filter((v) => neededCaps.length === 0 || neededCaps.includes(v.capacityTons) || vehicleIds.includes(v.id)),
+    [state.resources.vehicles, neededCaps.join(','), vehicleIds],
   );
+  const capsLabel = neededCaps.map((c) => `${String(c).replace('.', ',')} tấn`).join(' / ');
+
+  const slotBlocks = useMemo(() => fleet.map((v) => ({ v, range: parseShift(v.currentShiftTime) })), [fleet]);
 
   return (
     <>
-      <PageHeader
-        eyebrow="Điều phối"
-        title="Bảng điều phối & gán nguồn lực"
-        subtitle="Cross-check trùng lịch xe và công suất khung giờ trước khi gán."
-        actions={
-          <OrderPicker
-            value={order.id}
-            onChange={onSelect}
-            filter={(o) =>
-              o.status === "QUOTED_PENDING_SCHEDULE" || o.status === "ASSIGNED"
-            }
-          />
-        }
-      />
-
       {/* Schedule board */}
       <Card className="mb-4" padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 p-6 pb-4">
           <h3 className="flex items-center gap-2 text-[15px] font-semibold">
             <CalendarRange className="size-4" /> Lịch xe hôm nay
+            {capsLabel && <span className="text-sm font-normal text-slate-500">· xe {capsLabel}</span>}
           </h3>
         </div>
         <div className="overflow-x-auto px-6 pb-6">
@@ -176,9 +162,9 @@ export const DispatchTab = ({
                   </p>
                 </div>
                 <div className="relative col-span-14 h-8 rounded-lg bg-slate-50">
-                  {v.status === "MAINTENANCE" && (
+                  {vehicleOff(v) && (
                     <div className="absolute inset-0 rounded-lg bg-[repeating-linear-gradient(45deg,#fef3c7,#fef3c7_6px,#fffbeb_6px,#fffbeb_12px)] px-2 py-1.5 text-[11px] font-semibold text-amber-700">
-                      Bảo dưỡng
+                      {downtimeLabel(vehicleOff(v)!)}
                     </div>
                   )}
                   {range && (
@@ -307,9 +293,13 @@ export const DispatchTab = ({
               }
             />
             <div className="grid gap-2 sm:grid-cols-2">
-              {state.resources.vehicles.map((v) => {
+              {fleet.length === 0 && (
+                <p className="text-sm text-slate-500 sm:col-span-2">Đội xe chưa có xe {capsLabel}. Báo Admin bổ sung xe hoặc điều chỉnh báo giá.</p>
+              )}
+              {fleet.map((v) => {
                 const sel = vehicleIds.includes(v.id);
-                const meta = VEHICLE_STATUS_META[v.status];
+                const off = vehicleOff(v);
+                const meta = off ? DOWNTIME_REASON_META[off.reason] : VEHICLE_STATUS_META[v.status];
                 const reason = vehicleBlockReason(v);
                 return (
                   <button
@@ -323,7 +313,7 @@ export const DispatchTab = ({
                       sel ? "border-brand ring-4 ring-brand/10" : "border-slate-200 enabled:hover:border-slate-300",
                     )}
                   >
-                    <span className={cx("grid size-10 shrink-0 place-items-center rounded-lg", sel ? "bg-brand text-white" : v.status === "AVAILABLE" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>
+                    <span className={cx("grid size-10 shrink-0 place-items-center rounded-lg", sel ? "bg-brand text-white" :  v.status === "AVAILABLE" && !off ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>
                       {sel ? <CheckCircle2 className="size-5" /> : <Truck className="size-5" />}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -362,7 +352,8 @@ export const DispatchTab = ({
                 {g.pool.map((s) => {
                   const sel = crewIds.includes(s.id);
                   const full = !sel && g.need > 0 && g.got >= g.need;
-                  const off = !s.isAvailable || full;
+                  const leave = staffOff(s.id);
+                  const off = !!leave || full;
                   return (
                     <label
                       key={s.id}
@@ -382,8 +373,8 @@ export const DispatchTab = ({
                           <span className="tabular-nums">{s.code}</span> · {STAFF_ROLE_LABEL[s.role]}
                         </p>
                       </div>
-                      {!s.isAvailable && <Badge tone="neutral">Nghỉ ca</Badge>}
-                      {full && s.isAvailable && <Badge tone="neutral">Đủ người</Badge>}
+                      {leave && <Badge tone="neutral">{downtimeLabel(leave)}</Badge>}
+                      {full && !leave && <Badge tone="neutral">Đủ người</Badge>}
                     </label>
                   );
                 })}
@@ -400,6 +391,7 @@ export const DispatchTab = ({
             value={<StatusBadge status={order.status} />}
           />
           <KeyValue label="Giờ bắt đầu" value={order.timeSlot} />
+          <KeyValue label="Dự kiến bận" value={order.estimatedHours ? `${orderShift(order)} (${hoursLabel(order.estimatedHours)})` : `${orderShift(order)} (mặc định)`} />
           <KeyValue
             label="Xe"
             value={
@@ -430,8 +422,7 @@ export const DispatchTab = ({
           )}
           {!assignable && (
             <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-              Đơn này chưa đặt cọc hoặc đã bắt đầu thực hiện. Chọn một đơn ở
-              trạng thái “Đã cọc - Chờ điều phối”.
+              Chỉ gán xe khi khách đã đặt cọc và đơn chưa bắt đầu thực hiện.
             </p>
           )}
           <Tooltip

@@ -21,9 +21,11 @@ export const ROUTES = {
   coordinator: {
     root: '/coordinator',
     queue: '/coordinator/queue',
-    editor: '/coordinator/editor',
-    dispatch: '/coordinator/dispatch',
+    orders: '/coordinator/orders',
+    order: (orderId: string, section?: string) => `/coordinator/orders/${orderId}${section ? `?tab=${section}` : ''}`,
+    schedule: '/coordinator/schedule',
     incident: '/coordinator/incident',
+    claims: '/coordinator/claims',
   },
   admin: {
     root: '/admin',

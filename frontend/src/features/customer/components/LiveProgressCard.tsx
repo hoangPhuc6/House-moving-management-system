@@ -1,6 +1,6 @@
 import { CheckCircle2, Lock, Phone } from 'lucide-react';
 import { Card, cx, Divider, StatusBadge } from '@/components/ui';
-import { FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
+import { fieldStagesOf, isFieldStageDone, nextFieldStage } from '@/constants/order';
 import { STAFF_ROLE_LABEL } from '@/constants/resources';
 import type { Order } from '@/types';
 
@@ -15,7 +15,8 @@ export const LiveProgressCard = ({
   capacity?: number;
   crew: { id: string; name: string; role: keyof typeof STAFF_ROLE_LABEL }[];
 }) => {
-  const stageIdx = FIELD_STAGE_ORDER.indexOf(order.fieldStage);
+  const stages = fieldStagesOf(order);
+  const next = nextFieldStage(order);
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
   const leader = crew.find((c) => c.role === "TEAM_LEADER") ?? crew[0];
   return (
@@ -25,11 +26,10 @@ export const LiveProgressCard = ({
         <StatusBadge status={order.status} />
       </div>
       <ol>
-        {FIELD_STAGES.map((s, i) => {
-          const idx = i + 1;
-          const done = stageIdx >= idx;
+        {stages.map((s, i) => {
+          const done = isFieldStageDone(order, s.stage);
           const current =
-            stageIdx + 1 === idx &&
+            s.stage === next?.stage &&
             (order.status === "ASSIGNED" ||
               order.status === "IN_TRANSIT" ||
               paused);
@@ -39,7 +39,7 @@ export const LiveProgressCard = ({
             !done;
           return (
             <li key={s.stage} className="relative flex gap-3.5 pb-5 last:pb-0">
-              {i < FIELD_STAGES.length - 1 && (
+              {i < stages.length - 1 && (
                 <span
                   className={cx(
                     "absolute top-7 bottom-0 left-[13px] w-0.5",
@@ -64,7 +64,7 @@ export const LiveProgressCard = ({
                 ) : done ? (
                   <CheckCircle2 className="size-4" />
                 ) : (
-                  <span className="text-[11px] font-bold">{idx}</span>
+                  <span className="text-[11px] font-bold">{i + 1}</span>
                 )}
               </span>
               <div className="pt-0.5">

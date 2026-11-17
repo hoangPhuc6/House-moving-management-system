@@ -4,7 +4,7 @@ import { CUSTOMER } from '@/features/customer/constants';
 import { isMediaSubmitted, surveyStageOf } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
-import type { AddressDetail, Order } from '@/types';
+import type { Order } from '@/types';
 
 export const isOpenOrder = (o: Order): boolean =>
   o.status !== "COMPLETED" && o.status !== "CANCELLED_EXPIRED";
@@ -82,12 +82,5 @@ export const customerStatusOf = (o: Order): { label: string; tone: Tone } => {
   return { label: o.status, tone: 'neutral' };
 };
 
-const shortPlace = (detail: AddressDetail | undefined, full: string): string => {
-  if (detail?.ward) return detail.ward.replace(/^(Phường|Xã|Đặc khu)\s+/u, '');
-  const parts = full.split(',').map((s) => s.trim()).filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2]! : full;
-};
-
-/** Lộ trình rút gọn để khách nhận ra đơn, VD: "Thạnh Mỹ Tây → Long Bình". */
-export const routeLabelOf = (o: Order): string =>
-  `${shortPlace(o.bookingDetails?.from, o.fromAddress)} → ${shortPlace(o.bookingDetails?.to, o.toAddress)}`;
+/** Lộ trình rút gọn để khách nhận ra đơn — dùng chung với Điều phối. */
+export { routeLabelOf } from '@/features/order/route';

@@ -22,8 +22,11 @@ import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCount
 import { coordinatorSurveyBadge, shortDate, SURVEY_STAGE_META, surveyPhaseOf, surveyStageOf, weekdayOf } from '@/features/order/surveyStage';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
+import { routeSummaryOf } from '@/features/order/route';
+import { FieldStageBadge } from '@/features/order/components/FieldProgress';
 import { useApp, useNow } from '@/services/store/AppStore';
 import type { Order } from '@/types';
+import { VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
 
 type BucketId = 'ASSIGN' | 'SURVEYING' | 'QUOTE' | 'NEGOTIATE' | 'CONFIRM' | 'SCHEDULE' | 'RUNNING' | 'SETTLE';
 
@@ -32,14 +35,14 @@ type BucketId = 'ASSIGN' | 'SURVEYING' | 'QUOTE' | 'NEGOTIATE' | 'CONFIRM' | 'SC
  * khách xác nhận & cọc → xếp xe → thực hiện → quyết toán. `mine`: việc nằm ở Điều phối; còn lại đang chờ người khác.
  */
 const BUCKETS: { id: BucketId; label: string; mine: boolean; match: (o: Order) => boolean; action: string; tab: CoordTab; icon: LucideIcon }[] = [
-  { id: 'ASSIGN', label: 'Cần phân người khảo sát', mine: true, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'ASSIGN', action: 'Phân người', tab: 'editor', icon: UserPlus },
-  { id: 'SURVEYING', label: 'Đang khảo sát', mine: false, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'SURVEYING', action: 'Xem', tab: 'editor', icon: ClipboardCheck },
-  { id: 'QUOTE', label: 'Cần lập báo giá', mine: true, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'QUOTE', action: 'Lập báo giá', tab: 'editor', icon: FileText },
-  { id: 'NEGOTIATE', label: 'Khách thương lượng', mine: true, match: (o) => o.status === 'SURVEYED_PENDING_CONFIRM' && Boolean(o.negotiation), action: 'Phản hồi', tab: 'editor', icon: MessageSquare },
-  { id: 'CONFIRM', label: 'Chờ khách xác nhận & cọc', mine: false, match: (o) => o.status === 'SURVEYED_PENDING_CONFIRM' && !o.negotiation, action: 'Xem báo giá', tab: 'editor', icon: Clock },
+  { id: 'ASSIGN', label: 'Cần phân người khảo sát', mine: true, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'ASSIGN', action: 'Phân người', tab: 'quote', icon: UserPlus },
+  { id: 'SURVEYING', label: 'Đang khảo sát', mine: false, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'SURVEYING', action: 'Xem', tab: 'quote', icon: ClipboardCheck },
+  { id: 'QUOTE', label: 'Cần lập báo giá', mine: true, match: (o) => o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) === 'QUOTE', action: 'Lập báo giá', tab: 'quote', icon: FileText },
+  { id: 'NEGOTIATE', label: 'Khách thương lượng', mine: true, match: (o) => o.status === 'SURVEYED_PENDING_CONFIRM' && Boolean(o.negotiation), action: 'Phản hồi', tab: 'quote', icon: MessageSquare },
+  { id: 'CONFIRM', label: 'Chờ khách xác nhận & cọc', mine: false, match: (o) => o.status === 'SURVEYED_PENDING_CONFIRM' && !o.negotiation, action: 'Xem báo giá', tab: 'quote', icon: Clock },
   { id: 'SCHEDULE', label: 'Đã cọc · cần xếp xe', mine: true, match: (o) => o.status === 'QUOTED_PENDING_SCHEDULE', action: 'Xếp xe', tab: 'dispatch', icon: CalendarRange },
-  { id: 'RUNNING', label: 'Đang thực hiện', mine: false, match: (o) => ['ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'].includes(o.status), action: 'Theo dõi', tab: 'editor', icon: Truck },
-  { id: 'SETTLE', label: 'Chờ quyết toán', mine: true, match: (o) => o.status === 'PENDING_PAYMENT_OR_CLAIM', action: 'Quyết toán', tab: 'editor', icon: Wallet },
+  { id: 'RUNNING', label: 'Đang thực hiện', mine: false, match: (o) => ['ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'].includes(o.status), action: 'Theo dõi', tab: 'overview', icon: Truck },
+  { id: 'SETTLE', label: 'Chờ quyết toán', mine: true, match: (o) => o.status === 'PENDING_PAYMENT_OR_CLAIM', action: 'Quyết toán', tab: 'overview', icon: Wallet },
 ];
 
 interface UrgentItem {
@@ -68,19 +71,19 @@ const hoursText = (ms: number) => {
 /** Một đơn chỉ lấy lý do gấp nhất — tránh lặp cùng một đơn nhiều dòng. */
 const urgencyOf = (o: Order, now: number): UrgentItem | null => {
   if (o.flags.isVehicleIncident) {
-    return { order: o, level: 'danger', reason: 'Sự cố xe giữa đường — cần điều xe thay thế', action: 'Xử lý sự cố', tab: 'incident', rank: 0 };
+    return { order: o, level: 'danger', reason: `Sự cố xe: ${o.vehicleIncident ? VEHICLE_INCIDENT_KINDS[o.vehicleIncident.kind].toLowerCase() : 'hỏng giữa đường'} — cần điều xe thay thế`, action: 'Xử lý sự cố', tab: 'incident', rank: 0 };
   }
   if (o.status === 'PAUSED_WAITING_CUSTOMER' || (o.flags.waitingMinutes > 30 && ['ASSIGNED', 'IN_TRANSIT'].includes(o.status))) {
-    return { order: o, level: 'danger', reason: `Đội xe đang chờ khách${o.flags.waitingMinutes > 0 ? ` · ${o.flags.waitingMinutes} phút` : ''}`, action: 'Xem', tab: 'editor', rank: 1 };
+    return { order: o, level: 'danger', reason: `Đội xe đang chờ khách${o.flags.waitingMinutes > 0 ? ` · ${o.flags.waitingMinutes} phút` : ''}`, action: 'Xem', tab: 'overview', rank: 1 };
   }
   if (o.flags.hasFieldDiscrepancyLock) {
-    return { order: o, level: 'warning', reason: 'Phát sinh hiện trường — chờ khách duyệt báo giá điều chỉnh', action: 'Xem', tab: 'editor', rank: 2 };
+    return { order: o, level: 'warning', reason: 'Phát sinh hiện trường — chờ khách duyệt báo giá điều chỉnh', action: 'Xem', tab: 'quote', rank: 2 };
   }
   if (o.status === 'SURVEYED_PENDING_CONFIRM' && o.autoCancelDeadline) {
     const left = o.autoCancelDeadline - now;
-    if (left <= 0) return { order: o, level: 'danger', reason: 'Quá hạn 24h chưa chốt — sẽ bị tự hủy', action: 'Gọi khách', tab: 'editor', rank: 3 };
+    if (left <= 0) return { order: o, level: 'danger', reason: 'Quá hạn 24h chưa chốt — sẽ bị tự hủy', action: 'Gọi khách', tab: 'quote', rank: 3 };
     if (AUTO_CANCEL_MS - left > TELESALES_THRESHOLD_MS) {
-      return { order: o, level: 'warning', reason: `Chưa chốt báo giá · còn ${hoursText(left)} trước khi tự hủy`, action: 'Gọi khách', tab: 'editor', rank: 4 };
+      return { order: o, level: 'warning', reason: `Chưa chốt báo giá · còn ${hoursText(left)} trước khi tự hủy`, action: 'Gọi khách', tab: 'quote', rank: 4 };
     }
   }
   return null;
@@ -176,6 +179,7 @@ const BucketDetail = ({ id, order }: { id: BucketId; order: Order }) => {
   if (id === 'CONFIRM' && order.autoCancelDeadline) return <AutoCancelCountdown deadline={order.autoCancelDeadline} compact />;
   if (id === 'SCHEDULE' && order.quoteItems.length > 0) return <Badge tone="neutral">{formatVND(computeTotals(order).grandTotal)}</Badge>;
   if (id === 'SETTLE') return <Badge tone="warning">Còn thu {formatVND(computeTotals(order).remaining)}</Badge>;
+  if (id === 'RUNNING') return <FieldStageBadge order={order} />;
   return <StatusBadge status={order.status} />;
 };
 
@@ -382,7 +386,7 @@ export const TodoView = ({ onOpen, query }: { onOpen: (id: string, t: CoordTab) 
                             ·{' '}
                           </>
                         )}
-                        <span className="font-medium text-slate-700 tabular-nums">{o.timeSlot}</span> · {o.toAddress}
+                        <span className="font-medium text-slate-700 tabular-nums">{o.timeSlot}</span> · {routeSummaryOf(o)}
                       </p>
                     </div>
                     <BucketDetail id={active.id} order={o} />

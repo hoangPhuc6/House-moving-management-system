@@ -14,10 +14,12 @@ import { AdminSettlementPage } from '@/pages/admin/AdminSettlementPage';
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
 import { AdminVehiclesPage } from '@/pages/admin/AdminVehiclesPage';
 import { AuthPage } from '@/pages/AuthPage';
-import { CoordinatorDispatchPage } from '@/pages/coordinator/CoordinatorDispatchPage';
-import { CoordinatorEditorPage } from '@/pages/coordinator/CoordinatorEditorPage';
+import { CoordinatorClaimsPage } from '@/pages/coordinator/CoordinatorClaimsPage';
 import { CoordinatorIncidentPage } from '@/pages/coordinator/CoordinatorIncidentPage';
+import { CoordinatorOrderDetailPage } from '@/pages/coordinator/CoordinatorOrderDetailPage';
+import { CoordinatorOrdersPage } from '@/pages/coordinator/CoordinatorOrdersPage';
 import { CoordinatorQueuePage } from '@/pages/coordinator/CoordinatorQueuePage';
+import { CoordinatorSchedulePage } from '@/pages/coordinator/CoordinatorSchedulePage';
 import { CustomerCreatePage } from '@/pages/customer/CustomerCreatePage';
 import { CustomerHistoryPage } from '@/pages/customer/CustomerHistoryPage';
 import { CustomerOrderDetailPage } from '@/pages/customer/CustomerOrderDetailPage';
@@ -53,9 +55,14 @@ export const AppRoutes = () => (
       <Route path="coordinator" element={<CoordinatorLayout />}>
         <Route index element={<Navigate to="queue" replace />} />
         <Route path="queue" element={<CoordinatorQueuePage />} />
-        <Route path="editor" element={<CoordinatorEditorPage />} />
-        <Route path="dispatch" element={<CoordinatorDispatchPage />} />
+        <Route path="orders" element={<CoordinatorOrdersPage />} />
+        <Route path="orders/:orderId" element={<CoordinatorOrderDetailPage />} />
+        <Route path="schedule" element={<CoordinatorSchedulePage />} />
         <Route path="incident" element={<CoordinatorIncidentPage />} />
+        <Route path="claims" element={<CoordinatorClaimsPage />} />
+        {/* Đường dẫn cũ — chuyển về danh sách đơn. */}
+        <Route path="editor" element={<Navigate to="../orders" replace />} />
+        <Route path="dispatch" element={<Navigate to="../schedule" replace />} />
       </Route>
 
       <Route path="admin" element={<AdminLayout />}>

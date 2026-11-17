@@ -1,49 +1,46 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarRange, KanbanSquare, ReceiptText, Siren } from 'lucide-react';
+import { CalendarRange, ClipboardList, FileWarning, ListTodo, Siren } from 'lucide-react';
 import { Alert, Button } from '@/components/ui';
-import type { CoordTab, CoordinatorOutletContext } from '@/features/coordinator/types';
+import { claimsAwaiting } from '@/features/admin/components/ClaimsModule';
+import { defaultSectionOf } from '@/features/coordinator/orderSections';
+import type { CoordinatorOutletContext, OrderSection } from '@/features/coordinator/types';
 import { surveyPhaseOf } from '@/features/order/surveyStage';
 import { AppShell, type NavItem } from '@/layouts/AppShell';
 import { ROUTES } from '@/routes/paths';
-import { useActiveOrder, useApp } from '@/services/store/AppStore';
+import { useApp } from '@/services/store/AppStore';
 
-/** Khung của khu vực Điều phối viên. Giữ đơn đang chọn + từ khóa tìm kiếm cho các trang con. */
+/**
+ * Khung của khu vực Điều phối viên. Mỗi mục menu là một việc:
+ * Việc cần làm · Đơn hàng (danh sách + chi tiết từng đơn) · Lịch xe & nhân sự · Sự cố · Khiếu nại.
+ */
 export const CoordinatorLayout = () => {
   const { state } = useApp();
-  const active = useActiveOrder();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [selectedId, setSelectedId] = useState(active?.id ?? '');
   const [query, setQuery] = useState('');
-  const selected = state.orders.find((o) => o.id === selectedId) ?? active ?? null;
   const incidents = state.orders.filter((o) => o.flags.isVehicleIncident).length;
+  // Đơn đang chờ chính Điều phối: phân người khảo sát, lập báo giá, phản hồi thương lượng, xếp xe.
+  const myWork = state.orders.filter(
+    (o) =>
+      (o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) !== 'SURVEYING') ||
+      (o.status === 'SURVEYED_PENDING_CONFIRM' && o.negotiation) ||
+      o.status === 'QUOTED_PENDING_SCHEDULE',
+  ).length;
 
   const nav: NavItem[] = [
-    {
-      to: ROUTES.coordinator.queue,
-      label: 'Việc cần làm',
-      icon: KanbanSquare,
-    },
-    {
-      to: ROUTES.coordinator.editor,
-      label: 'Khảo sát & Báo giá',
-      icon: ReceiptText,
-      // Đơn đang chờ chính Điều phối: phân người khảo sát, lập báo giá, hoặc phản hồi thương lượng.
-      badge:
-        state.orders.filter(
-          (o) => (o.status === 'NEW_PENDING_SURVEY' && surveyPhaseOf(o) !== 'SURVEYING') || (o.status === 'SURVEYED_PENDING_CONFIRM' && o.negotiation),
-        ).length || undefined,
-    },
-    { to: ROUTES.coordinator.dispatch, label: 'Điều phối nguồn lực', icon: CalendarRange },
-    { to: ROUTES.coordinator.incident, label: 'Sự cố khẩn cấp', icon: Siren, badge: incidents || undefined, badgeTone: 'danger' },
+    { to: ROUTES.coordinator.queue, label: 'Việc cần làm', icon: ListTodo, badge: myWork || undefined },
+    { to: ROUTES.coordinator.orders, label: 'Đơn hàng', icon: ClipboardList },
+    { to: ROUTES.coordinator.schedule, label: 'Lịch xe & nhân sự', icon: CalendarRange },
+    { to: ROUTES.coordinator.incident, label: 'Sự cố', icon: Siren, badge: incidents || undefined, badgeTone: 'danger' },
+    { to: ROUTES.coordinator.claims, label: 'Khiếu nại', icon: FileWarning, badge: claimsAwaiting(state.claims, 'COORDINATOR') || undefined, badgeTone: 'danger' },
   ];
 
-  const open = (id: string, tab: CoordTab) => {
-    setSelectedId(id);
-    navigate(ROUTES.coordinator[tab]);
+  const open = (id: string, section?: OrderSection) => {
+    const order = state.orders.find((o) => o.id === id);
+    navigate(ROUTES.coordinator.order(id, section ?? (order ? defaultSectionOf(order) : undefined)));
   };
-  const context: CoordinatorOutletContext = { selected, setSelectedId, query, open };
+  const context: CoordinatorOutletContext = { query, open };
 
   return (
     <AppShell
@@ -54,7 +51,8 @@ export const CoordinatorLayout = () => {
         value: query,
         onChange: (v) => {
           setQuery(v);
-          navigate(ROUTES.coordinator.queue);
+          // Tìm kiếm luôn hiển thị ở danh sách đơn (trừ khi đang ở Việc cần làm — trang này cũng lọc theo từ khóa).
+          if (pathname !== ROUTES.coordinator.queue && pathname !== ROUTES.coordinator.orders) navigate(ROUTES.coordinator.orders);
         },
         placeholder: 'Tìm mã đơn, tên khách, số điện thoại…',
       }}

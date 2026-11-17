@@ -37,8 +37,8 @@ export const StepServices = ({
     update,
     activeServices,
     laborService,
-    vehiclePricing,
-    selectVehicle,
+    seatLimit,
+    setVehicleCount,
     distanceKm,
   } = wizard;
   const truckOnly = draft.serviceMode === "TRUCK_ONLY";
@@ -154,24 +154,23 @@ export const StepServices = ({
           subtitle={distanceKm !== null ? `Giá tính theo quãng đường ${distanceKm} km của bạn, tài xế hỗ trợ chằng buộc` : "Giá xe tính theo quãng đường, tài xế hỗ trợ chằng buộc"}
           action={<Badge tone="neutral">Bắt buộc</Badge>}
         >
-          <div
-            className="grid gap-2 sm:grid-cols-3"
-            role="radiogroup"
-            aria-label="Loại xe"
-          >
+          <p className="text-xs text-slate-500">Chọn số xe cho từng loại — thuê nhiều xe hoặc ghép loại khác nhau được.</p>
+          <div className="grid gap-2 sm:grid-cols-3" aria-label="Loại xe">
             {vehicles.map((v) => {
               const cap = parseCapacityTons(v.name);
               const price = cap !== null ? VEHICLE_PRICING[cap] : undefined;
               const trip = price && distanceKm !== null ? vehicleTripPrice(price, distanceKm) : null;
-              const sel = draft.vehicleService === v.name;
+              const qty = draft.vehicleQty[v.name] ?? 0;
+              const sel = qty > 0;
               return (
-                <button
+                <div
                   key={v.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={sel}
-                  onClick={() => selectVehicle(v.name)}
-                  className={cx(choiceClass(sel), "flex flex-col p-4")}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={sel}
+                  onClick={() => !sel && setVehicleCount(v.name, 1)}
+                  onKeyDown={(e) => e.key === "Enter" && !sel && setVehicleCount(v.name, 1)}
+                  className={cx(choiceClass(sel), "flex cursor-pointer flex-col p-4 text-left")}
                 >
                   <span className="text-sm font-semibold text-slate-900">
                     {v.name}
@@ -201,7 +200,11 @@ export const StepServices = ({
                       Nhập đủ 2 địa chỉ ở Bước 1 để xem giá theo quãng đường
                     </span>
                   )}
-                </button>
+                  <div className="mt-3 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-xs font-medium text-slate-500">{sel ? "Số xe" : "Bấm để chọn"}</span>
+                    <CompactStepper value={qty} onChange={(n) => setVehicleCount(v.name, n)} label={v.name} max={3} />
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -231,12 +234,12 @@ export const StepServices = ({
                   Thuê thêm nhân viên bốc vác
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                  {vehiclePricing
-                    ? `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người, ${vehiclePricing.label} chở được tối đa ${vehiclePricing.maxLabor} người.`
-                    : `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người. Chọn loại xe trước để biết số chỗ tối đa.`}
+                  {seatLimit > 0
+                    ? `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người, các xe đã chọn chở được tối đa ${seatLimit} người.`
+                    : `Không bắt buộc — ${formatVND(LABOR_PER_PERSON)}/người. Chọn xe trước để biết số chỗ tối đa.`}
                 </p>
               </div>
-              {vehiclePricing && (
+              {seatLimit > 0 && (
                 <div className="flex items-center gap-3">
                   {draft.laborCount > 0 && (
                     <span className="text-sm font-semibold tabular-nums text-slate-900">
@@ -247,7 +250,7 @@ export const StepServices = ({
                     value={draft.laborCount}
                     onChange={(n) => update("laborCount", n)}
                     label="nhân viên bốc vác"
-                    max={vehiclePricing.maxLabor}
+                    max={seatLimit}
                   />
                 </div>
               )}

@@ -1,6 +1,6 @@
-import { FIELD_STAGE_ORDER, STATUS_META } from '@/constants/order';
-import { AUTO_CANCEL_MS, DEPOSIT_AMOUNT, RESCHEDULE_LOCK_HOURS } from '@/constants/pricing';
-import { PLATE_REGEX, shiftFromStart } from '@/constants/resources';
+import { FIELD_STAGE_LOG_ACTION, FIELD_STAGE_LOG_LABEL, FIELD_STAGE_ORDER, isTruckOnly, nextFieldStage, STATUS_META } from '@/constants/order';
+import { AUTO_CANCEL_MS, DEPOSIT_AMOUNT, RESCHEDULE_LOCK_HOURS, totalVehicles, vehicleLinesLabel } from '@/constants/pricing';
+import { hoursLabel, orderShift, PLATE_REGEX, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
 import { getAssignmentRequirement, isDriverRole, validateAssignment } from '@/services/dispatch';
 import { formatVND, uid } from '@/services/format';
 import { canCloseOrder, canFileClaim, computeTotals, selectSettlement } from '@/services/pricing';
@@ -18,6 +18,8 @@ import {
 } from '@/services/store/helpers';
 import { createInitialState } from '@/services/store/initialState';
 import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
+import { cleanSurveyItems } from '@/features/order/surveyItems';
+import { addDaysISO, DOWNTIME_REASON_META, downtimeLabel, downtimeOn, downtimeRangeLabel, todayLocalISO } from '@/services/downtime';
 import type {
   AppAction,
   AppState,
@@ -27,6 +29,7 @@ import type {
   Order,
   OrderStatus,
   SurveyMethod,
+  ToastTone,
   Vehicle,
 } from '@/types';
 
@@ -36,6 +39,25 @@ const SURVEY_METHOD_OF: Record<SurveyStageKind, SurveyMethod> = {
   VIDEO_CALL: 'VIDEO_CALL',
   ON_SITE: 'ON_SITE',
   PHOTOS: 'PHOTO',
+};
+
+const patchClaim = (state: AppState, claimId: string, patch: Partial<ClaimTicket>, message?: string, tone: ToastTone = 'success'): AppState => {
+  const next = { ...state, claims: state.claims.map((c) => (c.id === claimId ? { ...c, ...patch } : c)) };
+  return message ? toast(next, tone, message) : next;
+};
+
+/**
+ * Step 7 Hard-Lock: đủ 2 điều kiện (công nợ = 0đ, đã trả dụng cụ về kho) thì tự đóng hồ sơ và khóa doanh thu —
+ * không cần ai bấm. Gọi sau mỗi thao tác có thể làm thỏa điều kiện cuối cùng.
+ */
+const closeIfSettled = (state: AppState, orderId: string): AppState => {
+  const o = findOrder(state, orderId);
+  if (!o || o.status !== 'PENDING_PAYMENT_OR_CLAIM' || !canCloseOrder(selectSettlement(o))) return state;
+  const revenue = computeTotals(o).grandTotal;
+  const next = patchOrder(state, orderId, (ord) =>
+    withLog({ ...ord, status: 'COMPLETED', finalRevenue: revenue }, audit('SYSTEM', 'Tự động đóng hồ sơ', `Đã thu đủ & trả dụng cụ về kho. Doanh thu ${formatVND(revenue)} được khóa.`)),
+  );
+  return toast(next, 'success', `${orderId} đã hoàn tất — doanh thu ${formatVND(revenue)} được khóa.`);
 };
 
 export const appReducer = (state: AppState, action: AppAction): AppState => {
@@ -92,7 +114,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
           resources: {
             ...next.resources,
             vehicles: next.resources.vehicles.map((v) =>
-              order.vehicleIds.includes(v.id) ? { ...v, status: 'BUSY', busyOrderId: shortId(order.id), currentShiftTime: shiftFromStart(order.timeSlot) } : v,
+              order.vehicleIds.includes(v.id) ? { ...v, status: 'BUSY', busyOrderId: shortId(order.id), currentShiftTime: orderShift(order) } : v,
             ),
           },
         };
@@ -118,6 +140,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         referenceQuote: action.input.referenceQuote,
         surveyAssignment: null,
         surveyReport: null,
+        estimatedHours: null,
+        vehicleIncident: null,
         negotiation: null,
         surveyMethod: null,
         quoteItems: [],
@@ -126,7 +150,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         depositRequired: DEPOSIT_AMOUNT,
         depositPaid: 0,
         balancePaid: 0,
-        isWarehouseReturned: false,
+        // Gói chỉ thuê xe không xuất dụng cụ / vật tư → không có gì phải trả kho.
+        isWarehouseReturned: action.input.details?.serviceMode === 'TRUCK_ONLY',
         finalRevenue: null,
         flags: { hasFieldDiscrepancyLock: false, isVehicleIncident: false, waitingMinutes: 0, hoursUntilDeparture: 72 },
         fieldStage: 'NOT_STARTED',
@@ -150,7 +175,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (o.surveyReport) return toast(state, 'info', `${o.id} đã có kết quả khảo sát.`);
       const surveyor = state.resources.staff.find((s) => s.id === action.surveyorId);
       if (!surveyor) return toast(state, 'warning', 'Cần chọn người khảo sát.');
-      if (!surveyor.isAvailable) return toast(state, 'warning', `${surveyor.name} đang nghỉ ca, hãy chọn người khác.`);
+      const surveyDay = o.bookingDetails?.surveyDate || todayLocalISO();
+      const surveyorOff = downtimeOn(state.resources.downtimes, 'STAFF', surveyor.id, surveyDay);
+      if (surveyorOff) return toast(state, 'warning', `${surveyor.name}: ${downtimeLabel(surveyorOff).toLowerCase()} — hãy chọn người khác.`);
       const appointment = appointmentLabel(o);
       const note = action.note.trim();
       const kind = SURVEY_STAGE_META[surveyStageOf(o)].label.toLowerCase();
@@ -182,6 +209,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
       if (!o.surveyAssignment) return toast(state, 'warning', 'Đơn chưa được phân người khảo sát.');
       if (surveyStageOf(o) === 'PHOTOS' && !isMediaSubmitted(o)) return toast(state, 'warning', 'Khách chưa gửi ảnh / video — chưa thể gửi kết quả khảo sát.');
+      if (cleanSurveyItems(action.items).length === 0) return toast(state, 'warning', 'Chưa có món đồ nào trong danh sách khảo sát.');
+      if (totalVehicles(action.proposal.vehicles) === 0) return toast(state, 'warning', 'Đề xuất ít nhất một xe.');
+      if (!(action.proposal.estimatedHours > 0)) return toast(state, 'warning', 'Ghi tổng thời gian dự kiến của chuyến.');
       const surveyor = state.resources.staff.find((s) => s.id === o.surveyAssignment?.surveyorId);
       const p = action.proposal;
       const next = patchOrder(state, action.orderId, (ord) =>
@@ -191,7 +221,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
             surveyReport: {
               submittedAt: Date.now(),
               surveyorId: ord.surveyAssignment!.surveyorId,
-              itemsNote: action.itemsNote.trim(),
+              items: cleanSurveyItems(action.items),
               note: action.note.trim(),
               proposal: p,
             },
@@ -199,7 +229,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
           audit(
             'STAFF',
             'Gửi kết quả khảo sát',
-            `${surveyor?.name ?? 'Người khảo sát'} đề xuất ${p.vehicleQty} × xe ${String(p.vehicleCapacity).replace('.', ',')} tấn, ${p.workers} người, ${p.distanceKm} km.`,
+            `${surveyor?.name ?? 'Người khảo sát'} đề xuất ${vehicleLinesLabel(p.vehicles)}, ${p.workers} người, ${p.distanceKm} km.`,
           ),
         ),
       );
@@ -252,6 +282,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
       const kind = surveyStageOf(o);
       if (kind !== 'TRUCK_CONFIRM' && !o.surveyReport) return toast(state, 'warning', 'Chưa có kết quả khảo sát — chờ người khảo sát gửi về rồi mới lập báo giá.');
+      if (!(action.estimatedHours > 0)) return toast(state, 'warning', 'Ghi tổng thời gian dự kiến của chuyến để biết xe & người bận bao lâu.');
       const method = SURVEY_METHOD_OF[kind];
       const methodLabel: Record<SurveyMethod, string> = {
         ON_SITE: 'Khảo sát trực tiếp',
@@ -261,8 +292,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       };
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
-          { ...ord, quoteItems: action.items, surveyMethod: method, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
-          audit('COORDINATOR', 'Gửi báo giá', `${methodLabel[method]} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}.`),
+          { ...ord, quoteItems: action.items, estimatedHours: action.estimatedHours, surveyMethod: method, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
+          audit('COORDINATOR', 'Gửi báo giá', `${methodLabel[method]} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}, dự kiến ${hoursLabel(action.estimatedHours)}.`),
         ),
       );
       return toast(next, 'success', `Đã gửi báo giá cho ${action.orderId}. Bộ đếm tự hủy 24h bắt đầu chạy.`);
@@ -332,9 +363,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const o = findOrder(state, action.orderId);
       if (!o) return state;
       if (o.status !== 'ASSIGNED' && o.status !== 'IN_TRANSIT') return toast(state, 'warning', 'Lệnh công tác chưa sẵn sàng hoặc đang tạm dừng.');
-      const cur = FIELD_STAGE_ORDER.indexOf(o.fieldStage);
-      const target = FIELD_STAGE_ORDER.indexOf(action.stage);
-      if (target !== cur + 1) return state;
+      if (nextFieldStage(o)?.stage !== action.stage) return state;
       if ((action.stage === 'WORKING' || action.stage === 'MOVING') && o.flags.hasFieldDiscrepancyLock) {
         return toast(state, 'danger', 'Chưa thể bắt đầu: chờ khách xác nhận báo giá điều chỉnh.');
       }
@@ -344,16 +373,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       let status: OrderStatus = o.status;
       if (action.stage === 'WORKING') status = 'IN_TRANSIT';
       if (action.stage === 'HANDED_OVER') status = 'PENDING_PAYMENT_OR_CLAIM';
-      const label: Record<FieldStage, string> = {
-        NOT_STARTED: 'Chưa bắt đầu',
-        MATERIALS_PICKED: 'Đã nhận vật tư tại kho',
-        WORKING: 'Bắt đầu làm / vận chuyển',
-        MOVING: 'Đang di chuyển',
-        ARRIVED: 'Đã tới nơi',
-        HANDED_OVER: 'Đã lập biên bản bàn giao',
-      };
       let next = patchOrder(state, action.orderId, (ord) =>
-        withLog({ ...ord, fieldStage: action.stage, status }, audit('STAFF', 'Cập nhật tiến độ hiện trường', label[action.stage])),
+        withLog({ ...ord, fieldStage: action.stage, status }, audit('STAFF', FIELD_STAGE_LOG_ACTION, FIELD_STAGE_LOG_LABEL[action.stage])),
       );
       if (action.stage === 'HANDED_OVER') {
         next = { ...next, resources: { ...next.resources, vehicles: releaseVehicle(next.resources.vehicles, o.vehicleIds) } };
@@ -394,8 +415,14 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       };
 
     case 'REPORT_VEHICLE_INCIDENT': {
+      const note = action.note.trim();
+      if (!note) return toast(state, 'warning', 'Mô tả xe bị gì để Điều phối xử lý.');
+      const kindLabel = VEHICLE_INCIDENT_KINDS[action.kind];
       const next = patchOrder(state, action.orderId, (o) =>
-        withLog({ ...o, flags: { ...o.flags, isVehicleIncident: true } }, audit('STAFF', 'Báo sự cố xe hỏng (Mã 1.1.2)', 'Xe chết máy giữa đường, đồ đạc vẫn an toàn trên thùng xe.')),
+        withLog(
+          { ...o, flags: { ...o.flags, isVehicleIncident: true }, vehicleIncident: { kind: action.kind, note, reportedAt: Date.now() } },
+          audit('STAFF', 'Báo sự cố xe (Mã 1.1.2)', `${kindLabel}: ${note}`),
+        ),
       );
       return toast(next, 'danger', 'Đã gửi báo động sự cố xe tới Trung tâm điều phối.');
     }
@@ -409,16 +436,27 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         plateNumber: action.plateNumber,
         capacityTons: 2,
         status: 'BUSY',
-        currentShiftTime: shiftFromStart(o.timeSlot),
+        currentShiftTime: orderShift(o),
         busyOrderId: shortId(o.id),
       };
-      let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleId ? [o.vehicleId] : [], 'MAINTENANCE');
+      const today = todayLocalISO();
+      if (!action.repairUntil || action.repairUntil < today) return toast(state, 'warning', 'Ghi ngày dự kiến sửa xong xe hỏng (từ hôm nay trở đi).');
+      const replacementOff = existing ? downtimeOn(state.resources.downtimes, 'VEHICLE', existing.id, today) : null;
+      if (existing && replacementOff) return toast(state, 'danger', `Xe ${existing.plateNumber} đang ${downtimeLabel(replacementOff).toLowerCase()}.`);
+      let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleId ? [o.vehicleId] : []);
+      // Xe hỏng nghỉ sửa từ hôm nay tới ngày Điều phối ước tính; lịch nghỉ cũ chồng lên khoảng này được thay thế.
+      const downtimes = o.vehicleId
+        ? [
+            ...state.resources.downtimes.filter((d) => !(d.target === 'VEHICLE' && d.resourceId === o.vehicleId && d.from <= action.repairUntil && d.to >= today)),
+            { id: uid('dt'), target: 'VEHICLE' as const, resourceId: o.vehicleId, reason: 'REPAIR' as const, from: today, to: action.repairUntil, note: o.vehicleIncident ? `${VEHICLE_INCIDENT_KINDS[o.vehicleIncident.kind]}: ${o.vehicleIncident.note} — đơn ${o.id}` : `Sự cố giữa đường — đơn ${o.id}`, createdAt: Date.now() },
+          ]
+        : state.resources.downtimes;
       vehicles = existing
-        ? vehicles.map((v) => (v.id === existing.id ? { ...v, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: shiftFromStart(o.timeSlot) } : v))
+        ? vehicles.map((v) => (v.id === existing.id ? { ...v, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: orderShift(o) } : v))
         : [...vehicles, replacement];
       const driver = state.resources.staff.find((s) => s.name === action.driverName);
       const oldPlate = state.resources.vehicles.find((v) => v.id === o.vehicleId)?.plateNumber ?? '—';
-      const next = patchOrder({ ...state, resources: { ...state.resources, vehicles } }, action.orderId, (ord) =>
+      const next = patchOrder({ ...state, resources: { ...state.resources, vehicles, downtimes } }, action.orderId, (ord) =>
         withLog(
           {
             ...ord,
@@ -426,6 +464,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
             vehicleIds: ord.vehicleIds.map((id) => (id === o.vehicleId ? replacement.id : id)),
             crewIds: driver && !ord.crewIds.includes(driver.id) ? [...ord.crewIds, driver.id] : ord.crewIds,
             flags: { ...ord.flags, isVehicleIncident: false },
+            vehicleIncident: null,
           },
           audit('COORDINATOR', 'Chuyển giao phương tiện (Tăng bo)', `${oldPlate} → ${action.plateNumber}, tài xế mới: ${action.driverName}.`),
         ),
@@ -467,6 +506,11 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (unavailable) return toast(state, 'danger', `Hệ thống chặn thao tác gán: xe ${unavailable.plateNumber} không khả dụng.`);
       if (o.status !== 'QUOTED_PENDING_SCHEDULE' && o.status !== 'ASSIGNED') return toast(state, 'warning', 'Chỉ gán nguồn lực cho đơn đã cọc và chờ điều phối.');
       const crewMembers = state.resources.staff.filter((m) => action.crewIds.includes(m.id));
+      const offOf = (target: 'VEHICLE' | 'STAFF', id: string) => downtimeOn(state.resources.downtimes, target, id, o.scheduledDate);
+      const offVehicle = picked.find((v) => offOf('VEHICLE', v.id));
+      if (offVehicle) return toast(state, 'danger', `Xe ${offVehicle.plateNumber} không chạy ngày chuyển: ${downtimeLabel(offOf('VEHICLE', offVehicle.id)!).toLowerCase()}.`);
+      const offStaff = crewMembers.find((m) => offOf('STAFF', m.id));
+      if (offStaff) return toast(state, 'danger', `${offStaff.name} nghỉ vào ngày chuyển: ${downtimeLabel(offOf('STAFF', offStaff.id)!).toLowerCase()}.`);
       const mismatch = validateAssignment(
         getAssignmentRequirement(o),
         picked.map((v) => v.capacityTons),
@@ -475,7 +519,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       );
       if (mismatch) return toast(state, 'danger', `Không khớp báo giá: ${mismatch}`);
       let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleIds);
-      vehicles = vehicles.map((x) => (action.vehicleIds.includes(x.id) ? { ...x, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: shiftFromStart(o.timeSlot) } : x));
+      vehicles = vehicles.map((x) => (action.vehicleIds.includes(x.id) ? { ...x, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: orderShift(o) } : x));
       const crewNames = state.resources.staff.filter((s) => action.crewIds.includes(s.id)).map((s) => s.name);
       const plates = picked.map((v) => v.plateNumber).join(', ');
       const next = patchOrder({ ...state, resources: { ...state.resources, vehicles } }, action.orderId, (ord) =>
@@ -565,25 +609,16 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog({ ...ord, balancePaid: ord.balancePaid + remaining }, audit('CUSTOMER', 'Thanh toán QR', `Thanh toán ${formatVND(remaining)} — công nợ = 0đ.`)),
       );
-      return toast(next, 'success', `Thanh toán thành công ${formatVND(remaining)}. Công nợ khách hàng = 0đ.`);
+      return closeIfSettled(toast(next, 'success', `Thanh toán thành công ${formatVND(remaining)}. Công nợ khách hàng = 0đ.`), action.orderId);
     }
 
     case 'CONFIRM_WAREHOUSE_RETURN': {
-      const next = patchOrder(state, action.orderId, (o) =>
-        withLog({ ...o, isWarehouseReturned: true }, audit('ADMIN', 'Xác nhận thu hồi dụng cụ', 'Đã thu hồi đủ dụng cụ & nhập kho vật tư dư.')),
-      );
-      return toast(next, 'success', `${action.orderId}: đã xác nhận nhập kho.`);
-    }
-
-    case 'CLOSE_ORDER': {
       const o = findOrder(state, action.orderId);
-      if (!o) return state;
-      if (!canCloseOrder(selectSettlement(o))) return toast(state, 'danger', 'Chưa thể đóng hồ sơ: cần công nợ = 0đ và đã thu hồi dụng cụ.');
-      const revenue = computeTotals(o).grandTotal;
+      if (!o || o.status !== 'PENDING_PAYMENT_OR_CLAIM' || o.isWarehouseReturned) return state;
       const next = patchOrder(state, action.orderId, (ord) =>
-        withLog({ ...ord, status: 'COMPLETED', finalRevenue: revenue }, audit('ADMIN', 'Đóng hồ sơ (Hoàn tất)', `Doanh thu cuối cùng ${formatVND(revenue)} — đã khóa bất biến.`)),
+        withLog({ ...ord, isWarehouseReturned: true }, audit('STAFF', 'Trả dụng cụ về kho', 'Đội xe xác nhận đã trả đủ dụng cụ & nhập lại vật tư dư.')),
       );
-      return toast(next, 'success', `${action.orderId} đã hoàn tất. Doanh thu ${formatVND(revenue)} được khóa.`);
+      return closeIfSettled(toast(next, 'success', `${action.orderId}: đã trả dụng cụ về kho.`), action.orderId);
     }
 
     case 'CREATE_CLAIM': {
@@ -597,35 +632,71 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         description: action.description,
         status: 'OPEN',
         requestedAmount: action.requestedAmount,
+        proposedAmount: null,
         approvedAmount: null,
+        handlingNote: '',
         createdAt: Date.now(),
-        packingEvidence: [
-          { id: uid('ev'), kind: 'PHOTO', caption: 'Đồ đạc bọc màng PE trước khi lên xe', takenAt: 'Lúc đóng gói', tone: 'neutral' },
-          { id: uid('ev'), kind: 'VIDEO', caption: 'Video kiểm tra tình trạng trước vận chuyển', takenAt: 'Lúc đóng gói', tone: 'neutral' },
-        ],
+        // Gói chỉ thuê xe: khách tự đóng gói → đội xe không có ảnh / video đóng gói để đối chiếu.
+        packingEvidence: isTruckOnly(o)
+          ? []
+          : [
+              { id: uid('ev'), kind: 'PHOTO', caption: 'Đồ đạc bọc màng PE trước khi lên xe', takenAt: 'Lúc đóng gói', tone: 'neutral' },
+              { id: uid('ev'), kind: 'VIDEO', caption: 'Video kiểm tra tình trạng trước vận chuyển', takenAt: 'Lúc đóng gói', tone: 'neutral' },
+            ],
         customerEvidence: [{ id: uid('ev'), kind: 'PHOTO', caption: action.title, takenAt: 'Vừa gửi', tone: 'danger' }],
       };
       return toast({ ...state, claims: [claim, ...state.claims] }, 'success', `Đã tạo phiếu ${claim.id}. Doanh thu gốc của ${o.id} không bị thay đổi.`);
     }
 
-    case 'SET_CLAIM_STATUS': {
-      const claim = state.claims.find((c) => c.id === action.claimId);
-      if (!claim) return state;
-      let next: AppState = {
-        ...state,
-        claims: state.claims.map((c) => (c.id === action.claimId ? { ...c, status: action.status, approvedAmount: action.approvedAmount } : c)),
-      };
-      if (action.status === 'APPROVED' && action.approvedAmount) {
-        next = {
+    case 'CLAIM_INVESTIGATE': {
+      const c = state.claims.find((x) => x.id === action.claimId);
+      if (!c || c.status !== 'OPEN') return state;
+      return patchClaim(state, c.id, { status: 'INVESTIGATING' }, `${c.id}: Điều phối bắt đầu đối chiếu.`, 'info');
+    }
+
+    case 'CLAIM_PROPOSE_PAYOUT': {
+      const c = state.claims.find((x) => x.id === action.claimId);
+      if (!c || (c.status !== 'OPEN' && c.status !== 'INVESTIGATING')) return state;
+      if (action.amount <= 0) return toast(state, 'warning', 'Mức đề xuất phải lớn hơn 0đ — không bồi thường thì chọn Từ chối.');
+      if (!action.note.trim()) return toast(state, 'warning', 'Ghi căn cứ đề xuất để Admin duyệt.');
+      return patchClaim(
+        state,
+        c.id,
+        { status: 'PENDING_APPROVAL', proposedAmount: action.amount, handlingNote: action.note.trim() },
+        `${c.id}: đã gửi Admin duyệt chi ${formatVND(action.amount)}.`,
+      );
+    }
+
+    case 'CLAIM_REJECT': {
+      const c = state.claims.find((x) => x.id === action.claimId);
+      if (!c || (c.status !== 'OPEN' && c.status !== 'INVESTIGATING')) return state;
+      if (!action.note.trim()) return toast(state, 'warning', 'Ghi lý do từ chối — khách sẽ thấy lý do này.');
+      return patchClaim(state, c.id, { status: 'REJECTED', handlingNote: action.note.trim() }, `${c.id}: đã từ chối khiếu nại.`, 'info');
+    }
+
+    case 'CLAIM_APPROVE_PAYOUT': {
+      const c = state.claims.find((x) => x.id === action.claimId);
+      if (!c || c.status !== 'PENDING_APPROVAL') return state;
+      if (action.amount <= 0) return toast(state, 'warning', 'Số tiền duyệt phải lớn hơn 0đ.');
+      const next = patchClaim(state, c.id, { status: 'APPROVED', approvedAmount: action.amount });
+      return toast(
+        {
           ...next,
           ledger: [
-            { id: uid('GL'), orderId: claim.orderId, amount: action.approvedAmount, category: 'Chi phí bồi thường khiếu nại', note: `${claim.id} — ${claim.title}`, createdAt: Date.now() },
+            { id: uid('GL'), orderId: c.orderId, amount: action.amount, category: 'Chi phí bồi thường khiếu nại', note: `${c.id} — ${c.title}`, createdAt: Date.now() },
             ...next.ledger,
           ],
-        };
-        next = toast(next, 'success', `Duyệt bồi thường ${formatVND(action.approvedAmount)} cho ${claim.id} — ghi nhận chi phí riêng, doanh thu gốc giữ nguyên.`);
-      }
-      return next;
+        },
+        'success',
+        `Duyệt chi ${formatVND(action.amount)} cho ${c.id} — ghi nhận chi phí riêng, doanh thu gốc giữ nguyên.`,
+      );
+    }
+
+    case 'CLAIM_SEND_BACK': {
+      const c = state.claims.find((x) => x.id === action.claimId);
+      if (!c || c.status !== 'PENDING_APPROVAL') return state;
+      if (!action.note.trim()) return toast(state, 'warning', 'Ghi lý do trả lại để Điều phối bổ sung.');
+      return patchClaim(state, c.id, { status: 'INVESTIGATING', handlingNote: `Admin trả lại: ${action.note.trim()}` }, `${c.id}: đã trả lại Điều phối.`, 'info');
     }
 
     case 'APPROVE_REFUND': {
@@ -658,12 +729,48 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       return toast({ ...state, resources: { ...state.resources, vehicles } }, 'success', `Đã cập nhật xe ${plate}.`);
     }
 
-    case 'SET_VEHICLE_STATUS': {
-      const v = state.resources.vehicles.find((x) => x.id === action.id);
-      if (!v) return state;
-      if (v.status === 'BUSY') return toast(state, 'danger', 'Xe đang được gán cho đơn hàng — không thể đổi trạng thái.');
-      const vehicles = state.resources.vehicles.map((x) => (x.id === v.id ? { ...x, status: action.status } : x));
-      return toast({ ...state, resources: { ...state.resources, vehicles } }, 'success', action.status === 'MAINTENANCE' ? `Xe ${v.plateNumber} chuyển sang bảo dưỡng.` : `Xe ${v.plateNumber} sẵn sàng hoạt động.`);
+    case 'ADD_DOWNTIME': {
+      const { target, resourceId, from, to } = action;
+      const today = todayLocalISO();
+      const name =
+        target === 'VEHICLE'
+          ? state.resources.vehicles.find((v) => v.id === resourceId)?.plateNumber
+          : state.resources.staff.find((m) => m.id === resourceId)?.name;
+      if (!name) return state;
+      if (!from || !to) return toast(state, 'warning', 'Chọn đủ ngày bắt đầu và ngày kết thúc.');
+      if (to < from) return toast(state, 'warning', 'Ngày kết thúc phải từ ngày bắt đầu trở đi.');
+      if (to < today) return toast(state, 'warning', 'Khoảng nghỉ đã qua — chỉ ghi lịch từ hôm nay trở đi.');
+      const overlap = state.resources.downtimes.find((d) => d.target === target && d.resourceId === resourceId && d.from <= to && d.to >= from);
+      if (overlap) return toast(state, 'warning', `${name} đã có lịch ${downtimeLabel(overlap).toLowerCase()} trùng khoảng này.`);
+      // Đã nhận việc trong khoảng đó thì không cho nghỉ — Điều phối đổi người / xe cho đơn trước.
+      const inRange = (d?: string | null) => !!d && from <= d && d <= to;
+      const running = ['ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'];
+      const clashes = state.orders.filter((o) => {
+        if (!running.includes(o.status) && o.status !== 'NEW_PENDING_SURVEY') return false;
+        if (target === 'VEHICLE') return running.includes(o.status) && o.vehicleIds.includes(resourceId) && inRange(o.scheduledDate);
+        const moving = running.includes(o.status) && o.crewIds.includes(resourceId) && inRange(o.scheduledDate);
+        const surveying = o.status === 'NEW_PENDING_SURVEY' && !o.surveyReport && o.surveyAssignment?.surveyorId === resourceId && inRange(o.bookingDetails?.surveyDate);
+        return moving || surveying;
+      });
+      if (clashes.length) return toast(state, 'danger', `${name} đã có lịch ở đơn ${clashes.map((o) => o.id).join(', ')} trong khoảng này — đổi người / xe cho đơn trước.`);
+      const downtime = { id: uid('dt'), target, resourceId, reason: action.reason, from, to, note: action.note.trim(), createdAt: Date.now() };
+      return toast(
+        { ...state, resources: { ...state.resources, downtimes: [...state.resources.downtimes, downtime] } },
+        'success',
+        `${name}: ${DOWNTIME_REASON_META[action.reason].label.toLowerCase()} ${downtimeRangeLabel(downtime)}.`,
+      );
+    }
+
+    case 'END_DOWNTIME': {
+      const d = state.resources.downtimes.find((x) => x.id === action.id);
+      if (!d) return state;
+      const today = todayLocalISO();
+      // Chưa bắt đầu → hủy hẳn; đang diễn ra → kết thúc trước hôm nay để từ hôm nay nhận việc lại.
+      const upcoming = d.from >= today;
+      const downtimes = upcoming
+        ? state.resources.downtimes.filter((x) => x.id !== d.id)
+        : state.resources.downtimes.map((x) => (x.id === d.id ? { ...x, to: addDaysISO(today, -1) } : x));
+      return toast({ ...state, resources: { ...state.resources, downtimes } }, 'success', upcoming ? 'Đã hủy lịch nghỉ.' : 'Đã kết thúc sớm — từ hôm nay nhận việc lại.');
     }
 
     case 'REMOVE_VEHICLE': {

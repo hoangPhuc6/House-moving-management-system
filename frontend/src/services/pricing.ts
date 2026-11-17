@@ -1,4 +1,4 @@
-import { INCLUDED_KM, LABOR_PER_PERSON, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES, vehicleTripPrice } from '@/constants/pricing';
+import { CARTON_ORDER, CARTON_SIZES, INCLUDED_KM, LABOR_PER_PERSON, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES, vehicleTripPrice } from '@/constants/pricing';
 import { formatVND, uid } from '@/services/format';
 import type { Order, OrderTotals, QuoteItem, SettlementLockState, SurveyInput } from '@/types';
 
@@ -52,7 +52,6 @@ export const canCloseOrder =(s: SettlementLockState): boolean => s.remainingBala
 
 /** Đơn giá vật tư & phụ phí trong báo giá chính thức. */
 export const SURVEY_UNIT_PRICES = {
-  carton: 25_000,
   tape: 15_000,
   peFilm: 120_000,
   perFloor: 100_000,
@@ -65,18 +64,29 @@ export const SURVEY_UNIT_PRICES = {
  * giá chuyến đã gồm INCLUDED_KM đầu, phần vượt tính theo cước km của xe.
  */
 export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
-  const v = VEHICLE_PRICING[s.vehicleCapacity] ?? VEHICLE_PRICING[2]!;
   const p = SURVEY_UNIT_PRICES;
-  const { extraKm, total: tripPrice } = vehicleTripPrice(v, s.distanceKm);
-  const vehicleNote =
-    extraKm > 0
-      ? `Giá chuyến ${formatVND(v.perTrip)} (gồm ${INCLUDED_KM} km) + ${extraKm} km vượt × ${formatVND(v.perKm)} — quãng đường ${s.distanceKm} km`
-      : `Giá chuyến ${formatVND(v.perTrip)}, đã gồm ${INCLUDED_KM} km đầu (quãng đường ${s.distanceKm} km)`;
+  // Mỗi loại xe một dòng (lớn trước) — dòng tên "Xe tải 5 tấn" để Điều phối xếp đúng loại khi gán xe.
+  const vehicleItems: QuoteItem[] = [...s.vehicles]
+    .filter((l) => l.qty > 0 && VEHICLE_PRICING[l.capacity])
+    .sort((a, b) => b.capacity - a.capacity)
+    .map((l) => {
+      const v = VEHICLE_PRICING[l.capacity]!;
+      const { extraKm, total: tripPrice } = vehicleTripPrice(v, s.distanceKm);
+      const note =
+        extraKm > 0
+          ? `Giá chuyến ${formatVND(v.perTrip)} (gồm ${INCLUDED_KM} km) + ${extraKm} km vượt × ${formatVND(v.perKm)} — quãng đường ${s.distanceKm} km`
+          : `Giá chuyến ${formatVND(v.perTrip)}, đã gồm ${INCLUDED_KM} km đầu (quãng đường ${s.distanceKm} km)`;
+      return { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: tripPrice, quantity: l.qty, note };
+    });
+  const cartonItems: QuoteItem[] = CARTON_ORDER.map((size) => {
+    const c = CARTON_SIZES[size];
+    return { id: uid('qi'), name: `${c.label} ${c.dims}`, category: 'MATERIAL', unit: 'thùng', unitPrice: c.price, quantity: s.cartons[size], note: `Vật tư — dùng cho ${c.use}` };
+  });
   const segments = Math.ceil(s.alleyMeters / p.alleySegmentMeters);
   const items: QuoteItem[] = [
-    { id: uid('qi'), name: v.label, category: 'VEHICLE', unit: 'chuyến', unitPrice: tripPrice, quantity: s.vehicleQty, note: vehicleNote },
+    ...vehicleItems,
     { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: LABOR_PER_PERSON, quantity: s.workers, note: 'Đơn giá bốc xếp cố định / người' },
-    { id: uid('qi'), name: 'Thùng carton 60x40x40', category: 'MATERIAL', unit: 'thùng', unitPrice: p.carton, quantity: s.cartons, note: 'Vật tư — đơn giá cố định' },
+    ...cartonItems,
     { id: uid('qi'), name: 'Băng keo đóng gói', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.tape, quantity: s.tapeRolls, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Màng PE bọc đồ', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.peFilm, quantity: s.peFilmRolls, note: 'Vật tư — đơn giá cố định' },
   ];

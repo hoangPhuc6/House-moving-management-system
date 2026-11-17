@@ -111,4 +111,4 @@ export const CompactStepper = ({ value, onChange, label, max = 99 }: { value: nu
 );
 
 export const FieldError = ({ message }: { message?: string | null }) =>
-  message ? <p className="text-xs font-medium text-rose-600" role="alert">{message}</p> : null;
+  message ? <p data-field-error className="text-xs font-medium text-rose-600" role="alert">{message}</p> : null;

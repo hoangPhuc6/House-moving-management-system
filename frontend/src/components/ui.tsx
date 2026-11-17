@@ -223,7 +223,7 @@ export const Field = ({ label, hint, error, children, className }: { label: stri
   <label className={cx('flex flex-col gap-1.5', className)}>
     <span className="text-[13px] font-semibold text-slate-700">{label}</span>
     {children}
-    {error ? <span className="text-xs font-medium text-rose-600">{error}</span> : hint ? <span className="text-xs text-slate-500">{hint}</span> : null}
+    {error ? <span data-field-error className="text-xs font-medium text-rose-600">{error}</span> : hint ? <span className="text-xs text-slate-500">{hint}</span> : null}
   </label>
 );
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Bookmark, RotateCcw, Send } from 'lucide-react';
 import { Alert, Button, cx } from '@/components/ui';
@@ -23,6 +23,18 @@ const STEP_HEADINGS = [
 
 const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
+/**
+ * Cuộn tới trường lỗi đầu tiên (giữa màn hình để không bị thanh hành động dính đáy che) và focus vào ô nhập / ô tick của nó.
+ * Chờ một khung hình để thông báo lỗi kịp render.
+ */
+const revealFirstError = (root: HTMLElement | null) =>
+  window.requestAnimationFrame(() => {
+    const field = root?.querySelector('[data-field-error]')?.parentElement;
+    if (!field) return;
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field.querySelector<HTMLElement>('input, select, textarea, button')?.focus({ preventScroll: true });
+  });
+
 /** Wizard đặt lịch chuyển nhà 3 bước: Địa điểm → Dịch vụ & Khảo sát → Xác nhận. Danh mục đồ & ảnh được chốt ở giai đoạn khảo sát. */
 export const CreateRequest = () => {
   const { dispatch } = useApp();
@@ -32,6 +44,7 @@ export const CreateRequest = () => {
   const [maxReached, setMaxReached] = useState(0);
   const [attempted, setAttempted] = useState<Set<number>>(() => new Set());
   const [showRestored, setShowRestored] = useState(wizard.restored);
+  const stepRef = useRef<HTMLDivElement>(null);
 
   const errorsFor = (s: number) => validateStep(wizard.draft, s);
   const errors = attempted.has(step) ? errorsFor(step) : {};
@@ -48,6 +61,7 @@ export const CreateRequest = () => {
     setAttempted((a) => new Set(a).add(step));
     if (Object.keys(errorsFor(step)).length > 0) {
       dispatch({ type: 'PUSH_TOAST', tone: 'warning', message: 'Vui lòng hoàn thiện các trường bắt buộc được đánh dấu.' });
+      revealFirstError(stepRef.current);
       return;
     }
     if (!last) {
@@ -59,7 +73,9 @@ export const CreateRequest = () => {
     const broken = WIZARD_STEPS.findIndex((_, i) => Object.keys(errorsFor(i)).length > 0);
     if (broken !== -1) {
       setAttempted((a) => new Set(a).add(broken));
-      goTo(broken);
+      setStep(broken);
+      // Bước vừa mở cần render xong mới có thông báo lỗi để cuộn tới.
+      window.setTimeout(() => revealFirstError(stepRef.current), 50);
       return;
     }
     dispatch({ type: 'CREATE_ORDER', input: wizard.buildOrderInput() });
@@ -128,7 +144,7 @@ export const CreateRequest = () => {
         }}
         className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]"
       >
-        <div key={step} className="anim-enter min-w-0">
+        <div key={step} ref={stepRef} className="anim-enter min-w-0">
           {step === 0 && <StepLocation wizard={wizard} errors={errors} />}
           {step === 1 && <StepServices wizard={wizard} errors={errors} />}
           {step === 2 && <StepReview wizard={wizard} errors={errors} onEdit={goTo} />}

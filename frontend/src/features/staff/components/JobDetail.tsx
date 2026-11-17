@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertOctagon,
@@ -10,20 +11,21 @@ import {
   StopCircle,
   Timer,
   UserRound,
+  Warehouse,
   Wrench,
 } from 'lucide-react';
-import { Button, cx, StatusBadge } from '@/components/ui';
-import { FIELD_STAGE_LABEL, FIELD_STAGE_ORDER, FIELD_STAGES } from '@/constants/order';
-import { STAFF_ROLE_LABEL } from '@/constants/resources';
+import { Button, cx, Field, Modal, Select, StatusBadge } from '@/components/ui';
+import { FIELD_STAGE_LABEL, FIELD_STAGE_ORDER, fieldStagesOf, isFieldStageDone, nextFieldStage } from '@/constants/order';
+import { STAFF_ROLE_LABEL, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
 import { Block } from '@/features/staff/components/Block';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
-import { RUNNING, STAGE_ICONS } from '@/features/staff/constants';
+import { needsToolReturn, RUNNING, STAGE_ICONS } from '@/features/staff/constants';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { ROUTES } from '@/routes/paths';
 import { formatDateVN, formatVND } from '@/services/format';
 import { waitFee } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
-import type { FieldStage, Order } from '@/types';
+import type { FieldStage, Order, VehicleIncidentKind } from '@/types';
 
 export const JobDetail = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
@@ -34,7 +36,9 @@ export const JobDetail = ({ order }: { order: Order }) => {
     order.crewIds.includes(s.id),
   );
   const stageIdx = FIELD_STAGE_ORDER.indexOf(order.fieldStage);
-  const next = FIELD_STAGES[stageIdx];
+  const stages = fieldStagesOf(order);
+  const next = nextFieldStage(order);
+  const doneCount = stages.filter((s) => isFieldStageDone(order, s.stage)).length;
   const locked = order.flags.hasFieldDiscrepancyLock;
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
   const active = RUNNING.includes(order.status);
@@ -47,6 +51,17 @@ export const JobDetail = ({ order }: { order: Order }) => {
     ? STAGE_ICONS[next.stage as Exclude<FieldStage, "NOT_STARTED">]
     : CheckCircle2;
   const checked = order.equipment.filter((e) => e.checked).length;
+  const [incidentOpen, setIncidentOpen] = useState(false);
+  const [incidentKind, setIncidentKind] = useState<VehicleIncidentKind>("ENGINE");
+  const [incidentNote, setIncidentNote] = useState("");
+  const [incidentTried, setIncidentTried] = useState(false);
+  const incidentErr = incidentTried && !incidentNote.trim();
+  const sendIncident = () => {
+    setIncidentTried(true);
+    if (!incidentNote.trim()) return;
+    dispatch({ type: "REPORT_VEHICLE_INCIDENT", orderId: order.id, kind: incidentKind, note: incidentNote });
+    setIncidentOpen(false);
+  };
   // Trước khi xác nhận bước 2 (Bắt đầu làm): chỉ đường tới nơi đi để bốc hàng; sau đó: tới nơi đến.
   const headingToDestination = stageIdx >= FIELD_STAGE_ORDER.indexOf("WORKING");
   const navTarget = headingToDestination ? order.toAddress : order.fromAddress;
@@ -153,27 +168,27 @@ export const JobDetail = ({ order }: { order: Order }) => {
         title="Tiến độ hiện trường"
         right={
           <span className="text-xs font-semibold text-slate-500 tabular-nums">
-            {Math.max(0, stageIdx)}/5
+            {doneCount}/{stages.length}
           </span>
         }
       >
         <div className="mb-4 flex gap-1">
-          {FIELD_STAGES.map((s, i) => (
+          {stages.map((s) => (
             <div
               key={s.stage}
               className={cx(
                 "h-1.5 flex-1 rounded-full",
-                i < stageIdx ? "bg-brand" : "bg-slate-200",
+                isFieldStageDone(order, s.stage) ? "bg-brand" : "bg-slate-200",
               )}
             />
           ))}
         </div>
         <ul className="space-y-1.5">
-          {FIELD_STAGES.map((s, i) => {
+          {stages.map((s) => {
             const Icon =
               STAGE_ICONS[s.stage as Exclude<FieldStage, "NOT_STARTED">];
-            const done = i < stageIdx;
-            const isNext = i === stageIdx;
+            const done = isFieldStageDone(order, s.stage);
+            const isNext = s.stage === next?.stage;
             return (
               <li
                 key={s.stage}
@@ -240,12 +255,7 @@ export const JobDetail = ({ order }: { order: Order }) => {
                 icon={Siren}
                 className="h-16 flex-col !gap-1 text-xs leading-tight whitespace-normal"
                 disabled={order.flags.isVehicleIncident}
-                onClick={() =>
-                  dispatch({
-                    type: "REPORT_VEHICLE_INCIDENT",
-                    orderId: order.id,
-                  })
-                }
+                onClick={() => setIncidentOpen(true)}
               >
                 {order.flags.isVehicleIncident
                   ? "Đã báo sự cố"
@@ -390,12 +400,65 @@ export const JobDetail = ({ order }: { order: Order }) => {
           </button>
         </StickyActionBar>
       )}
-      {!active && (
+      {/* Sau bàn giao: đội xe mang dụng cụ & vật tư dư về kho rồi tự xác nhận — đủ điều kiện thì hệ thống tự đóng hồ sơ. */}
+      {needsToolReturn(order) && (
+        <StickyActionBar className="md:!sticky md:bottom-4">
+          <p className="mb-2 text-xs text-slate-500">Mang toàn bộ dụng cụ & vật tư dư (thùng, màng PE…) về kho rồi xác nhận.</p>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "CONFIRM_WAREHOUSE_RETURN", orderId: order.id })}
+            className="flex h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-brand text-base font-bold text-white shadow-lg shadow-brand/25 active:scale-[0.98]"
+          >
+            <Warehouse className="size-5" /> Đã trả đủ dụng cụ về kho
+          </button>
+        </StickyActionBar>
+      )}
+      {!active && !needsToolReturn(order) && (
         <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
           <CheckCircle2 className="size-5" />{" "}
           {FIELD_STAGE_LABEL[order.fieldStage]} — lệnh đã kết thúc.
         </div>
       )}
+      <Modal
+        open={incidentOpen}
+        onClose={() => setIncidentOpen(false)}
+        tone="danger"
+        title="Báo sự cố xe"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIncidentOpen(false)}>
+              Hủy
+            </Button>
+            <Button variant="danger" icon={Siren} onClick={sendIncident}>
+              Gửi Điều phối
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Xe bị gì *">
+            <Select value={incidentKind} onChange={(e) => setIncidentKind(e.target.value as VehicleIncidentKind)} className="text-base sm:text-sm">
+              {(Object.keys(VEHICLE_INCIDENT_KINDS) as VehicleIncidentKind[]).map((k) => (
+                <option key={k} value={k}>
+                  {VEHICLE_INCIDENT_KINDS[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Mô tả *" error={incidentErr ? "Mô tả tình trạng xe, vị trí và đồ đạc" : null}>
+            <textarea
+              value={incidentNote}
+              onChange={(e) => setIncidentNote(e.target.value)}
+              rows={4}
+              placeholder="VD: Xe nổ lốp sau trên cầu Sài Gòn, đã tấp vào lề. Đồ đạc an toàn, cần xe thay thế."
+              className={cx(
+                "w-full rounded-xl border p-3 text-base focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none sm:text-sm",
+                incidentErr ? "border-rose-400" : "border-slate-200",
+              )}
+            />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -40,10 +40,28 @@ export const buildReferenceQuote = (input: ReferenceInput, catalog: ServiceItem[
   const line = (serviceName: string, quantity: number, unitPrice: number, note: string | null, autoApplied: boolean) =>
     breakdown.push({ serviceName, quantity, unitPrice, totalPrice: unitPrice * quantity, note, autoApplied });
 
-  // Vận chuyển: giá xe đã gồm INCLUDED_KM đầu tiên, phần vượt tính theo cước km của xe.
-  line(vehicle.label, 1, vehicle.perTrip, `Đã gồm ${INCLUDED_KM} km đầu tiên`, false);
-  const { extraKm: chargeableExtraKm, total: transportFee } = vehicleTripPrice(vehicle, distanceKm);
-  if (chargeableExtraKm > 0) line('Cước km vượt', chargeableExtraKm, vehicle.perKm, `Quãng đường ước tính ${distanceKm} km, vượt ${chargeableExtraKm} km so với ${INCLUDED_KM} km đã gồm`, true);
+  // Vận chuyển: giá xe đã gồm INCLUDED_KM đầu tiên, phần vượt tính theo cước km của từng loại xe.
+  const lines = input.vehicleLines?.filter((l) => l.qty > 0 && VEHICLE_PRICING[l.capacity]).length
+    ? input.vehicleLines.filter((l) => l.qty > 0 && VEHICLE_PRICING[l.capacity]).sort((a, b) => b.capacity - a.capacity)
+    : [{ capacity: VEHICLE_PRICING[capacity] ? capacity : 2, qty: 1 }];
+  let transportFee = 0;
+  let chargeableExtraKm = 0;
+  lines.forEach((l) => {
+    const v = VEHICLE_PRICING[l.capacity] ?? vehicle;
+    const trip = vehicleTripPrice(v, distanceKm);
+    chargeableExtraKm = trip.extraKm;
+    transportFee += trip.total * l.qty;
+    line(v.label, l.qty, v.perTrip, `Đã gồm ${INCLUDED_KM} km đầu tiên`, false);
+    if (trip.extraKm > 0) {
+      line(
+        lines.length > 1 ? `Cước km vượt — ${v.label}` : 'Cước km vượt',
+        trip.extraKm * l.qty,
+        v.perKm,
+        `Quãng đường ước tính ${distanceKm} km, vượt ${trip.extraKm} km so với ${INCLUDED_KM} km đã gồm${l.qty > 1 ? ` × ${l.qty} xe` : ''}`,
+        true,
+      );
+    }
+  });
 
   // Dịch vụ khách chọn (trừ xe — đã tính ở trên).
   const totalItems = input.items.reduce((s, i) => s + i.quantity, 0);

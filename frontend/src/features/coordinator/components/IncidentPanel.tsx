@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { ArrowLeftRight, Siren, Truck } from 'lucide-react';
 import {
   Alert,
-  Badge,
   Button,
   Card,
   CardHeader,
@@ -10,28 +9,24 @@ import {
   Field,
   Input,
   Modal,
-  PageHeader,
   Select,
-  StatusBadge,
   Tooltip,
 } from '@/components/ui';
 import { FIELD_STAGE_LABEL } from '@/constants/order';
-import { PLATE_REGEX } from '@/constants/resources';
-import { OrderPicker } from '@/features/coordinator/components/OrderPicker';
+import { PLATE_REGEX, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
+import { formatTime } from '@/services/format';
+import { addDaysISO, dayMonth, downtimeOn, todayLocalISO } from '@/services/downtime';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
-export const IncidentTab = ({
-  order,
-  onSelect,
-}: {
-  order: Order;
-  onSelect: (id: string) => void;
-}) => {
+/** Mục "Sự cố" của trang chi tiết đơn: chuyển giao phương tiện (tăng bo). */
+export const IncidentPanel = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
   const [open, setOpen] = useState(false);
   const [plate, setPlate] = useState("");
   const [driver, setDriver] = useState("");
+  const today = todayLocalISO();
+  const [repairUntil, setRepairUntil] = useState(() => addDaysISO(todayLocalISO(), 2));
   const [submitted, setSubmitted] = useState(false);
   const vehicle = state.resources.vehicles.find(
     (v) => v.id === order.vehicleId,
@@ -42,7 +37,7 @@ export const IncidentTab = ({
     "PAUSED_WAITING_CUSTOMER",
   ].includes(order.status);
   const drivers = state.resources.staff.filter(
-    (s) => (s.role === "DRIVER" || s.role === "TEAM_LEADER") && s.isAvailable,
+    (s) => (s.role === "DRIVER" || s.role === "TEAM_LEADER") && !downtimeOn(state.resources.downtimes, "STAFF", s.id, today),
   );
   const plateNorm = plate.trim().toUpperCase();
   const plateError = !plateNorm
@@ -53,39 +48,29 @@ export const IncidentTab = ({
         ? "Biển số trùng xe đang hỏng"
         : null;
   const driverError = !driver.trim() ? "Bắt buộc chọn tài xế mới" : null;
-  const incidentOrders = state.orders.filter(
-    (o) =>
-      o.flags.isVehicleIncident ||
-      ["IN_TRANSIT", "PAUSED_WAITING_CUSTOMER"].includes(o.status),
-  );
+  const repairError = !repairUntil ? "Ghi ngày dự kiến sửa xong" : repairUntil < today ? "Không được trước hôm nay" : null;
 
   return (
     <>
-      <PageHeader
-        eyebrow="Khẩn cấp"
-        title="Xử lý sự cố phương tiện"
-        subtitle="Chuyển giao phương tiện (tăng bo) cho đơn đang vận chuyển."
-        actions={<OrderPicker value={order.id} onChange={onSelect} />}
-      />
-      <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <Card
           className={cx(order.flags.isVehicleIncident && "border-rose-300")}
         >
           <CardHeader
-            title={`Đơn #${order.id}`}
-            subtitle={`${order.customerName} · ${order.toAddress}`}
+            title="Phương tiện đang thực hiện"
+            subtitle="Chuyển giao xe & tài xế khi xe gặp sự cố giữa đường"
             icon={order.flags.isVehicleIncident ? Siren : Truck}
-            action={<StatusBadge status={order.status} />}
           />
           {order.flags.isVehicleIncident ? (
             <Alert
               tone="danger"
               icon={Siren}
-              title="Đội xe báo sự cố: xe chết máy giữa đường"
+              title={`Đội xe báo sự cố: ${order.vehicleIncident ? VEHICLE_INCIDENT_KINDS[order.vehicleIncident.kind].toLowerCase() : "xe hỏng giữa đường"}`}
             >
-              Xe <b className="tabular-nums">{vehicle?.plateNumber ?? "—"}</b>{" "}
-              không thể tiếp tục. Đồ đạc vẫn trên thùng xe — cần điều xe thay
-              thế và tài xế mới.
+              <p>
+                Xe <b className="tabular-nums">{vehicle?.plateNumber ?? "—"}</b>
+                {order.vehicleIncident && <> · báo lúc {formatTime(order.vehicleIncident.reportedAt)}</>}
+              </p>
+              {order.vehicleIncident && <p className="mt-1 whitespace-pre-line">{order.vehicleIncident.note}</p>}
             </Alert>
           ) : (
             <Alert tone="info">
@@ -133,46 +118,6 @@ export const IncidentTab = ({
           </Tooltip>
         </Card>
 
-        <Card>
-          <CardHeader title="Đơn cần theo dõi" icon={Siren} />
-          <ul className="space-y-2">
-            {incidentOrders.map((o) => (
-              <li key={o.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(o.id)}
-                  className={cx(
-                    "flex w-full items-center justify-between rounded-xl border p-3 text-left",
-                    o.id === order.id
-                      ? "border-slate-900"
-                      : "border-slate-200 hover:border-slate-300",
-                  )}
-                >
-                  <div>
-                    <p className="text-sm font-semibold tabular-nums">
-                      #{o.id}
-                    </p>
-                    <p className="text-xs text-slate-500">{o.customerName}</p>
-                  </div>
-                  {o.flags.isVehicleIncident ? (
-                    <Badge tone="danger" dot pulse>
-                      Sự cố
-                    </Badge>
-                  ) : (
-                    <StatusBadge status={o.status} />
-                  )}
-                </button>
-              </li>
-            ))}
-            {incidentOrders.length === 0 && (
-              <li className="text-sm text-slate-400">
-                Không có đơn đang chạy.
-              </li>
-            )}
-          </ul>
-        </Card>
-      </div>
-
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -188,12 +133,13 @@ export const IncidentTab = ({
               icon={ArrowLeftRight}
               onClick={() => {
                 setSubmitted(true);
-                if (plateError || driverError) return;
+                if (plateError || driverError || repairError) return;
                 dispatch({
                   type: "TRANSFER_VEHICLE",
                   orderId: order.id,
                   plateNumber: plateNorm,
                   driverName: driver,
+                  repairUntil,
                 });
                 setOpen(false);
                 setPlate("");
@@ -227,7 +173,7 @@ export const IncidentTab = ({
           <div className="flex flex-wrap gap-1.5">
             {state.resources.vehicles
               .filter(
-                (v) => v.status === "AVAILABLE" && v.id !== order.vehicleId,
+                (v) => v.status === "AVAILABLE" && v.id !== order.vehicleId && !downtimeOn(state.resources.downtimes, "VEHICLE", v.id, today),
               )
               .map((v) => (
                 <button
@@ -254,6 +200,15 @@ export const IncidentTab = ({
               ))}
             </Select>
           </Field>
+          {vehicle && (
+            <Field
+              label={`Xe ${vehicle.plateNumber} sửa xong dự kiến *`}
+              error={submitted ? repairError : null}
+              hint={`Xe hỏng nghỉ sửa từ hôm nay (${dayMonth(today)}) tới ngày này — không được xếp vào đơn khác.`}
+            >
+              <Input type="date" min={today} value={repairUntil} invalid={submitted && !!repairError} onChange={(e) => setRepairUntil(e.target.value)} className="tabular-nums" />
+            </Field>
+          )}
         </div>
       </Modal>
     </>

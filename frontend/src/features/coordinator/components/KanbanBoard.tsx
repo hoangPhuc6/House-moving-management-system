@@ -6,6 +6,9 @@ import { COLUMNS } from '@/features/coordinator/constants';
 import type { CoordTab } from '@/features/coordinator/types';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { coordinatorSurveyBadge } from '@/features/order/surveyStage';
+import { routeLabelOf } from '@/features/order/route';
+import { FieldStageBadge } from '@/features/order/components/FieldProgress';
+import { hasFieldProgress } from '@/features/order/fieldProgress';
 import { formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp, useNow } from '@/services/store/AppStore';
@@ -75,7 +78,7 @@ export const KanbanBoard = ({
                             ? "dispatch"
                             : o.flags.isVehicleIncident
                               ? "incident"
-                              : "editor",
+                              : "quote",
                         )
                       }
                       className={cx(
@@ -97,7 +100,7 @@ export const KanbanBoard = ({
                         {o.customerName}
                       </p>
                       <p className="truncate text-xs text-slate-500">
-                        {o.toAddress}
+                        {routeLabelOf(o)}
                       </p>
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         {o.status === "SURVEYED_PENDING_CONFIRM" &&
@@ -107,7 +110,7 @@ export const KanbanBoard = ({
                             compact
                           />
                         ) : (
-                          <StatusBadge status={o.status} />
+                          hasFieldProgress(o) ? <FieldStageBadge order={o} /> : <StatusBadge status={o.status} />
                         )}
                         {o.negotiation && <Badge tone="warning">Khách thương lượng</Badge>}
                         {o.status === "NEW_PENDING_SURVEY" && (() => {

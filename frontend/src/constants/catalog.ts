@@ -37,6 +37,8 @@ export const createInitialCatalog = (): CatalogState => ({
   ],
   inventory: [
     { id: 'inv-1', name: 'Thùng carton 60x40x40', unit: 'thùng', stock: 240, minStock: 100 },
+    { id: 'inv-1s', name: 'Thùng carton 40x30x30', unit: 'thùng', stock: 150, minStock: 60 },
+    { id: 'inv-1l', name: 'Thùng carton 60x50x50', unit: 'thùng', stock: 120, minStock: 50 },
     { id: 'inv-2', name: 'Băng keo đóng gói', unit: 'cuộn', stock: 85, minStock: 40 },
     { id: 'inv-3', name: 'Màng PE bọc đồ', unit: 'cuộn', stock: 32, minStock: 30 },
     { id: 'inv-4', name: 'Xe đẩy hàng', unit: 'chiếc', stock: 8, minStock: 4 },

@@ -1,13 +1,8 @@
-import { useState } from 'react';
-import { KanbanSquare, ListTodo } from 'lucide-react';
-import { PageHeader, Tabs } from '@/components/ui';
-import { KanbanBoard } from '@/features/coordinator/components/KanbanBoard';
+import { PageHeader } from '@/components/ui';
 import { TodoView } from '@/features/coordinator/components/TodoView';
-import type { CoordTab } from '@/features/coordinator/types';
+import type { OrderSection } from '@/features/coordinator/types';
 import { weekdayOf } from '@/features/order/surveyStage';
 import { useNow } from '@/services/store/AppStore';
-
-type QueueView = 'todo' | 'kanban';
 
 /** "Ca sáng · Thứ Năm, 29/10/2026" theo giờ hiện tại. */
 const shiftLabel = (epoch: number) => {
@@ -18,38 +13,13 @@ const shiftLabel = (epoch: number) => {
   return `${shift} · ${weekdayOf(iso)}, ${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
-export const QueueTab = ({
-  onOpen,
-  query,
-}: {
-  onOpen: (id: string, t: CoordTab) => void;
-  query: string;
-}) => {
+/** Trang đầu của Điều phối — việc gấp ở trên, sau đó là đơn theo từng bước quy trình. */
+export const QueueTab = ({ onOpen, query }: { onOpen: (id: string, s?: OrderSection) => void; query: string }) => {
   const now = useNow(60_000);
-  const [view, setView] = useState<QueueView>('todo');
-
   return (
     <>
-      <PageHeader
-        eyebrow={shiftLabel(now)}
-        title={view === 'todo' ? 'Việc cần làm' : 'Tất cả đơn hàng'}
-        subtitle={
-          view === 'todo'
-            ? 'Việc gấp ở trên cùng, sau đó là đơn theo từng bước quy trình.'
-            : 'Toàn bộ vòng đời đơn hàng. Đơn chưa chốt sau 24h sẽ tự động hủy.'
-        }
-        actions={
-          <Tabs<QueueView>
-            value={view}
-            onChange={setView}
-            tabs={[
-              { id: 'todo', label: 'Việc cần làm', icon: ListTodo },
-              { id: 'kanban', label: 'Tất cả đơn', icon: KanbanSquare },
-            ]}
-          />
-        }
-      />
-      {view === 'todo' ? <TodoView onOpen={onOpen} query={query} /> : <KanbanBoard onOpen={onOpen} query={query} />}
+      <PageHeader eyebrow={shiftLabel(now)} title="Việc cần làm" subtitle="Việc gấp ở trên cùng, sau đó là đơn theo từng bước quy trình." />
+      <TodoView onOpen={onOpen} query={query} />
     </>
   );
 };

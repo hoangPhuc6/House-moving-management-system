@@ -1,6 +1,7 @@
 import { ChevronDown, ClipboardList } from 'lucide-react';
 import { Badge, Card } from '@/components/ui';
 import { PACKING_LABEL, SERVICE_MODES, needsFloor } from '@/features/customer/booking/constants';
+import { parseCapacityTons } from '@/services/dispatch';
 import { useCatalog } from '@/services/store/CatalogStore';
 import type { AddressDetail, Order } from '@/types';
 
@@ -17,7 +18,12 @@ export const RequestSummaryCard = ({ order }: { order: Order }) => {
   const truckOnly = d?.serviceMode === 'TRUCK_ONLY';
 
   // Vật tư đóng gói gộp thành một mục như lúc đặt đơn; bốc vác (chỉ thuê xe) kèm số người.
-  const services = order.requestedServices.filter((s) => !packingNames.has(s)).map((s) => (truckOnly && /bốc/i.test(s) && d && d.laborCount > 0 ? `${s} ×${d.laborCount}` : s));
+  const vehicleQtyOf = (name: string) => d?.vehicles?.find((l) => l.capacity === parseCapacityTons(name))?.qty ?? 0;
+  const services = order.requestedServices
+    .filter((s) => !packingNames.has(s))
+    .map((s) =>
+      truckOnly && /bốc/i.test(s) && d && d.laborCount > 0 ? `${s} ×${d.laborCount}` : truckOnly && vehicleQtyOf(s) > 1 ? `${s} ×${vehicleQtyOf(s)}` : s,
+    );
   if (order.requestedServices.some((s) => packingNames.has(s))) services.push(PACKING_LABEL);
 
   const rows: [string, string][] = [

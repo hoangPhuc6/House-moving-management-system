@@ -17,10 +17,11 @@ import { PLATE_REGEX, VEHICLE_STATUS_META } from '@/constants/resources';
 import { CAPACITIES } from '@/features/admin/constants';
 import type { Draft } from '@/features/admin/types';
 import { capLabel } from '@/features/admin/utils';
+import { downtimeLabel, downtimeOn, todayLocalISO, upcomingDowntimes } from '@/services/downtime';
 import { useApp } from '@/services/store/AppStore';
 import type { Vehicle } from '@/types';
 
-/** Quản lý đội xe: thêm, sửa, bảo dưỡng và xóa xe. */
+/** Quản lý danh mục đội xe: thêm, sửa, xóa. Lịch bảo dưỡng / sửa chữa do Điều phối ghi ở Lịch xe & nhân sự — ở đây chỉ xem. */
 export const VehiclesModule = ({ query }: { query: string }) => {
   const { state, dispatch } = useApp();
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -28,7 +29,9 @@ export const VehiclesModule = ({ query }: { query: string }) => {
   const [removing, setRemoving] = useState<Vehicle | null>(null);
 
   const vehicles = state.resources.vehicles.filter((v) => !query.trim() || v.plateNumber.toLowerCase().includes(query.trim().toLowerCase()));
-  const count = (s: Vehicle['status']) => state.resources.vehicles.filter((v) => v.status === s).length;
+  const today = todayLocalISO();
+  const offToday = (v: Vehicle) => downtimeOn(state.resources.downtimes, 'VEHICLE', v.id, today);
+  const count = (s: Vehicle['status']) => state.resources.vehicles.filter((v) => v.status === s && !offToday(v)).length;
 
   const plate = draft?.plateNumber.trim().toUpperCase() ?? '';
   const plateError = !draft
@@ -57,14 +60,14 @@ export const VehiclesModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Vận hành"
         title="Quản lý xe"
-        subtitle="Loại xe (tải trọng) phải khớp với báo giá khi điều phối. Xe đang gán cho đơn không thể sửa hoặc xóa."
+        subtitle="Loại xe (tải trọng) phải khớp với báo giá khi điều phối. Xe đang gán cho đơn không thể sửa hoặc xóa. Lịch bảo dưỡng do Điều phối ghi."
         actions={<Button icon={Plus} onClick={() => open({ id: null, plateNumber: '', capacityTons: CAPACITIES[0] ?? 2 })}>Thêm xe</Button>}
       />
       <div className="mb-4 grid gap-4 sm:grid-cols-4">
         <Stat label="Tổng số xe" value={state.resources.vehicles.length} icon={Truck} />
         <Stat label="Sẵn sàng" value={count('AVAILABLE')} icon={Truck} tone="success" />
         <Stat label="Đang chạy đơn" value={count('BUSY')} icon={Truck} tone="info" />
-        <Stat label="Bảo dưỡng" value={count('MAINTENANCE')} icon={Wrench} tone="warning" />
+        <Stat label="Nghỉ bảo dưỡng / sửa" value={state.resources.vehicles.filter((v) => offToday(v)).length} icon={Wrench} tone="warning" />
       </div>
 
       <Card padded={false}>
@@ -75,7 +78,7 @@ export const VehiclesModule = ({ query }: { query: string }) => {
                 <th className="px-6 py-3">Biển số</th>
                 <th className="px-3 py-3">Tải trọng</th>
                 <th className="px-3 py-3">Trạng thái</th>
-                <th className="px-3 py-3">Đơn đang gán</th>
+                <th className="px-3 py-3">Đơn đang gán / lịch nghỉ</th>
                 <th className="px-6 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -84,20 +87,21 @@ export const VehiclesModule = ({ query }: { query: string }) => {
                 <tr><td colSpan={5} className="p-6"><EmptyState icon={Truck} title="Không có xe phù hợp" /></td></tr>
               )}
               {vehicles.map((v) => {
-                const meta = VEHICLE_STATUS_META[v.status];
+                const off = offToday(v);
+                const next = upcomingDowntimes(state.resources.downtimes, 'VEHICLE', v.id, today)[0];
+                const meta = off ? { label: downtimeLabel(off), tone: 'warning' as const } : VEHICLE_STATUS_META[v.status];
                 const busy = v.status === 'BUSY';
                 return (
-                  <tr key={v.id} className={cx(v.status === 'MAINTENANCE' && 'bg-amber-50/30')}>
+                  <tr key={v.id} className={cx(off && 'bg-amber-50/30')}>
                     <td className="px-6 py-3.5 font-semibold tabular-nums">{v.plateNumber}</td>
                     <td className="px-3 py-3.5 tabular-nums">{capLabel(v.capacityTons)}</td>
                     <td className="px-3 py-3.5"><Badge tone={meta.tone} dot>{meta.label}</Badge></td>
-                    <td className="px-3 py-3.5 text-slate-500 tabular-nums">{busy ? `#${v.busyOrderId} · ${v.currentShiftTime ?? ''}` : '—'}</td>
+                    <td className="px-3 py-3.5 text-slate-500 tabular-nums">
+                      {busy ? `#${v.busyOrderId} · ${v.currentShiftTime ?? ''}` : next && !off ? `Sắp: ${downtimeLabel(next)}` : '—'}
+                    </td>
                     <td className="px-6 py-3.5">
                       <div className="flex justify-end gap-1.5">
                         <Button size="sm" variant="secondary" icon={Pencil} disabled={busy} onClick={() => open({ id: v.id, plateNumber: v.plateNumber, capacityTons: v.capacityTons })}>Sửa</Button>
-                        <Button size="sm" variant="ghost" icon={Wrench} disabled={busy} onClick={() => dispatch({ type: 'SET_VEHICLE_STATUS', id: v.id, status: v.status === 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE' })}>
-                          {v.status === 'MAINTENANCE' ? 'Hoàn tất bảo dưỡng' : 'Bảo dưỡng'}
-                        </Button>
                         <Button size="sm" variant="ghost" icon={Trash2} className="text-rose-600 hover:bg-rose-50" disabled={busy} onClick={() => setRemoving(v)}>Xóa</Button>
                       </div>
                     </td>

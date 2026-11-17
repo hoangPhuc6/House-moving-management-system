@@ -1,4 +1,4 @@
-import type { FieldStage, HouseType, OrderStatus, SurveyMethod, ToastTone } from '@/types';
+import type { BookingDetails, FieldStage, HouseType, OrderStatus, SurveyMethod, ToastTone } from '@/types';
 
 export const STATUS_META: Record<OrderStatus, { label: string; tone: ToastTone | 'neutral' }> = {
   NEW_PENDING_SURVEY: { label: 'Mới - Chờ khảo sát', tone: 'info' },
@@ -62,6 +62,24 @@ export const FIELD_STAGES: { stage: FieldStage; label: string }[] = [
 
 export const FIELD_STAGE_ORDER: FieldStage[] = ['NOT_STARTED', 'MATERIALS_PICKED', 'WORKING', 'MOVING', 'ARRIVED', 'HANDED_OVER'];
 
+type StageOrder = { fieldStage: FieldStage; bookingDetails?: BookingDetails | null };
+
+export const isTruckOnly = (o: { bookingDetails?: BookingDetails | null }) => o.bookingDetails?.serviceMode === 'TRUCK_ONLY';
+
+/** Phạm vi khiếu nại gói chỉ thuê xe — khách tự đóng gói nên chỉ nhận hư hỏng phát sinh do phía MoveFlow. */
+export const TRUCK_ONLY_CLAIM_SCOPE =
+  'Gói chỉ thuê xe: bạn tự đóng gói, nên MoveFlow chỉ nhận khiếu nại hư hỏng do va chạm / sự cố trong lúc xe chạy, hoặc do nhân viên bốc vác MoveFlow (nếu có thuê). Đồ vỡ do đóng gói không kỹ không thuộc phạm vi bồi thường.';
+
+/** Các bước hiện trường của đơn — gói chỉ thuê xe không xuất vật tư nên bỏ bước "Nhận vật tư tại kho". */
+export const fieldStagesOf = (o: StageOrder) => (isTruckOnly(o) ? FIELD_STAGES.filter((s) => s.stage !== 'MATERIALS_PICKED') : FIELD_STAGES);
+
+const rank = (s: FieldStage) => FIELD_STAGE_ORDER.indexOf(s);
+
+/** Bước đội xe bấm tiếp theo (null = đã bàn giao). */
+export const nextFieldStage = (o: StageOrder) => fieldStagesOf(o).find((s) => rank(s.stage) > rank(o.fieldStage)) ?? null;
+
+export const isFieldStageDone = (o: StageOrder, stage: FieldStage) => rank(stage) <= rank(o.fieldStage);
+
 export const FIELD_STAGE_LABEL: Record<FieldStage, string> = {
   NOT_STARTED: 'Chưa bắt đầu',
   MATERIALS_PICKED: 'Đã nhận vật tư',
@@ -69,6 +87,17 @@ export const FIELD_STAGE_LABEL: Record<FieldStage, string> = {
   MOVING: 'Đang di chuyển',
   ARRIVED: 'Đã tới nơi',
   HANDED_OVER: 'Đã bàn giao',
+};
+
+/** Nội dung ghi nhật ký khi đội xe cập nhật từng bước — cũng dùng để đọc lại giờ cập nhật. */
+export const FIELD_STAGE_LOG_ACTION = 'Cập nhật tiến độ hiện trường';
+export const FIELD_STAGE_LOG_LABEL: Record<FieldStage, string> = {
+  NOT_STARTED: 'Chưa bắt đầu',
+  MATERIALS_PICKED: 'Đã nhận vật tư tại kho',
+  WORKING: 'Bắt đầu làm / vận chuyển',
+  MOVING: 'Đang di chuyển',
+  ARRIVED: 'Đã tới nơi',
+  HANDED_OVER: 'Đã lập biên bản bàn giao',
 };
 
 export const CUSTOMER_STATUS_COPY: Record<OrderStatus, { title: string; desc: string }> = {
@@ -85,8 +114,8 @@ export const CUSTOMER_STATUS_COPY: Record<OrderStatus, { title: string; desc: st
 
 
 export const SURVEY_METHOD_META: Record<SurveyMethod, { label: string; short: string }> = {
-  PHOTO: { label: 'Khảo sát qua ảnh (Điều phối thực hiện)', short: 'Qua ảnh' },
-  VIDEO_CALL: { label: 'Khảo sát qua video call (Điều phối thực hiện)', short: 'Video call' },
+  PHOTO: { label: 'Khảo sát qua ảnh / video khách gửi', short: 'Qua ảnh' },
+  VIDEO_CALL: { label: 'Khảo sát qua video call', short: 'Video call' },
   TRUCK_CONFIRM: { label: 'Xác nhận xe qua điện thoại (gói chỉ thuê xe)', short: 'Xác nhận xe' },
-  ON_SITE: { label: 'Khảo sát trực tiếp (nhân viên vận chuyển)', short: 'Trực tiếp' },
+  ON_SITE: { label: 'Khảo sát trực tiếp tận nơi', short: 'Trực tiếp' },
 };

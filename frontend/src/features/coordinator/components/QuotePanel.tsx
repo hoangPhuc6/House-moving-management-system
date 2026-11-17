@@ -1,31 +1,21 @@
 import { useEffect, useState } from 'react';
-import { History, Lock, MessageSquareWarning, ReceiptText, Send, Undo2 } from 'lucide-react';
+import { Lock, MessageSquareWarning, ReceiptText, Send, Undo2 } from 'lucide-react';
 import {
   Alert,
   Button,
   Card,
-  CardHeader,
-  cx,
   EmptyState,
   Field,
   Input,
-  PageHeader,
 } from '@/components/ui';
-import { OrderInfoCard } from '@/features/coordinator/components/OrderInfoCard';
-import { OrderPicker } from '@/features/coordinator/components/OrderPicker';
 import { SurveyPanel } from '@/features/coordinator/components/SurveyPanel';
 import { formatTime, formatVND } from '@/services/format';
 import { lineTotal } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 import type { Order, QuoteItemPatch } from '@/types';
 
-export const EditorTab = ({
-  order,
-  onSelect,
-}: {
-  order: Order;
-  onSelect: (id: string) => void;
-}) => {
+/** Mục "Khảo sát & Báo giá" của trang chi tiết đơn: khảo sát → lập báo giá → thương lượng. */
+export const QuotePanel = ({ order }: { order: Order }) => {
   const { dispatch } = useApp();
   const toPatches = (o: Order): QuoteItemPatch[] =>
     o.quoteItems.map(({ id, quantity, unitPrice }) => ({
@@ -71,14 +61,6 @@ export const EditorTab = ({
     "h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Báo giá"
-        title="Báo giá"
-        subtitle="Lập báo giá từ kết quả khảo sát, xử lý thương lượng của khách. Mọi thay đổi được ghi nhật ký."
-        actions={<OrderPicker value={order.id} onChange={onSelect} />}
-      />
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <Card padded={false}>
           {order.status === "NEW_PENDING_SURVEY" ? (
             <SurveyPanel key={order.id} order={order} />
@@ -89,7 +71,7 @@ export const EditorTab = ({
               </EmptyState>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto pt-5">
               {order.negotiation && editable && (
                 <Alert
                   tone="warning"
@@ -251,49 +233,5 @@ export const EditorTab = ({
           </>
           )}
         </Card>
-
-        <div className="space-y-4">
-          <OrderInfoCard order={order} />
-          <Card>
-            <CardHeader
-              title="Audit Log"
-              subtitle={`${order.auditLog.length} sự kiện`}
-              icon={History}
-            />
-            <ol className="relative max-h-[560px] space-y-4 overflow-y-auto border-l border-slate-200 pl-5">
-              {[...order.auditLog].reverse().map((l) => (
-                <li key={l.id} className="relative">
-                  <span
-                    className={cx(
-                      "absolute top-1 -left-[25px] size-2.5 rounded-full ring-4 ring-white",
-                      l.actorRole === "COORDINATOR"
-                        ? "bg-brand"
-                        : l.actorRole === "CUSTOMER"
-                          ? "bg-blue-500"
-                          : l.actorRole === "STAFF"
-                            ? "bg-emerald-500"
-                            : "bg-slate-400",
-                    )}
-                  />
-                  <p className="text-sm font-semibold text-slate-900">
-                    {l.action}
-                  </p>
-                  <p className="mt-0.5 text-sm text-slate-600">{l.detail}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {l.actor} ·{" "}
-                    <span className="tabular-nums">
-                      {formatTime(l.timestamp)}
-                    </span>
-                  </p>
-                </li>
-              ))}
-              {order.auditLog.length === 0 && (
-                <li className="text-sm text-slate-400">Chưa có lịch sử.</li>
-              )}
-            </ol>
-          </Card>
-        </div>
-      </div>
-    </>
   );
 };

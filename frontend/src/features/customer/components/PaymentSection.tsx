@@ -13,6 +13,7 @@ import {
   QrMock,
 } from '@/components/ui';
 import { SectionTitle } from '@/features/customer/components/SectionTitle';
+import { isTruckOnly, TRUCK_ONLY_CLAIM_SCOPE } from '@/constants/order';
 import { CLAIM_PRESETS } from '@/features/customer/constants';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { formatVND } from '@/services/format';
@@ -247,6 +248,9 @@ export const PaymentSection = ({ order }: { order: Order }) => {
                       <p className="truncate text-xs text-slate-500">
                         {c.title}
                       </p>
+                      {c.status === "REJECTED" && c.handlingNote && (
+                        <p className="mt-0.5 text-xs text-rose-600">Lý do: {c.handlingNote}</p>
+                      )}
                     </div>
                     <Badge
                       tone={
@@ -326,6 +330,11 @@ export const PaymentSection = ({ order }: { order: Order }) => {
         }
       >
         <div className="space-y-5">
+          {isTruckOnly(order) && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+              {TRUCK_ONLY_CLAIM_SCOPE}
+            </p>
+          )}
           <div>
             <p className="mb-2 text-[13px] font-semibold text-slate-700">
               Loại sự việc

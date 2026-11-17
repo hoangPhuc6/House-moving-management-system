@@ -36,6 +36,8 @@ export interface ReferenceInput {
   laborQuantity?: number;
   /** Tải trọng xe ước lượng theo quy mô nhà (gói trọn gói); bỏ trống = theo xe khách chọn / khối lượng. */
   vehicleTons?: number;
+  /** Gói chỉ thuê xe: các xe khách chọn — có thì tính giá theo đúng các xe này. */
+  vehicleLines?: VehicleLine[];
 }
 
 export interface AppContextValue {
@@ -83,7 +85,8 @@ export interface AuditLogEntry {
   detail: string;
 }
 
-export type VehicleStatus = 'AVAILABLE' | 'BUSY' | 'MAINTENANCE';
+/** Trạng thái chạy của xe. Bảo dưỡng / sửa chữa theo khoảng ngày nằm ở ResourceDowntime. */
+export type VehicleStatus = 'AVAILABLE' | 'BUSY';
 
 export interface Vehicle {
   id: string;
@@ -101,12 +104,34 @@ export interface StaffMember {
   code: string;
   name: string;
   role: StaffRole;
-  isAvailable: boolean;
+}
+
+export type DowntimeTarget = 'VEHICLE' | 'STAFF';
+export type VehicleDowntimeReason = 'MAINTENANCE' | 'REPAIR' | 'INSPECTION';
+export type StaffDowntimeReason = 'LEAVE' | 'SICK' | 'OTHER';
+export type DowntimeReason = VehicleDowntimeReason | StaffDowntimeReason;
+
+/**
+ * Khoảng ngày một xe / nhân sự không nhận việc (bảo dưỡng, nghỉ phép…) — Điều phối ghi lại.
+ * Tính cả hai đầu: from = to là nghỉ đúng một ngày.
+ */
+export interface ResourceDowntime {
+  id: string;
+  target: DowntimeTarget;
+  resourceId: string;
+  reason: DowntimeReason;
+  /** YYYY-MM-DD */
+  from: string;
+  /** YYYY-MM-DD */
+  to: string;
+  note: string;
+  createdAt: number;
 }
 
 export interface ResourceAllocation {
   vehicles: Vehicle[];
   staff: StaffMember[];
+  downtimes: ResourceDowntime[];
 }
 
 export interface ExceptionFlags {
@@ -154,12 +179,22 @@ export interface SurveyAssignment {
   surveyorId: string;
 }
 
+/** Một món đồ ghi nhận khi khảo sát — khách, Điều phối và đội chuyển cùng đối chiếu theo danh sách này. */
+export interface SurveyItem {
+  /** Tên kèm kích thước nếu cần, VD "Giường 1m8", "Tủ lạnh 2 cánh". */
+  name: string;
+  qty: number;
+  fragile: boolean;
+  /** Cần tháo / lắp khi chuyển. */
+  disassemble: boolean;
+}
+
 /** Kết quả người khảo sát gửi về — Điều phối dựa vào đây để lập báo giá (người khảo sát không định giá). */
 export interface SurveyReport {
   submittedAt: number;
   surveyorId: string;
-  /** Danh sách đồ đạc / khối lượng ghi nhận khi khảo sát. */
-  itemsNote: string;
+  /** Danh sách đồ đạc ghi nhận khi khảo sát. */
+  items: SurveyItem[];
   /** Ghi chú hiện trường: lối đi, đồ đặc biệt, lưu ý cho đội chuyển… */
   note: string;
   /** Đề xuất nguồn lực: xe, số người, vật tư, lầu, hẻm. */
@@ -243,6 +278,8 @@ export interface BookingDetails {
   surveyPreference: SurveyPreference | null;
   /** Gói chỉ thuê xe: số nhân viên bốc vác khách thuê thêm (0 = không thuê). */
   laborCount: number;
+  /** Gói chỉ thuê xe: các xe khách thuê (ghép được nhiều loại). */
+  vehicles?: VehicleLine[];
   /** Ngày hẹn khảo sát (ISO) — rỗng khi khách chọn gửi ảnh / video. */
   surveyDate: string;
   /** Khung giờ hẹn khảo sát — rỗng khi khách chọn gửi ảnh / video. */
@@ -252,6 +289,16 @@ export interface BookingDetails {
   scheduleNote: string;
   email: string;
   customerNote: string;
+}
+
+export type VehicleIncidentKind = 'ENGINE' | 'TIRE' | 'ELECTRIC' | 'BRAKE' | 'ACCIDENT' | 'OTHER';
+
+/** Đội xe báo xe gặp sự cố giữa chuyến — Điều phối dựa vào đây để quyết định tăng bo. */
+export interface VehicleIncident {
+  kind: VehicleIncidentKind;
+  /** Mô tả: xe bị gì, đang ở đâu, đồ đạc có an toàn không. */
+  note: string;
+  reportedAt: number;
 }
 
 export interface Order {
@@ -277,6 +324,10 @@ export interface Order {
   surveyAssignment: SurveyAssignment | null;
   /** Kết quả khảo sát người khảo sát gửi về (null = chưa khảo sát xong). */
   surveyReport: SurveyReport | null;
+  /** Thời gian dự kiến của chuyến (giờ), chốt khi gửi báo giá; null = chưa có, dùng mặc định. */
+  estimatedHours: number | null;
+  /** Sự cố xe đội xe báo — null khi không có / đã tăng bo xong. */
+  vehicleIncident: VehicleIncident | null;
   /** Khách yêu cầu thương lượng báo giá — Điều phối sửa rồi gửi lại (null = không có yêu cầu đang chờ). */
   negotiation: QuoteNegotiation | null;
   /** Phương thức đã dùng để lập báo giá khảo sát (null khi chưa khảo sát). */
@@ -310,7 +361,11 @@ export interface Order {
   surveyMediaSubmittedAt?: number | null;
 }
 
-export type ClaimStatus = 'OPEN' | 'INVESTIGATING' | 'APPROVED' | 'REJECTED';
+/**
+ * OPEN → (Điều phối) INVESTIGATING → đề xuất PENDING_APPROVAL hoặc từ chối REJECTED
+ * → (Admin) duyệt chi APPROVED hoặc trả lại INVESTIGATING.
+ */
+export type ClaimStatus = 'OPEN' | 'INVESTIGATING' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
 
 export interface EvidenceMedia {
   id: string;
@@ -328,7 +383,11 @@ export interface ClaimTicket {
   description: string;
   status: ClaimStatus;
   requestedAmount: number;
+  /** Mức bồi thường Điều phối đề xuất sau khi đối chiếu. */
+  proposedAmount: number | null;
   approvedAmount: number | null;
+  /** Ghi chú xử lý mới nhất: căn cứ đề xuất, lý do từ chối, hoặc lý do Admin trả lại. */
+  handlingNote: string;
   createdAt: number;
   packingEvidence: EvidenceMedia[];
   customerEvidence: EvidenceMedia[];
@@ -378,16 +437,28 @@ export interface Toast {
 
 export type CancelMode = 'REFUND_FULL' | 'FORFEIT' | 'RESERVE_3_MONTHS';
 
+/** Một loại xe trong đề xuất / báo giá — đơn có thể ghép nhiều loại, VD 1 xe 5 tấn + 1 xe 1,25 tấn. */
+export interface VehicleLine {
+  /** Tải trọng (tấn) — khóa của VEHICLE_PRICING. */
+  capacity: number;
+  qty: number;
+}
+
+/** Thùng carton theo cỡ: nhỏ (sách, đồ nặng), vừa (đồ dùng chung), lớn (quần áo, chăn gối). */
+export type CartonSize = 'S' | 'M' | 'L';
+
 export interface SurveyInput {
   distanceKm: number;
-  vehicleCapacity: number;
-  vehicleQty: number;
+  /** Các loại xe cần dùng; loại không dùng thì không có trong danh sách. */
+  vehicles: VehicleLine[];
   workers: number;
-  cartons: number;
+  cartons: Record<CartonSize, number>;
   tapeRolls: number;
   peFilmRolls: number;
   floors: number;
   alleyMeters: number;
+  /** Tổng thời gian dự kiến cho chuyến (bốc xếp + di chuyển + dỡ), giờ — quyết định xe & người bận bao lâu. */
+  estimatedHours: number;
 }
 
 export interface NewOrderInput {
@@ -416,8 +487,8 @@ export type AppAction =
   | { type: 'CREATE_ORDER'; input: NewOrderInput }
   | { type: 'ASSIGN_SURVEYOR'; orderId: string; note: string; surveyorId: string }
   | { type: 'UNASSIGN_SURVEYOR'; orderId: string }
-  | { type: 'SUBMIT_SURVEY_REPORT'; orderId: string; itemsNote: string; note: string; proposal: SurveyInput }
-  | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[] }
+  | { type: 'SUBMIT_SURVEY_REPORT'; orderId: string; items: SurveyItem[]; note: string; proposal: SurveyInput }
+  | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[]; estimatedHours: number }
   | { type: 'CUSTOMER_REQUEST_NEGOTIATION'; orderId: string; message: string }
   | { type: 'RESEND_QUOTE'; orderId: string; note: string }
   | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; names: string[] }
@@ -431,8 +502,8 @@ export type AppAction =
   | { type: 'START_WAIT_TIMER'; orderId: string }
   | { type: 'STOP_WAIT_TIMER'; orderId: string }
   | { type: 'TICK_WAIT_TIMERS' }
-  | { type: 'REPORT_VEHICLE_INCIDENT'; orderId: string }
-  | { type: 'TRANSFER_VEHICLE'; orderId: string; plateNumber: string; driverName: string }
+  | { type: 'REPORT_VEHICLE_INCIDENT'; orderId: string; kind: VehicleIncidentKind; note: string }
+  | { type: 'TRANSFER_VEHICLE'; orderId: string; plateNumber: string; driverName: string; /** Xe cũ hỏng — sửa tới ngày nào (YYYY-MM-DD). */ repairUntil: string }
   | { type: 'UPDATE_QUOTE_ITEMS'; orderId: string; patches: QuoteItemPatch[]; discountPercent: number; note: string }
   | { type: 'ASSIGN_RESOURCES'; orderId: string; vehicleIds: string[]; crewIds: string[] }
   | { type: 'RESCHEDULE'; orderId: string; newDate: string; newSlot: string }
@@ -440,14 +511,18 @@ export type AppAction =
   | { type: 'RUN_AUTO_CANCEL_CRON' }
   | { type: 'PAY_BALANCE'; orderId: string }
   | { type: 'CONFIRM_WAREHOUSE_RETURN'; orderId: string }
-  | { type: 'CLOSE_ORDER'; orderId: string }
   | { type: 'CREATE_CLAIM'; orderId: string; title: string; description: string; requestedAmount: number }
-  | { type: 'SET_CLAIM_STATUS'; claimId: string; status: ClaimStatus; approvedAmount: number | null }
+  | { type: 'CLAIM_INVESTIGATE'; claimId: string }
+  | { type: 'CLAIM_PROPOSE_PAYOUT'; claimId: string; amount: number; note: string }
+  | { type: 'CLAIM_REJECT'; claimId: string; note: string }
+  | { type: 'CLAIM_APPROVE_PAYOUT'; claimId: string; amount: number }
+  | { type: 'CLAIM_SEND_BACK'; claimId: string; note: string }
   | { type: 'APPROVE_REFUND'; refundId: string }
   | { type: 'PUSH_TOAST'; tone: ToastTone; message: string }
   | { type: 'DISMISS_TOAST'; id: string }
   | { type: 'ADD_VEHICLE'; plateNumber: string; capacityTons: number }
   | { type: 'UPDATE_VEHICLE'; id: string; plateNumber: string; capacityTons: number }
-  | { type: 'SET_VEHICLE_STATUS'; id: string; status: Exclude<VehicleStatus, 'BUSY'> }
+  | { type: 'ADD_DOWNTIME'; target: DowntimeTarget; resourceId: string; reason: DowntimeReason; from: string; to: string; note: string }
+  | { type: 'END_DOWNTIME'; id: string }
   | { type: 'REMOVE_VEHICLE'; id: string }
   | { type: 'RESET_DEMO' };

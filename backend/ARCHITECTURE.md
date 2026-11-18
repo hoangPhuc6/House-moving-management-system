@@ -66,6 +66,7 @@ Hiện trạng từng module:
 | booking | controller/{client,management}, dto, entity, enums, event, mapper, repository(+specification), service(+impl), util |
 | quotation | controller, dto, entity, enums, mapper, repository, scheduler, service(+impl) |
 | survey | config, controller/{admin,client,field,management}, dto, entity, enums, mapper, repository(+specification), service(+impl) |
+| inventory (M8) | controller/{admin,management,field,client}, dto, entity, enums, mapper, repository(+specification), service(+impl: `InventoryLedger` là nơi duy nhất đổi tồn kho; `BookingCancelledInventoryListener`) |
 
 ---
 
@@ -120,6 +121,11 @@ Các controller hiện có:
 | `scheduling/admin/AdminVehicleTypeController` | `/api/v1/admin/vehicle-types` | `@AdminOnly` |
 | `scheduling/admin/AdminVehicleController` | `/api/v1/admin/vehicles` | `@AdminOnly` |
 | `scheduling/management/ManagementMovingScheduleController` | `/api/v1/management/bookings/{id}/moving-schedules`, `/api/v1/management/moving-schedules` (danh sách, `available-vehicles`, `available-staff`, `{id}/...`) | `@StaffOnly` |
+| `inventory/admin/AdminMaterialController` | `/api/v1/admin/materials` | `@AdminOnly` |
+| `inventory/management/ManagementInventoryController` | `/api/v1/management/materials` (+ `/{id}/transactions`), `/api/v1/management/inventory/{imports,damages,adjustments,low-stock,transactions}` | `@StaffOnly` |
+| `inventory/management/ManagementMaterialAllocationController` | `/api/v1/management/moving-schedules/{scheduleId}/materials` (xem, xuất, `/settle`), `/api/v1/management/material-allocations/{id}/cancel`, `/api/v1/management/bookings/{bookingId}/materials` | `@StaffOnly` |
+| `inventory/field/FieldMaterialController` | `/api/v1/field/moving-schedules/{scheduleId}/materials` | `@MoverOnly` |
+| `inventory/client/CustomerMaterialController` | `/api/v1/bookings/{bookingId}/materials` | `@CustomerOnly` |
 
 ### Quyền sở hữu dữ liệu (chống IDOR)
 
@@ -134,6 +140,7 @@ Annotation chỉ trả lời câu hỏi *"role này có được gọi API khôn
 ```
 survey ────► booking, quotation, identity, common.storage
 scheduling ► booking, identity, survey (SurveyStaffScheduleService; cài đặt StaffExternalScheduleChecker)
+inventory ─► scheduling (MovingScheduleLookupService), booking (BookingWorkflowService, BookingCancelledEvent), identity
 quotation ─► booking, pricing, voucher, catalog, identity
 booking ──► pricing ──► catalog
    │           │
@@ -146,7 +153,7 @@ security ◄──► identity        (ngoại lệ được chấp nhận)
 ```
 
 - **Đảo phụ thuộc quotation / survey:** quotation cần biết "khảo sát mới nhất đã hoàn tất chưa" nhưng không được phụ thuộc survey (survey đã phụ thuộc quotation). Interface `SurveyCompletionChecker` đặt ở `quotation/service`, survey cài đặt (`SurveyCompletionCheckerImpl`).
-- **Sự kiện thay cho phụ thuộc ngược:** booking không gọi survey. Khi đơn bị hủy, booking phát `BookingCancelledEvent`; `BookingCancelledSurveyListener` (survey) hủy lịch khảo sát và bản nháp báo giá **trong cùng transaction**.
+- **Sự kiện thay cho phụ thuộc ngược:** booking không gọi survey. Khi đơn bị hủy, booking phát `BookingCancelledEvent`; `BookingCancelledSurveyListener` (survey) hủy lịch khảo sát và bản nháp báo giá, `BookingCancelledInventoryListener` (inventory) hoàn kho vật tư đã cấp cho các chuyến chưa chạy, **trong cùng transaction**.
 
 ### Quy tắc
 
@@ -166,12 +173,13 @@ Module khác thao tác dữ liệu của nhau qua các interface hẹp sau:
 | pricing | `PricingService` | booking, quotation | `calculatePrice` (giá tham khảo), `calculate(PricingInput)` (báo giá chính thức) |
 | identity | `StaffLookupService` | survey | `findActiveByRole`, `findSummary`, `getReference`, `isActiveStaffWithRole` |
 | identity | `UserLookupService` | booking, quotation, survey | `getUserReference` |
-| booking | `BookingWorkflowService` | survey, quotation | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
+| booking | `BookingWorkflowService` | survey, quotation, inventory (`getReference`, `getSnapshot` kiểm chủ đơn / mã đơn, `addToTotalAmount` khi chốt vật tư) | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
 | quotation | `QuotationDraftService` | survey | Mở / sửa / hết hạn bản nháp báo giá trong lúc khảo sát |
 | quotation (survey cài đặt) | `SurveyCompletionChecker` | quotation | `isLatestSurveyCompleted` |
 | survey | `SurveyStaffScheduleService` | (sau này) điều phối vận chuyển | `hasSurveyBetween`: MOVER có lịch khảo sát trong khoảng giờ không |
 | survey (module khác cài đặt) | `StaffExternalScheduleChecker` | survey | `isBusy`: điểm mở rộng để lịch vận chuyển chặn trùng lịch khảo sát; cài đặt bởi `scheduling/MovingStaffScheduleChecker` |
-| booking | sự kiện `BookingCancelledEvent` | survey | Phát khi đơn bị hủy (khách hoặc nhân viên) |
+| scheduling | `MovingScheduleLookupService` | inventory | `getReference`, `getSnapshot`, `lockForUpdate`, `isAssigned` (MOVER có phân công chưa CANCELLED) |
+| booking | sự kiện `BookingCancelledEvent` | survey, inventory | Phát khi đơn bị hủy (khách hoặc nhân viên) |
 
 `ServiceLookupService` tách riêng khỏi `ServiceCatalogService` (API cho controller), nên module khác chỉ phụ thuộc đúng phần cần dùng. Interface này do một bean riêng (`ServiceLookupServiceImpl`) cài đặt, không dùng chung bean với `ServiceCatalogServiceImpl`: mock hay thay đổi một bên không ảnh hưởng bên kia.
 

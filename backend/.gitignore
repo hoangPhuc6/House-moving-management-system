@@ -42,4 +42,5 @@ build/
 /docs/
 /graphify-out/
 /CLAUDE.local.md
+/Claude outputs
 /.claude/

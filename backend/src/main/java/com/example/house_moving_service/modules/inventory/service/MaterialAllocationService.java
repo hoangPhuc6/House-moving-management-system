@@ -3,10 +3,14 @@ package com.example.house_moving_service.modules.inventory.service;
 import com.example.house_moving_service.modules.inventory.dto.request.AllocateMaterialsRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.CancelAllocationRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialsRequest;
+import com.example.house_moving_service.modules.inventory.dto.response.BookingMaterialsResponse;
+import com.example.house_moving_service.modules.inventory.dto.response.CustomerMaterialChargeResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.MaterialAllocationResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.ScheduleMaterialsResponse;
 
-/** Cấp phát vật tư theo chuyến: xuất cho chuyến, chốt sau chuyến, hủy cấp phát. */
+import java.util.List;
+
+/** Cấp phát vật tư theo chuyến: xuất cho chuyến, chốt sau chuyến, hủy cấp phát; xem theo chuyến / đơn / MOVER / khách. */
 public interface MaterialAllocationService {
 
     /** Mọi dòng cấp phát của chuyến (mọi trạng thái, theo id tăng dần) kèm tổng tiền tạm tính / đã tính. */
@@ -30,4 +34,22 @@ public interface MaterialAllocationService {
      * CANCELLED, không tính tiền.
      */
     MaterialAllocationResponse cancel(Integer allocationId, CancelAllocationRequest request, Long actorUserId);
+
+    /**
+     * Vật tư của cả đơn gom theo chuyến (chuyến có dòng cấp phát, scheduleId tăng dần), mọi trạng thái, kèm tổng tiền
+     * đã tính. Không có đơn → ERR_BOOKING_NOT_FOUND.
+     */
+    BookingMaterialsResponse getBookingMaterials(Integer bookingId);
+
+    /**
+     * Vật tư của chuyến cho MOVER được phân công (phân công chưa CANCELLED), không có tiền. Không phân công →
+     * ERR_MOVING_FORBIDDEN.
+     */
+    ScheduleMaterialsResponse getFieldScheduleMaterials(Integer scheduleId, Long userId);
+
+    /**
+     * Vật tư đã tính tiền trong đơn của khách: chỉ dòng SETTLED có charged_amount > 0. Không phải chủ đơn →
+     * ERR_BOOKING_FORBIDDEN.
+     */
+    List<CustomerMaterialChargeResponse> getCustomerCharges(Integer bookingId, Long customerUserId);
 }

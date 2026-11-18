@@ -79,4 +79,16 @@ class MaterialRepositoryTest {
 
         assertThat(materialRepository.existsByCodeIgnoreCase(PREFIX.toLowerCase() + "ok")).isTrue();
     }
+
+    @Test
+    @DisplayName("findActiveLowStock: chỉ vật tư đang hoạt động có tồn < tối thiểu, thiếu nhiều nhất trước")
+    void findActiveLowStock_activeOnlyOrderedByShortage() {
+        save("LOW-BIG", MaterialCategory.CONSUMABLE, 1, 20, true); // thiếu 19
+
+        List<String> codes = materialRepository.findActiveLowStock().stream()
+                .map(Material::getCode).filter(code -> code.startsWith(PREFIX)).toList();
+
+        // LOW thiếu 8, LOW-BIG thiếu 19; LOW-OFF đang tắt; EQUAL / OK không thấp
+        assertThat(codes).containsExactly(PREFIX + "LOW-BIG", PREFIX + "LOW");
+    }
 }

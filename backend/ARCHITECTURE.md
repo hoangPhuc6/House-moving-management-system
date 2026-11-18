@@ -66,7 +66,7 @@ Hiện trạng từng module:
 | booking | controller/{client,management}, dto, entity, enums, event, mapper, repository(+specification), service(+impl), util |
 | quotation | controller, dto, entity, enums, mapper, repository, scheduler, service(+impl) |
 | survey | config, controller/{admin,client,field,management}, dto, entity, enums, mapper, repository(+specification), service(+impl) |
-| inventory (M8) | controller/{admin,management}, dto, entity, enums, mapper, repository(+specification), service(+impl: `InventoryLedger` là nơi duy nhất đổi tồn kho; `BookingCancelledInventoryListener`) |
+| inventory (M8) | controller/{admin,management,field,client}, dto, entity, enums, mapper, repository(+specification), service(+impl: `InventoryLedger` là nơi duy nhất đổi tồn kho; `BookingCancelledInventoryListener`) |
 
 ---
 
@@ -122,8 +122,10 @@ Các controller hiện có:
 | `scheduling/admin/AdminVehicleController` | `/api/v1/admin/vehicles` | `@AdminOnly` |
 | `scheduling/management/ManagementMovingScheduleController` | `/api/v1/management/bookings/{id}/moving-schedules`, `/api/v1/management/moving-schedules` (danh sách, `available-vehicles`, `available-staff`, `{id}/...`) | `@StaffOnly` |
 | `inventory/admin/AdminMaterialController` | `/api/v1/admin/materials` | `@AdminOnly` |
-| `inventory/management/ManagementInventoryController` | `/api/v1/management/inventory/imports`, `/api/v1/management/inventory/damages` | `@StaffOnly` |
-| `inventory/management/ManagementMaterialAllocationController` | `/api/v1/management/moving-schedules/{scheduleId}/materials` (xuất, `/settle`), `/api/v1/management/material-allocations/{id}/cancel` | `@StaffOnly` |
+| `inventory/management/ManagementInventoryController` | `/api/v1/management/materials` (+ `/{id}/transactions`), `/api/v1/management/inventory/{imports,damages,adjustments,low-stock,transactions}` | `@StaffOnly` |
+| `inventory/management/ManagementMaterialAllocationController` | `/api/v1/management/moving-schedules/{scheduleId}/materials` (xem, xuất, `/settle`), `/api/v1/management/material-allocations/{id}/cancel`, `/api/v1/management/bookings/{bookingId}/materials` | `@StaffOnly` |
+| `inventory/field/FieldMaterialController` | `/api/v1/field/moving-schedules/{scheduleId}/materials` | `@MoverOnly` |
+| `inventory/client/CustomerMaterialController` | `/api/v1/bookings/{bookingId}/materials` | `@CustomerOnly` |
 
 ### Quyền sở hữu dữ liệu (chống IDOR)
 
@@ -171,7 +173,7 @@ Module khác thao tác dữ liệu của nhau qua các interface hẹp sau:
 | pricing | `PricingService` | booking, quotation | `calculatePrice` (giá tham khảo), `calculate(PricingInput)` (báo giá chính thức) |
 | identity | `StaffLookupService` | survey | `findActiveByRole`, `findSummary`, `getReference`, `isActiveStaffWithRole` |
 | identity | `UserLookupService` | booking, quotation, survey | `getUserReference` |
-| booking | `BookingWorkflowService` | survey, quotation, inventory (`getReference`, `addToTotalAmount` khi chốt vật tư) | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
+| booking | `BookingWorkflowService` | survey, quotation, inventory (`getReference`, `getSnapshot` kiểm chủ đơn / mã đơn, `addToTotalAmount` khi chốt vật tư) | `getSnapshot`, `getItems`, `getRoute`, `changeStatus`, `updateRouteAccess`, `getReference`, `getItemReference` |
 | quotation | `QuotationDraftService` | survey | Mở / sửa / hết hạn bản nháp báo giá trong lúc khảo sát |
 | quotation (survey cài đặt) | `SurveyCompletionChecker` | quotation | `isLatestSurveyCompleted` |
 | survey | `SurveyStaffScheduleService` | (sau này) điều phối vận chuyển | `hasSurveyBetween`: MOVER có lịch khảo sát trong khoảng giờ không |

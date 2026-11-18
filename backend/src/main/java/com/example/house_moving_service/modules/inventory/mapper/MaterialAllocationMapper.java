@@ -1,5 +1,6 @@
 package com.example.house_moving_service.modules.inventory.mapper;
 
+import com.example.house_moving_service.modules.inventory.dto.response.CustomerMaterialChargeResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.MaterialAllocationResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.ScheduleMaterialsResponse;
 import com.example.house_moving_service.modules.inventory.entity.Material;
@@ -17,6 +18,11 @@ import java.util.List;
 public class MaterialAllocationMapper {
 
     public MaterialAllocationResponse toResponse(MaterialAllocation a) {
+        return toResponse(a, true);
+    }
+
+    // withPrices = false: bản cho MOVER, unitPrice / chargedAmount = null
+    private MaterialAllocationResponse toResponse(MaterialAllocation a, boolean withPrices) {
         Material material = a.getMaterial();
         return MaterialAllocationResponse.builder()
                 .id(a.getId())
@@ -30,8 +36,8 @@ public class MaterialAllocationMapper {
                 .quantityReturned(a.getQuantityReturned())
                 .quantityDamaged(a.getQuantityDamaged())
                 .status(a.getStatus())
-                .unitPrice(a.getUnitPrice())
-                .chargedAmount(a.getChargedAmount())
+                .unitPrice(withPrices ? a.getUnitPrice() : null)
+                .chargedAmount(withPrices ? a.getChargedAmount() : null)
                 .allocatedBy(UserNames.of(a.getAllocatedBy()))
                 .allocatedAt(a.getAllocatedAt())
                 .settledBy(UserNames.of(a.getSettledBy()))
@@ -58,6 +64,30 @@ public class MaterialAllocationMapper {
                 .allocations(allocations.stream().map(this::toResponse).toList())
                 .estimatedTotal(estimated.setScale(2, RoundingMode.HALF_UP))
                 .chargedTotal(charged.setScale(2, RoundingMode.HALF_UP))
+                .build();
+    }
+
+    /** Bản cho MOVER: cùng dạng ScheduleMaterialsResponse nhưng bỏ hết tiền (unitPrice, chargedAmount, các tổng = null). */
+    public ScheduleMaterialsResponse toFieldScheduleResponse(MovingScheduleSnapshot schedule,
+                                                             List<MaterialAllocation> allocations) {
+        return ScheduleMaterialsResponse.builder()
+                .scheduleId(schedule.id())
+                .bookingId(schedule.bookingId())
+                .scheduleStatus(schedule.status())
+                .allocations(allocations.stream()
+                        .map(a -> toResponse(a, false))
+                        .toList())
+                .build();
+    }
+
+    public CustomerMaterialChargeResponse toCustomerCharge(MaterialAllocation a) {
+        return CustomerMaterialChargeResponse.builder()
+                .materialName(a.getMaterial().getName())
+                .unit(a.getMaterial().getUnit())
+                .quantityUsed(a.getQuantityUsed())
+                .unitPrice(a.getUnitPrice())
+                .chargedAmount(a.getChargedAmount())
+                .settledAt(a.getSettledAt())
                 .build();
     }
 }

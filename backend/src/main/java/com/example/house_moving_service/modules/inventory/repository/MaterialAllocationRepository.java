@@ -33,6 +33,10 @@ public interface MaterialAllocationRepository extends JpaRepository<MaterialAllo
     @EntityGraph(attributePaths = "material")
     List<MaterialAllocation> findAllByScheduleIdOrderByIdAsc(Integer scheduleId);
 
+    // Mọi dòng của đơn (mọi chuyến, mọi trạng thái), theo chuyến rồi id tăng dần
+    @EntityGraph(attributePaths = "material")
+    List<MaterialAllocation> findAllByBookingIdOrderByScheduleIdAscIdAsc(Integer bookingId);
+
     // Chỉ lấy id chuyến (không nạp entity) để khóa chuyến trước, rồi mới khóa dòng cấp phát
     @Query("SELECT a.schedule.id FROM MaterialAllocation a WHERE a.id = :id")
     Optional<Integer> findScheduleIdById(@Param("id") Integer id);

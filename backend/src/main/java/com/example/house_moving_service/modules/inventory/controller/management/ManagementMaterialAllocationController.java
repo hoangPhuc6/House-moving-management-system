@@ -4,6 +4,7 @@ import com.example.house_moving_service.common.dto.ApiResponse;
 import com.example.house_moving_service.modules.inventory.dto.request.AllocateMaterialsRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.CancelAllocationRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialsRequest;
+import com.example.house_moving_service.modules.inventory.dto.response.BookingMaterialsResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.MaterialAllocationResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.ScheduleMaterialsResponse;
 import com.example.house_moving_service.modules.inventory.service.MaterialAllocationService;
@@ -45,8 +46,18 @@ public class ManagementMaterialAllocationController {
     )
     public ResponseEntity<ApiResponse<ScheduleMaterialsResponse>> getScheduleMaterials(
             @Parameter(description = "ID chuyến", required = true) @PathVariable Integer scheduleId) {
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách cấp phát vật tư thành công",
-                materialAllocationService.getScheduleMaterials(scheduleId)));
+        return ResponseEntity.ok(ApiResponse.ok(materialAllocationService.getScheduleMaterials(scheduleId)));
+    }
+
+    @GetMapping("/bookings/{bookingId}/materials")
+    @Operation(
+            summary = "Vật tư của đơn",
+            description = "Mọi dòng cấp phát của đơn gom theo chuyến (chỉ chuyến có cấp phát, scheduleId tăng dần), mọi "
+                    + "trạng thái; mỗi chuyến kèm tiền dự kiến / đã tính, chargedTotal = tổng đã tính của cả đơn."
+    )
+    public ResponseEntity<ApiResponse<BookingMaterialsResponse>> getBookingMaterials(
+            @Parameter(description = "ID đơn hàng", required = true) @PathVariable Integer bookingId) {
+        return ResponseEntity.ok(ApiResponse.ok(materialAllocationService.getBookingMaterials(bookingId)));
     }
 
     @PostMapping("/moving-schedules/{scheduleId}/materials")

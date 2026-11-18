@@ -2,6 +2,7 @@ package com.example.house_moving_service.modules.inventory.service.impl;
 
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.service.UserLookupService;
 import com.example.house_moving_service.modules.inventory.dto.request.AllocateMaterialItemRequest;
@@ -9,6 +10,8 @@ import com.example.house_moving_service.modules.inventory.dto.request.AllocateMa
 import com.example.house_moving_service.modules.inventory.dto.request.CancelAllocationRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialItemRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialsRequest;
+import com.example.house_moving_service.modules.inventory.dto.response.BookingMaterialsResponse;
+import com.example.house_moving_service.modules.inventory.dto.response.CustomerMaterialChargeResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.MaterialAllocationResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.ScheduleMaterialsResponse;
 import com.example.house_moving_service.modules.inventory.entity.Material;
@@ -64,6 +67,55 @@ public class MaterialAllocationServiceImpl implements MaterialAllocationService 
     public ScheduleMaterialsResponse getScheduleMaterials(Integer scheduleId) {
         MovingScheduleSnapshot schedule = movingScheduleLookupService.getSnapshot(scheduleId);
         return allocationMapper.toScheduleResponse(schedule, allocationRepository.findAllByScheduleIdOrderByIdAsc(scheduleId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BookingMaterialsResponse getBookingMaterials(Integer bookingId) {
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(bookingId);
+        // Repository trả theo scheduleId tăng dần nên LinkedHashMap giữ đúng thứ tự chuyến
+        Map<Integer, List<MaterialAllocation>> bySchedule = allocationRepository
+                .findAllByBookingIdOrderByScheduleIdAscIdAsc(bookingId).stream()
+                .collect(Collectors.groupingBy(a -> a.getSchedule().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        List<ScheduleMaterialsResponse> schedules = bySchedule.entrySet().stream()
+                .map(e -> allocationMapper.toScheduleResponse(
+                        movingScheduleLookupService.getSnapshot(e.getKey()), e.getValue()))
+                .toList();
+        BigDecimal chargedTotal = schedules.stream().map(ScheduleMaterialsResponse::chargedTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+        return BookingMaterialsResponse.builder()
+                .bookingId(booking.id())
+                .bookingCode(booking.bookingCode())
+                .schedules(schedules)
+                .chargedTotal(chargedTotal)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ScheduleMaterialsResponse getFieldScheduleMaterials(Integer scheduleId, Long userId) {
+        // Chuyến không tồn tại → ERR_MOVING_SCHEDULE_NOT_FOUND trước, rồi mới kiểm phân công
+        MovingScheduleSnapshot schedule = movingScheduleLookupService.getSnapshot(scheduleId);
+        if (userId == null || !movingScheduleLookupService.isAssigned(scheduleId, userId)) {
+            throw new AppException(ErrorCode.ERR_MOVING_FORBIDDEN);
+        }
+        return allocationMapper.toFieldScheduleResponse(schedule,
+                allocationRepository.findAllByScheduleIdOrderByIdAsc(scheduleId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CustomerMaterialChargeResponse> getCustomerCharges(Integer bookingId, Long customerUserId) {
+        BookingSnapshot booking = bookingWorkflowService.getSnapshot(bookingId);
+        if (booking.customerUserId() == null || !booking.customerUserId().equals(customerUserId)) {
+            throw new AppException(ErrorCode.ERR_BOOKING_FORBIDDEN);
+        }
+        return allocationRepository.findAllByBookingIdOrderByScheduleIdAscIdAsc(bookingId).stream()
+                .filter(a -> a.getStatus() == AllocationStatus.SETTLED
+                        && a.getChargedAmount() != null && a.getChargedAmount().signum() > 0)
+                .map(allocationMapper::toCustomerCharge)
+                .toList();
     }
 
     @Override

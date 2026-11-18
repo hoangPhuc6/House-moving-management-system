@@ -2,6 +2,7 @@ package com.example.house_moving_service.modules.inventory.service.impl;
 
 import com.example.house_moving_service.common.exception.AppException;
 import com.example.house_moving_service.common.exception.ErrorCode;
+import com.example.house_moving_service.modules.booking.dto.response.BookingSnapshot;
 import com.example.house_moving_service.modules.booking.entity.Booking;
 import com.example.house_moving_service.modules.booking.service.BookingWorkflowService;
 import com.example.house_moving_service.modules.identity.entity.User;
@@ -11,6 +12,8 @@ import com.example.house_moving_service.modules.inventory.dto.request.AllocateMa
 import com.example.house_moving_service.modules.inventory.dto.request.CancelAllocationRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialItemRequest;
 import com.example.house_moving_service.modules.inventory.dto.request.SettleMaterialsRequest;
+import com.example.house_moving_service.modules.inventory.dto.response.BookingMaterialsResponse;
+import com.example.house_moving_service.modules.inventory.dto.response.CustomerMaterialChargeResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.MaterialAllocationResponse;
 import com.example.house_moving_service.modules.inventory.dto.response.ScheduleMaterialsResponse;
 import com.example.house_moving_service.modules.inventory.entity.InventoryTransaction;
@@ -523,5 +526,152 @@ class MaterialAllocationServiceTest {
 
         assertError(catchThrowable(() -> service.getScheduleMaterials(404)), ErrorCode.ERR_MOVING_SCHEDULE_NOT_FOUND);
         verify(allocationRepository, never()).findAllByScheduleIdOrderByIdAsc(anyInt());
+    }
+
+    // ---- Task 7: xem theo đơn / MOVER / khách ----
+
+    static final long CUSTOMER_USER_ID = 30L;
+    static final long MOVER_USER_ID = 40L;
+    static final int OTHER_SCHEDULE_ID = 60;
+
+    void givenBooking() {
+        when(bookingWorkflowService.getSnapshot(BOOKING_ID)).thenReturn(BookingSnapshot.builder()
+                .id(BOOKING_ID).bookingCode("BK-001").customerUserId(CUSTOMER_USER_ID).build());
+    }
+
+    MaterialAllocation settledAllocation(Material material, MovingSchedule onSchedule, int used, String unitPrice) {
+        MaterialAllocation a = existingAllocation(material, used, unitPrice);
+        a.setSchedule(onSchedule);
+        a.setStatus(AllocationStatus.SETTLED);
+        a.setQuantityUsed(used);
+        BigDecimal charged = new BigDecimal(unitPrice).multiply(BigDecimal.valueOf(used));
+        a.setChargedAmount(charged);
+        a.setChargedAt(NOW);
+        a.setSettledAt(NOW);
+        return a;
+    }
+
+    @Test
+    @DisplayName("Vật tư của đơn: gom theo chuyến đúng thứ tự, mỗi chuyến có tổng riêng, chargedTotal = tổng cả đơn")
+    void bookingMaterials_groupsBySchedule() {
+        givenBooking();
+        givenSchedule(MovingScheduleStatus.COMPLETED);
+        MovingSchedule other = MovingSchedule.builder().id(OTHER_SCHEDULE_ID).booking(booking).build();
+        when(movingScheduleLookupService.getSnapshot(OTHER_SCHEDULE_ID)).thenReturn(MovingScheduleSnapshot.builder()
+                .id(OTHER_SCHEDULE_ID).bookingId(BOOKING_ID).status(MovingScheduleStatus.IN_PROGRESS).build());
+        Material box = givenMaterial(1, MaterialCategory.CONSUMABLE, 80, "15000");
+        Material tape = givenMaterial(2, MaterialCategory.CONSUMABLE, 30, "20000");
+        MaterialAllocation s1 = settledAllocation(box, schedule, 10, "15000");      // 150000
+        MaterialAllocation s2 = settledAllocation(tape, schedule, 2, "20000");      // 40000
+        MaterialAllocation open = existingAllocation(box, 5, "15000");
+        open.setSchedule(other);                                                     // dự kiến 75000, chưa tính
+        when(allocationRepository.findAllByBookingIdOrderByScheduleIdAscIdAsc(BOOKING_ID))
+                .thenReturn(List.of(s1, s2, open));
+
+        BookingMaterialsResponse response = service.getBookingMaterials(BOOKING_ID);
+
+        assertThat(response.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(response.bookingCode()).isEqualTo("BK-001");
+        assertThat(response.schedules()).extracting(ScheduleMaterialsResponse::scheduleId)
+                .containsExactly(SCHEDULE_ID, OTHER_SCHEDULE_ID);
+        assertThat(response.schedules().get(0).allocations()).hasSize(2);
+        assertThat(response.schedules().get(0).chargedTotal()).isEqualByComparingTo("190000");
+        assertThat(response.schedules().get(1).scheduleStatus()).isEqualTo(MovingScheduleStatus.IN_PROGRESS);
+        assertThat(response.schedules().get(1).estimatedTotal()).isEqualByComparingTo("75000");
+        assertThat(response.schedules().get(1).chargedTotal()).isEqualByComparingTo("0");
+        assertThat(response.chargedTotal()).isEqualByComparingTo("190000");
+        verify(allocationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Vật tư của đơn chưa cấp phát → schedules rỗng, chargedTotal 0")
+    void bookingMaterials_empty() {
+        givenBooking();
+        when(allocationRepository.findAllByBookingIdOrderByScheduleIdAscIdAsc(BOOKING_ID)).thenReturn(List.of());
+
+        BookingMaterialsResponse response = service.getBookingMaterials(BOOKING_ID);
+
+        assertThat(response.schedules()).isEmpty();
+        assertThat(response.chargedTotal()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("Đơn không tồn tại → ERR_BOOKING_NOT_FOUND")
+    void bookingMaterials_notFound() {
+        when(bookingWorkflowService.getSnapshot(404)).thenThrow(new AppException(ErrorCode.ERR_BOOKING_NOT_FOUND, 404));
+
+        assertError(catchThrowable(() -> service.getBookingMaterials(404)), ErrorCode.ERR_BOOKING_NOT_FOUND);
+        assertError(catchThrowable(() -> service.getCustomerCharges(404, CUSTOMER_USER_ID)),
+                ErrorCode.ERR_BOOKING_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("MOVER được phân công: thấy mọi dòng nhưng không thấy giá, thành tiền, các tổng")
+    void field_assignedHidesPrices() {
+        givenSchedule(MovingScheduleStatus.COMPLETED);
+        when(movingScheduleLookupService.isAssigned(SCHEDULE_ID, MOVER_USER_ID)).thenReturn(true);
+        Material box = givenMaterial(1, MaterialCategory.CONSUMABLE, 80, "15000");
+        Material trolley = givenMaterial(2, MaterialCategory.TOOL, 3, "0");
+        settledAllocation(box, schedule, 10, "15000");
+        existingAllocation(trolley, 1, "0");
+
+        ScheduleMaterialsResponse response = service.getFieldScheduleMaterials(SCHEDULE_ID, MOVER_USER_ID);
+
+        assertThat(response.scheduleId()).isEqualTo(SCHEDULE_ID);
+        assertThat(response.allocations()).extracting(MaterialAllocationResponse::materialId).containsExactly(1, 2);
+        assertThat(response.allocations()).allSatisfy(a -> {
+            assertThat(a.unitPrice()).isNull();
+            assertThat(a.chargedAmount()).isNull();
+        });
+        assertThat(response.allocations().get(0).quantityUsed()).isEqualTo(10);
+        assertThat(response.estimatedTotal()).isNull();
+        assertThat(response.chargedTotal()).isNull();
+    }
+
+    @Test
+    @DisplayName("MOVER không được phân công → ERR_MOVING_FORBIDDEN, không đọc dòng cấp phát")
+    void field_notAssignedForbidden() {
+        givenSchedule(MovingScheduleStatus.IN_PROGRESS);
+        when(movingScheduleLookupService.isAssigned(SCHEDULE_ID, MOVER_USER_ID)).thenReturn(false);
+
+        assertError(catchThrowable(() -> service.getFieldScheduleMaterials(SCHEDULE_ID, MOVER_USER_ID)),
+                ErrorCode.ERR_MOVING_FORBIDDEN);
+        verify(allocationRepository, never()).findAllByScheduleIdOrderByIdAsc(anyInt());
+    }
+
+    @Test
+    @DisplayName("Khách chủ đơn: chỉ thấy dòng SETTLED có thành tiền > 0")
+    void customer_onlyChargedLines() {
+        givenBooking();
+        Material box = givenMaterial(1, MaterialCategory.CONSUMABLE, 80, "15000");
+        Material trolley = givenMaterial(2, MaterialCategory.TOOL, 3, "0");
+        Material wrap = givenMaterial(3, MaterialCategory.CONSUMABLE, 10, "30000");
+        MaterialAllocation charged = settledAllocation(box, schedule, 10, "15000");
+        MaterialAllocation toolZero = settledAllocation(trolley, schedule, 0, "0");    // SETTLED nhưng 0đ
+        MaterialAllocation open = existingAllocation(wrap, 2, "30000");                 // chưa chốt
+        MaterialAllocation cancelled = existingAllocation(wrap, 1, "30000");
+        cancelled.setStatus(AllocationStatus.CANCELLED);
+        when(allocationRepository.findAllByBookingIdOrderByScheduleIdAscIdAsc(BOOKING_ID))
+                .thenReturn(List.of(charged, toolZero, open, cancelled));
+
+        List<CustomerMaterialChargeResponse> result = service.getCustomerCharges(BOOKING_ID, CUSTOMER_USER_ID);
+
+        assertThat(result).singleElement().satisfies(r -> {
+            assertThat(r.materialName()).isEqualTo("Vật tư 1");
+            assertThat(r.unit()).isEqualTo("cái");
+            assertThat(r.quantityUsed()).isEqualTo(10);
+            assertThat(r.unitPrice()).isEqualByComparingTo("15000");
+            assertThat(r.chargedAmount()).isEqualByComparingTo("150000");
+            assertThat(r.settledAt()).isEqualTo(NOW);
+        });
+    }
+
+    @Test
+    @DisplayName("Khách không phải chủ đơn → ERR_BOOKING_FORBIDDEN, không đọc dòng cấp phát")
+    void customer_notOwnerForbidden() {
+        givenBooking();
+
+        assertError(catchThrowable(() -> service.getCustomerCharges(BOOKING_ID, 999L)), ErrorCode.ERR_BOOKING_FORBIDDEN);
+        verify(allocationRepository, never()).findAllByBookingIdOrderByScheduleIdAscIdAsc(anyInt());
     }
 }

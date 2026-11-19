@@ -16,6 +16,7 @@ import { FIELD_STAGE_LABEL } from '@/constants/order';
 import { PLATE_REGEX, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
 import { formatTime } from '@/services/format';
 import { addDaysISO, dayMonth, downtimeOn, todayLocalISO } from '@/services/downtime';
+import { hasSkill, isActiveStaff } from '@/services/staff';
 import { useApp } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
@@ -36,8 +37,14 @@ export const IncidentPanel = ({ order }: { order: Order }) => {
     "IN_TRANSIT",
     "PAUSED_WAITING_CUSTOMER",
   ].includes(order.status);
+  // Tài xế thay thế: có kỹ năng lái, đang làm, bằng còn hạn vào ngày chuyển (hạng bằng kiểm khi xác nhận theo xe thay thế).
   const drivers = state.resources.staff.filter(
-    (s) => (s.role === "DRIVER" || s.role === "TEAM_LEADER") && !downtimeOn(state.resources.downtimes, "STAFF", s.id, today),
+    (s) =>
+      hasSkill(s, "DRIVE") &&
+      isActiveStaff(s) &&
+      !!s.license &&
+      s.license.expiresAt >= order.scheduledDate &&
+      !downtimeOn(state.resources.downtimes, "STAFF", s.id, today),
   );
   const plateNorm = plate.trim().toUpperCase();
   const plateError = !plateNorm
@@ -195,7 +202,7 @@ export const IncidentPanel = ({ order }: { order: Order }) => {
               <option value="">— Chọn tài xế —</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.name}>
-                  {d.name} ({d.code})
+                  {d.name} ({d.code}) · bằng {d.license?.licenseClass}
                 </option>
               ))}
             </Select>

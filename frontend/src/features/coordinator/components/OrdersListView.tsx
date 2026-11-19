@@ -5,6 +5,7 @@ import { KanbanBoard } from '@/features/coordinator/components/KanbanBoard';
 import type { OrderSection } from '@/features/coordinator/types';
 import { coordinatorSurveyBadge, shortDate, weekdayOf } from '@/features/order/surveyStage';
 import { routeSummaryOf } from '@/features/order/route';
+import { settlementBadges } from '@/features/order/settlementStage';
 import type { Order, OrderStatus } from '@/types';
 import { useApp } from '@/services/store/AppStore';
 
@@ -157,6 +158,11 @@ const StatusCell = ({ order: o }: { order: Order }) => {
     <span className="flex flex-wrap items-center gap-1.5">
       <StatusBadge status={o.status} />
       {sub && <Badge tone={sub.tone}>{sub.label}</Badge>}
+      {settlementBadges(o)?.map((b) => (
+        <Badge key={b.label} tone={b.tone}>
+          {b.label}
+        </Badge>
+      ))}
     </span>
   );
 };

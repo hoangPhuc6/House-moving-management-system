@@ -1,7 +1,7 @@
 import { CheckCircle2, Lock, Phone } from 'lucide-react';
 import { Card, cx, Divider, StatusBadge } from '@/components/ui';
 import { fieldStagesOf, isFieldStageDone, nextFieldStage } from '@/constants/order';
-import { STAFF_ROLE_LABEL } from '@/constants/resources';
+import { hasCustomerSurcharge } from '@/constants/surcharge';
 import type { Order } from '@/types';
 
 export const LiveProgressCard = ({
@@ -13,12 +13,13 @@ export const LiveProgressCard = ({
   order: Order;
   vehicle?: string;
   capacity?: number;
-  crew: { id: string; name: string; role: keyof typeof STAFF_ROLE_LABEL }[];
+  crew: { id: string; name: string }[];
 }) => {
   const stages = fieldStagesOf(order);
   const next = nextFieldStage(order);
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
-  const leader = crew.find((c) => c.role === "TEAM_LEADER") ?? crew[0];
+  // Khách liên hệ trưởng nhóm của chuyến (Điều phối chỉ định khi gán đội).
+  const leader = crew.find((c) => c.id === order.leaderId) ?? crew[0];
   return (
     <Card className="lg:row-span-2">
       <div className="mb-4 flex items-center justify-between">
@@ -35,7 +36,7 @@ export const LiveProgressCard = ({
               paused);
           const locked =
             (s.stage === "WORKING" || s.stage === "MOVING") &&
-            order.flags.hasFieldDiscrepancyLock &&
+            hasCustomerSurcharge(order) &&
             !done;
           return (
             <li key={s.stage} className="relative flex gap-3.5 pb-5 last:pb-0">

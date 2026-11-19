@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertOctagon,
   ArrowLeft,
   CheckCircle2,
   Lock,
@@ -12,20 +11,34 @@ import {
   Timer,
   UserRound,
   Warehouse,
-  Wrench,
 } from 'lucide-react';
-import { Button, cx, Field, Modal, Select, StatusBadge } from '@/components/ui';
+import { Badge, Button, cx, Field, Modal, Select, StatusBadge } from '@/components/ui';
 import { FIELD_STAGE_LABEL, FIELD_STAGE_ORDER, fieldStagesOf, isFieldStageDone, nextFieldStage } from '@/constants/order';
-import { STAFF_ROLE_LABEL, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
+import { VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
+import { isSurchargeBlocking, surchargesWithStatus } from '@/constants/surcharge';
 import { Block } from '@/features/staff/components/Block';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
+import { SurchargeBlock } from '@/features/staff/components/SurchargeBlock';
+import { MaterialsBlock, useMaterialReceipt } from '@/features/staff/components/MaterialsBlock';
 import { needsToolReturn, RUNNING, STAGE_ICONS } from '@/features/staff/constants';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { ROUTES } from '@/routes/paths';
 import { formatDateVN, formatVND } from '@/services/format';
+import { VEHICLE_STANDARD_EQUIPMENT } from '@/services/materials';
+import { TRIP_ROLE_LABEL } from '@/services/staff';
 import { waitFee } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
 import type { FieldStage, Order, VehicleIncidentKind } from '@/types';
+
+/** Lý do đang khóa theo trạng thái các khoản phát sinh. */
+const lockReason = (order: Order): string => {
+  const parts = [
+    [surchargesWithStatus(order, 'PROPOSED').length, 'chờ Điều phối duyệt'],
+    [surchargesWithStatus(order, 'WAITING_CUSTOMER').length, 'chờ khách xác nhận'],
+    [surchargesWithStatus(order, 'REJECTED_BY_CUSTOMER').length, 'khách từ chối — Điều phối đang thương lượng'],
+  ] as const;
+  return parts.filter(([n]) => n > 0).map(([n, l]) => `${n} khoản ${l}`).join(' · ') + '.';
+};
 
 export const JobDetail = ({ order }: { order: Order }) => {
   const { state, dispatch } = useApp();
@@ -39,18 +52,32 @@ export const JobDetail = ({ order }: { order: Order }) => {
   const stages = fieldStagesOf(order);
   const next = nextFieldStage(order);
   const doneCount = stages.filter((s) => isFieldStageDone(order, s.stage)).length;
-  const locked = order.flags.hasFieldDiscrepancyLock;
+  const locked = isSurchargeBlocking(order);
   const paused = order.status === "PAUSED_WAITING_CUSTOMER";
   const active = RUNNING.includes(order.status);
   const nextLocked =
     !!next && (next.stage === "WORKING" || next.stage === "MOVING") && locked;
   const incidentBlock =
     !!next && next.stage === "MOVING" && order.flags.isVehicleIncident;
-  const blocked = nextLocked || incidentBlock;
+  // Bước "Nhận vật tư tại kho": nút chính xác nhận luôn phiếu vật tư (kiểm từng dòng + tick đã kiểm tra).
+  const receipt = useMaterialReceipt(order);
+  const materialsRef = useRef<HTMLDivElement>(null);
+  const receivingStep =
+    !!next && next.stage === "MATERIALS_PICKED" && order.materials.lines.length > 0;
+  // Chỉ khóa khi kho chưa xuất phiếu; phiếu đã xuất thì nút luôn bấm được, thiếu điều kiện sẽ báo đỏ ở phiếu.
+  const materialBlock = receivingStep && !receipt.active;
+  const blocked = nextLocked || incidentBlock || materialBlock;
+  const advance = () => {
+    if (!next) return;
+    if (receivingStep) {
+      if (!receipt.submit()) materialsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    dispatch({ type: "ADVANCE_FIELD_STAGE", orderId: order.id, stage: next.stage });
+  };
   const NextIcon = next
     ? STAGE_ICONS[next.stage as Exclude<FieldStage, "NOT_STARTED">]
     : CheckCircle2;
-  const checked = order.equipment.filter((e) => e.checked).length;
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [incidentKind, setIncidentKind] = useState<VehicleIncidentKind>("ENGINE");
   const [incidentNote, setIncidentNote] = useState("");
@@ -100,6 +127,12 @@ export const JobDetail = ({ order }: { order: Order }) => {
               </div>
             </div>
           )}
+          {vehicle && (
+            <p className="-mt-2 mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">Trang bị theo xe</span> (kiểm khi nhận xe, không qua kho):{" "}
+              {VEHICLE_STANDARD_EQUIPMENT.map((e) => `${e.name} ×${e.quantity}`).join(", ")}
+            </p>
+          )}
           <div className="relative space-y-3 pl-6">
             <span className="absolute top-2 bottom-2 left-[7px] w-px border-l border-dashed border-slate-300" />
             <div className="relative">
@@ -142,12 +175,10 @@ export const JobDetail = ({ order }: { order: Order }) => {
             <Lock className="mt-0.5 size-5 shrink-0 text-rose-600" />
             <div>
               <p className="text-sm font-semibold text-rose-900">
-                Đang khóa luồng: Chờ khách hàng bấm Xác nhận báo giá điều chỉnh
-                trên Web.
+                Đang khóa luồng: chờ xử lý phát sinh hiện trường
               </p>
-              <p className="mt-1 text-xs text-rose-700 tabular-nums">
-                Phát sinh đề xuất: +
-                {formatVND(order.pendingAdjustment?.unitPrice ?? 350_000)}
+              <p className="mt-1 text-xs text-rose-700">
+                {lockReason(order)}
               </p>
             </div>
           </div>
@@ -227,27 +258,18 @@ export const JobDetail = ({ order }: { order: Order }) => {
         )}
       </Block>
 
+      <div ref={materialsRef} className="scroll-mt-4">
+        <MaterialsBlock key={`${order.id}-${order.materials.status}`} order={order} receipt={receipt} />
+      </div>
+
+      {(order.surcharges.length > 0 || (active && order.fieldStage !== "HANDED_OVER")) && (
+        <SurchargeBlock order={order} canReport={active && order.fieldStage !== "HANDED_OVER"} />
+      )}
+
       {/* Exceptions */}
       {active && order.fieldStage !== "HANDED_OVER" && (
-        <Block title="Xử lý phát sinh">
+        <Block title="Sự cố & chờ khách">
           <div className="grid gap-2">
-            <Button
-              variant="secondary"
-              size="lg"
-              icon={AlertOctagon}
-              className="h-14 border-amber-300 text-amber-800 hover:bg-amber-50"
-              disabled={locked}
-              onClick={() =>
-                dispatch({
-                  type: "REPORT_FIELD_DISCREPANCY",
-                  orderId: order.id,
-                })
-              }
-            >
-              {locked
-                ? "Đã báo — chờ khách xác nhận"
-                : "Báo cáo sai lệch hiện trường"}
-            </Button>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="danger"
@@ -297,75 +319,37 @@ export const JobDetail = ({ order }: { order: Order }) => {
 
       <Block title={`Đội ngũ (${crew.length})`} icon={UserRound}>
         <ul className="space-y-2.5">
-          {crew.map((c) => (
+          {crew.map((c) => {
+            const a = order.crew.find((x) => x.staffId === c.id);
+            const plate = state.resources.vehicles.find((v) => v.id === a?.vehicleId)?.plateNumber;
+            return (
             <li key={c.id} className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
                 {c.name.split(" ").slice(-1)[0]?.[0]}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{c.name}</p>
+                <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                  {c.name}
+                  {order.leaderId === c.id && <Badge tone="brand">Trưởng nhóm</Badge>}
+                </p>
                 <p className="text-xs text-slate-500">
-                  <span className="tabular-nums">{c.code}</span> ·{" "}
-                  {STAFF_ROLE_LABEL[c.role]}
+                  <span className="tabular-nums">{c.code}</span>
+                  {a && ` · ${TRIP_ROLE_LABEL[a.role]}`}
+                  {plate && <span className="tabular-nums"> · {plate}</span>}
                 </p>
               </div>
               <a
-                href="tel:0909000000"
+                href={`tel:${c.phone.replace(/\s/g, "")}`}
                 className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-slate-100"
                 aria-label={`Gọi ${c.name}`}
               >
                 <Phone className="size-4" />
               </a>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </Block>
-
-      {order.equipment.length > 0 && (
-        <Block
-          title="Dụng cụ xuất kho"
-          icon={Wrench}
-          right={
-            <span className="text-xs font-semibold text-slate-500 tabular-nums">
-              {checked}/{order.equipment.length}
-            </span>
-          }
-        >
-          <ul className="-mx-1">
-            {order.equipment.map((e) => (
-              <li key={e.id}>
-                <label className="flex h-12 cursor-pointer items-center gap-3 rounded-xl px-1 active:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    checked={e.checked}
-                    onChange={() =>
-                      dispatch({
-                        type: "TOGGLE_EQUIPMENT",
-                        orderId: order.id,
-                        itemId: e.id,
-                      })
-                    }
-                    className="size-5 rounded accent-[#FF5A1F]"
-                  />
-                  <span
-                    className={cx(
-                      "flex-1 text-sm",
-                      e.checked
-                        ? "text-slate-400 line-through"
-                        : "font-medium text-slate-800",
-                    )}
-                  >
-                    {e.name}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-500 tabular-nums">
-                    ×{e.quantity}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      )}
 
       {/* Primary progress action */}
       {active && next && (
@@ -373,13 +357,7 @@ export const JobDetail = ({ order }: { order: Order }) => {
           <button
             type="button"
             disabled={paused || blocked}
-            onClick={() =>
-              dispatch({
-                type: "ADVANCE_FIELD_STAGE",
-                orderId: order.id,
-                stage: next.stage,
-              })
-            }
+            onClick={advance}
             className={cx(
               "flex h-14 w-full items-center justify-center gap-2.5 rounded-xl text-base font-bold transition-all active:scale-[0.98]",
               blocked
@@ -394,24 +372,24 @@ export const JobDetail = ({ order }: { order: Order }) => {
             )}
             {blocked
               ? nextLocked
-                ? "Khóa: chờ khách xác nhận"
-                : "Khóa: chờ xe thay thế"
-              : next.label}
+                ? "Khóa: chờ xử lý phát sinh"
+                : materialBlock
+                  ? "Khóa: chờ kho xuất vật tư"
+                  : "Khóa: chờ xe thay thế"
+              : receivingStep && receipt.shortage
+                ? "Nhận vật tư (nhận thiếu)"
+                : next.label}
           </button>
         </StickyActionBar>
       )}
-      {/* Sau bàn giao: đội xe mang dụng cụ & vật tư dư về kho rồi tự xác nhận — đủ điều kiện thì hệ thống tự đóng hồ sơ. */}
+      {/* Sau bàn giao: đội xe khai số vật tư đã dùng ở phiếu bên trên rồi mang dụng cụ & vật tư dư về kho — kho kiểm nhận trả để quyết toán. */}
       {needsToolReturn(order) && (
-        <StickyActionBar className="md:!sticky md:bottom-4">
-          <p className="mb-2 text-xs text-slate-500">Mang toàn bộ dụng cụ & vật tư dư (thùng, màng PE…) về kho rồi xác nhận.</p>
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "CONFIRM_WAREHOUSE_RETURN", orderId: order.id })}
-            className="flex h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-brand text-base font-bold text-white shadow-lg shadow-brand/25 active:scale-[0.98]"
-          >
-            <Warehouse className="size-5" /> Đã trả đủ dụng cụ về kho
-          </button>
-        </StickyActionBar>
+        <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
+          <Warehouse className="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <p>
+            <span className="font-semibold">Chưa quyết toán vật tư.</span> Khai số đã dùng trên phiếu vật tư, mang dụng cụ & vật tư dư về kho để thủ kho kiểm nhận.
+          </p>
+        </div>
       )}
       {!active && !needsToolReturn(order) && (
         <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">

@@ -1,4 +1,5 @@
 import { type Dispatch } from 'react';
+import type { MaterialKind } from './catalog';
 
 export interface OrderTotals {
   baseQuote: number;
@@ -24,6 +25,8 @@ export interface AssignmentRequirement {
   vehicles: VehicleRequirement[];
   vehicleTotal: number;
   workers: number;
+  /** Đơn có dịch vụ tháo lắp → đội phải có ít nhất một người có kỹ năng tháo lắp. */
+  needsAssembly: boolean;
 }
 
 export interface ReferenceInput {
@@ -61,7 +64,8 @@ export type OrderStatus =
 
 export type HouseType = 'GROUND_FLOOR' | 'APARTMENT' | 'DEEP_ALLEY';
 
-export type QuoteItemCategory = 'VEHICLE' | 'LABOR' | 'MATERIAL' | 'SURCHARGE' | 'FIELD_ADJUSTMENT' | 'WAIT_FEE';
+/** SERVICE: dịch vụ thêm từ bảng giá (tháo lắp…) — tách khỏi LABOR để không bị tính vào số người bốc xếp khi điều phối. */
+export type QuoteItemCategory = 'VEHICLE' | 'LABOR' | 'MATERIAL' | 'SERVICE' | 'SURCHARGE' | 'FIELD_ADJUSTMENT' | 'WAIT_FEE';
 
 export interface QuoteItem {
   id: string;
@@ -72,6 +76,8 @@ export interface QuoteItem {
   quantity: number;
   /** Diễn giải cách ra đơn giá / số lượng (VD: "Giá chuyến 900.000 đ (gồm 10 km) + 8 km vượt × 15.000 đ"). */
   note?: string;
+  /** Khoản ngoài bảng giá do Điều phối nhập tay (bắt buộc có lý do trong note) — hiện rõ cho khách. */
+  offCatalog?: boolean;
 }
 
 export type ActorRole = Exclude<RoleType, 'LANDING' | 'AUTH'> | 'SYSTEM';
@@ -97,13 +103,46 @@ export interface Vehicle {
   busyOrderId: string | null;
 }
 
-export type StaffRole = 'TEAM_LEADER' | 'DRIVER' | 'MOVER' | 'TECHNICIAN';
+/**
+ * Kỹ năng của nhân viên (một người có thể có nhiều): lái xe, bốc xếp, tháo lắp.
+ * Kỹ năng thuộc hồ sơ; vai trò trong từng chuyến do Điều phối chọn khi gán đội ({@link CrewAssignment}).
+ * Trưởng nhóm không phải kỹ năng: tài xế của chuyến mặc định là trưởng nhóm.
+ */
+export type StaffSkill = 'DRIVE' | 'LOAD' | 'ASSEMBLY';
+
+/** Hạng GPLX: B2 lái xe tải ≤ 3,5 tấn; C lái mọi xe tải. */
+export type LicenseClass = 'B2' | 'C';
+
+export interface DriverLicense {
+  licenseClass: LicenseClass;
+  /** Ngày hết hạn (ISO yyyy-mm-dd). */
+  expiresAt: string;
+}
+
+/** ACTIVE: đang làm; ON_LEAVE: nghỉ phép (tạm không gán); RESIGNED: nghỉ việc. */
+export type StaffWorkStatus = 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED';
+
+/** Vai trò của một người trong MỘT chuyến. */
+export type TripRole = 'DRIVER' | 'LOADER';
+
+export interface CrewAssignment {
+  staffId: string;
+  role: TripRole;
+  /** Xe người này lái (chỉ với DRIVER). */
+  vehicleId: string | null;
+}
 
 export interface StaffMember {
   id: string;
   code: string;
   name: string;
-  role: StaffRole;
+  phone: string;
+  /** Tài khoản đăng nhập gắn với hồ sơ (CatalogState.users). */
+  userId: string | null;
+  skills: StaffSkill[];
+  /** null = không có bằng lái xe tải. */
+  license: DriverLicense | null;
+  status: StaffWorkStatus;
 }
 
 export type DowntimeTarget = 'VEHICLE' | 'STAFF';
@@ -135,8 +174,6 @@ export interface ResourceAllocation {
 }
 
 export interface ExceptionFlags {
-  /** Mã 1.1.1 — Khóa chuyển sang IN_TRANSIT cho tới khi khách xác nhận báo giá điều chỉnh. */
-  hasFieldDiscrepancyLock: boolean;
   /** Mã 1.1.2 — Xe hỏng giữa đường, cần chuyển giao phương tiện. */
   isVehicleIncident: boolean;
   /** Mã 1.1.4 — 30 phút đầu miễn phí, sau đó +150.000đ/giờ. */
@@ -145,20 +182,58 @@ export interface ExceptionFlags {
   hoursUntilDeparture: number;
 }
 
-/** Step 7 Hard-Lock: chỉ được COMPLETED khi remainingBalance === 0 && isWarehouseReturned === true. */
+/** Step 7 Hard-Lock: chỉ được COMPLETED khi remainingBalance === 0 && materialsSettled === true. */
 export interface SettlementLockState {
   remainingBalance: number;
-  isWarehouseReturned: boolean;
+  /** Phiếu vật tư đã quyết toán (hoặc đơn không dùng vật tư). */
+  materialsSettled: boolean;
 }
 
 export type FieldStage = 'NOT_STARTED' | 'MATERIALS_PICKED' | 'WORKING' | 'MOVING' | 'ARRIVED' | 'HANDED_OVER';
 
-export interface EquipmentItem {
+/**
+ * Vòng đời phiếu vật tư của một đơn:
+ * NONE → (gán đội) DRAFT → (kho xuất) ISSUED → (đội nhận) RECEIVED → (đội khai đã dùng) USAGE_REPORTED → (kho kiểm nhận trả) RETURNED.
+ * Đơn bị hủy khi đã xuất kho: kho kiểm nhận trả thẳng từ ISSUED / RECEIVED.
+ */
+export type MaterialSlipStatus = 'NONE' | 'DRAFT' | 'ISSUED' | 'RECEIVED' | 'USAGE_REPORTED' | 'RETURNED';
+
+/** Một dòng trên phiếu vật tư. Số lượng null = bước đó chưa diễn ra. */
+export interface MaterialLine {
   id: string;
+  inventoryItemId: string;
   name: string;
-  quantity: number;
-  checked: boolean;
+  unit: string;
+  kind: MaterialKind;
+  /** Theo báo giá (vật tư tiêu hao) hoặc bộ dụng cụ chuẩn theo số xe. */
+  planned: number;
+  /** Kho thực xuất — 0 khi chưa xuất. */
+  issued: number;
+  /** Đội xe xác nhận thực nhận. */
+  received: number | null;
+  /** Đội xe khai đã dùng — chỉ vật tư tiêu hao; dụng cụ luôn 0. */
+  used: number | null;
+  /** Kho kiểm nhận trả lại. */
+  returned: number | null;
+  /** Chênh lệch đã xử lý khi quyết toán (mất / hỏng / hao hụt) = issued − used − returned. */
+  lost: number;
 }
+
+export interface MaterialSlip {
+  status: MaterialSlipStatus;
+  lines: MaterialLine[];
+  issuedAt: number | null;
+  receivedAt: number | null;
+  usageReportedAt: number | null;
+  returnedAt: number | null;
+  /** Ghi chú khi đội xe nhận thiếu so với phiếu xuất. */
+  receiveNote: string;
+  /** Biên bản xử lý chênh lệch khi quyết toán (lý do, người chịu trách nhiệm). */
+  resolutionNote: string;
+}
+
+/** Số lượng nhập theo từng dòng phiếu: lineId → số lượng. */
+export type MaterialQuantities = Record<string, number>;
 
 /**
  * Hình thức khảo sát đã dùng. Với PHOTO / VIDEO_CALL / ON_SITE: Điều phối phân người khảo sát →
@@ -170,6 +245,91 @@ export interface EquipmentItem {
  */
 export type SurveyMethod = 'PHOTO' | 'VIDEO_CALL' | 'TRUCK_CONFIRM' | 'ON_SITE';
 
+/** Nhóm ảnh hiện trường bắt buộc khi khảo sát trực tiếp (khớp SURVEY_MEDIA_CATEGORIES). */
+export type SitePhotoCategory = 'ROOMS' | 'BIG' | 'ACCESS' | 'PARKING';
+
+/** Ảnh bằng chứng nhân viên chụp tại hiện trường. Bản demo giữ object URL trong phiên làm việc. */
+export interface EvidencePhoto {
+  id: string;
+  name: string;
+  url: string;
+  takenAt: number;
+  /** Ảnh hay video — mặc định ảnh. */
+  kind?: 'image' | 'video';
+}
+
+/** Ảnh khảo sát trực tiếp, gắn nhóm trong checklist. */
+export interface SitePhoto extends EvidencePhoto {
+  category: SitePhotoCategory;
+  /** Ảnh chụp cái gì — tên món đồ hoặc vị trí ("Thang bộ — điểm đi"). */
+  subject?: string;
+}
+
+/**
+ * Loại phụ phí phát sinh (khớp SurchargeType backend). Đơn giá:
+ * hệ thống tự tính (lầu, hẻm, km) · theo dịch vụ trong bảng giá (thêm đồ, tháo lắp, vật tư) · nhập tay (khác).
+ * Phí chờ khách đã có đồng hồ chờ riêng (mã 1.1.4) nên không báo qua đây.
+ */
+export type SurchargeType = 'EXTRA_FLOOR' | 'NO_ELEVATOR' | 'LONG_CARRY' | 'EXTRA_DISTANCE' | 'EXTRA_ITEMS' | 'DISASSEMBLY' | 'PACKING_MATERIAL' | 'OTHER';
+
+/**
+ * PROPOSED ─(Điều phối chốt)─► WAITING_CUSTOMER ─(khách đồng ý)─► ACCEPTED
+ * PROPOSED ─(Điều phối bác)─► REJECTED · PROPOSED ─(NV rút)─► CANCELLED
+ * WAITING_CUSTOMER ─(khách từ chối)─► REJECTED_BY_CUSTOMER ─(Điều phối gửi lại / rút)─► CANCELLED
+ */
+export type SurchargeStatus = 'PROPOSED' | 'WAITING_CUSTOMER' | 'ACCEPTED' | 'REJECTED' | 'REJECTED_BY_CUSTOMER' | 'CANCELLED';
+
+export interface Surcharge {
+  id: string;
+  /** Các dòng NV báo trong cùng một lần dùng chung reportId — hiển thị & duyệt theo nhóm, trạng thái vẫn theo từng dòng. */
+  reportId: string;
+  /** Ghi chú chung của lần báo (chỉ khi báo từ 2 dòng; giống nhau trên mọi dòng cùng reportId). */
+  reportNote: string;
+  type: SurchargeType;
+  /** Tên dòng phí (nhãn loại hoặc tên dịch vụ trong bảng giá). */
+  name: string;
+  /** Khảo sát / khách khai ghi gì — VD "Hẻm 50m". */
+  surveyed: string;
+  /** Thực tế tại hiện trường — VD "Hẻm 200m, xe không vào được". */
+  actual: string;
+  /** Mô tả sai lệch của dòng (bắt buộc). */
+  description: string;
+  /** Phần chênh lệch so với khảo sát. */
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  /** Số lượng / đơn giá lúc NV đề xuất — để đối chiếu khi Điều phối điều chỉnh. */
+  proposedQuantity: number;
+  proposedUnitPrice: number;
+  photos: EvidencePhoto[];
+  status: SurchargeStatus;
+  proposedAt: number;
+  /** Điều phối chốt / bác / rút. */
+  reviewedAt: number | null;
+  reviewNote: string;
+  /** Khách đồng ý / từ chối. */
+  respondedAt: number | null;
+  customerNote: string;
+}
+
+/** Một dòng NV gửi khi báo sai lệch — đơn giá chỉ là ước tính, Điều phối chốt. */
+export type SurchargeDraft = Pick<Surcharge, 'type' | 'name' | 'surveyed' | 'actual' | 'description' | 'quantity' | 'unit' | 'unitPrice' | 'photos'>;
+
+/** Một lần báo sai lệch: các dòng (mỗi dòng có mô tả & ảnh riêng) + ghi chú chung tùy chọn khi từ 2 dòng. */
+export interface SurchargeReportDraft {
+  note: string;
+  lines: SurchargeDraft[];
+}
+
+/** Số liệu Điều phối chốt cho một dòng. */
+export interface SurchargeDecision {
+  surchargeId: string;
+  quantity: number;
+  unitPrice: number;
+  /** Đổi dịch vụ trong cùng loại (loại tính theo bảng giá) — VD NV chọn nhầm tháo lắp tủ thay vì máy lạnh. */
+  service?: { name: string; unit: string; unitPrice: number };
+}
+
 /** Điều phối phân người khảo sát — áp dụng cho cả video call, tận nơi và khách gửi ảnh. */
 export interface SurveyAssignment {
   assignedAt: number;
@@ -177,6 +337,18 @@ export interface SurveyAssignment {
   note: string;
   /** Nhân viên được phân khảo sát (StaffMember.id). */
   surveyorId: string;
+}
+
+/**
+ * Biên bản khảo sát lưu khi gửi báo giá: số liệu làm căn cứ, ghi chú & ảnh hiện trường.
+ * Khách xem cạnh báo giá; phát sinh hiện trường lấy "khảo sát ghi" từ đây.
+ */
+export interface SurveyRecord {
+  method: SurveyMethod;
+  baseline: SurveyInput;
+  note: string;
+  photos: SitePhoto[];
+  recordedAt: number;
 }
 
 /** Một món đồ ghi nhận khi khảo sát — khách, Điều phối và đội chuyển cùng đối chiếu theo danh sách này. */
@@ -187,6 +359,10 @@ export interface SurveyItem {
   fragile: boolean;
   /** Cần tháo / lắp khi chuyển. */
   disassemble: boolean;
+  /** Ghi chú riêng cho món (kích thước, tình trạng, cách khiêng…). undefined = chưa thêm ghi chú. */
+  note?: string;
+  /** Ảnh / video chụp món này khi khảo sát. */
+  photos?: EvidencePhoto[];
 }
 
 /** Kết quả người khảo sát gửi về — Điều phối dựa vào đây để lập báo giá (người khảo sát không định giá). */
@@ -197,6 +373,8 @@ export interface SurveyReport {
   items: SurveyItem[];
   /** Ghi chú hiện trường: lối đi, đồ đặc biệt, lưu ý cho đội chuyển… */
   note: string;
+  /** Ảnh hiện trường / ảnh chụp màn hình video call người khảo sát đính kèm làm bằng chứng. */
+  photos: SitePhoto[];
   /** Đề xuất nguồn lực: xe, số người, vật tư, lầu, hẻm. */
   proposal: SurveyInput;
 }
@@ -335,11 +513,15 @@ export interface Order {
   quoteItems: QuoteItem[];
   /** Giảm giá trên toàn đơn theo phần trăm (0–100), áp dụng cho tổng báo giá. */
   discountPercent: number;
-  pendingAdjustment: QuoteItem | null;
+  /** Mã 1.1.1 — Phụ phí phát sinh tại hiện trường (NV đề xuất → Điều phối chốt → khách xác nhận). */
+  surcharges: Surcharge[];
+  /** Biên bản khảo sát — căn cứ của báo giá chính thức (null khi chưa báo giá). */
+  surveyRecord: SurveyRecord | null;
   depositRequired: number;
   depositPaid: number;
   balancePaid: number;
-  isWarehouseReturned: boolean;
+  /** Phiếu vật tư & dụng cụ: xuất kho → đội nhận → khai đã dùng → kiểm nhận trả. */
+  materials: MaterialSlip;
   /** Bất biến sau khi COMPLETED — khiếu nại KHÔNG được ghi đè giá trị này. */
   finalRevenue: number | null;
   flags: ExceptionFlags;
@@ -348,8 +530,15 @@ export interface Order {
   vehicleId: string | null;
   /** Tất cả xe đã gán cho đơn (đúng loại & số lượng theo báo giá). */
   vehicleIds: string[];
+  /** Toàn bộ nhân sự của đơn (suy ra từ crew) — dùng để tra lệnh việc của nhân viên. */
   crewIds: string[];
-  equipment: EquipmentItem[];
+  /** Phân vai theo chuyến: ai lái xe nào, ai bốc xếp. */
+  crew: CrewAssignment[];
+  /**
+   * Trưởng nhóm chuyến — mặc định là tài xế (nhiều xe: tài xế xe lớn nhất).
+   * Người nhận vật tư, chịu trách nhiệm bàn giao.
+   */
+  leaderId: string | null;
   auditLog: AuditLogEntry[];
   /** Epoch ms — hạn tự động hủy 24h (Mã 1.1.3). */
   autoCancelDeadline: number | null;
@@ -447,6 +636,19 @@ export interface VehicleLine {
 /** Thùng carton theo cỡ: nhỏ (sách, đồ nặng), vừa (đồ dùng chung), lớn (quần áo, chăn gối). */
 export type CartonSize = 'S' | 'M' | 'L';
 
+/**
+ * Hạng mục người khảo sát đề xuất thêm ngoài các ô số liệu: dịch vụ trong bảng giá (serviceId)
+ * hoặc nhập tự do (VD "Cẩu tủ qua ban công"). Điều phối định giá khi lập báo giá.
+ */
+export interface SurveyExtra {
+  /** Dịch vụ bảng giá tương ứng; null = khoản nhập tay, Điều phối định giá ngoài bảng giá. */
+  serviceId: string | null;
+  name: string;
+  qty: number;
+  unit: string;
+  note: string;
+}
+
 export interface SurveyInput {
   distanceKm: number;
   /** Các loại xe cần dùng; loại không dùng thì không có trong danh sách. */
@@ -455,10 +657,16 @@ export interface SurveyInput {
   cartons: Record<CartonSize, number>;
   tapeRolls: number;
   peFilmRolls: number;
-  floors: number;
-  alleyMeters: number;
+  /** Số lầu phải khiêng thang bộ — tách điểm đi / điểm đến để khách đối chiếu từng đầu. */
+  floorsFrom: number;
+  floorsTo: number;
+  /** Độ dài hẻm / quãng khiêng bộ (m) ở từng đầu. */
+  alleyFrom: number;
+  alleyTo: number;
   /** Tổng thời gian dự kiến cho chuyến (bốc xếp + di chuyển + dỡ), giờ — quyết định xe & người bận bao lâu. */
   estimatedHours: number;
+  /** Hạng mục đề xuất thêm (tháo lắp, đóng gói, khoản đặc biệt…) — không tự vào báo giá. */
+  extras?: SurveyExtra[];
 }
 
 export interface NewOrderInput {
@@ -476,6 +684,8 @@ export interface NewOrderInput {
   referenceQuote: ReferenceQuote;
   /** Thông tin chi tiết khách khai báo qua wizard đặt đơn 4 bước. */
   details?: BookingDetails;
+  /** Gói chỉ thuê xe: dịch vụ bảng giá khách chọn (tháo lắp, đóng gói) — đưa thẳng vào báo giá tự động. */
+  extraQuoteItems?: QuoteItem[];
 }
 
 export type QuoteItemPatch = Pick<QuoteItem, 'id' | 'quantity' | 'unitPrice'>;
@@ -487,30 +697,64 @@ export type AppAction =
   | { type: 'CREATE_ORDER'; input: NewOrderInput }
   | { type: 'ASSIGN_SURVEYOR'; orderId: string; note: string; surveyorId: string }
   | { type: 'UNASSIGN_SURVEYOR'; orderId: string }
-  | { type: 'SUBMIT_SURVEY_REPORT'; orderId: string; items: SurveyItem[]; note: string; proposal: SurveyInput }
-  | { type: 'SUBMIT_SURVEY'; orderId: string; items: QuoteItem[]; estimatedHours: number }
+  /** Người khảo sát gửi kết quả: đồ đạc, ghi chú, ảnh hiện trường và đề xuất nguồn lực. */
+  | { type: 'SUBMIT_SURVEY_REPORT'; orderId: string; items: SurveyItem[]; note: string; photos: SitePhoto[]; proposal: SurveyInput }
+  /** Chỉ Điều phối gửi báo giá; adjustReason bắt buộc khi lệch nhiều so với đề xuất của người khảo sát. */
+  | {
+      type: 'SUBMIT_SURVEY';
+      orderId: string;
+      items: QuoteItem[];
+      estimatedHours: number;
+      /** Số liệu khảo sát làm căn cứ báo giá. */
+      input: SurveyInput;
+      /** Ghi chú & ảnh bổ sung của Điều phối (VD ảnh chụp màn hình video call). */
+      evidence: { note: string; photos: SitePhoto[] };
+      /** Dịch vụ khách chọn khi đặt đơn nhưng Điều phối bỏ khỏi báo giá — bắt buộc lý do. */
+      removedRequested: { name: string; reason: string }[];
+      adjustReason?: string;
+    }
   | { type: 'CUSTOMER_REQUEST_NEGOTIATION'; orderId: string; message: string }
   | { type: 'RESEND_QUOTE'; orderId: string; note: string }
   | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; names: string[] }
   | { type: 'CUSTOMER_SUBMIT_SURVEY_MEDIA'; orderId: string }
   | { type: 'CUSTOMER_UPDATE_SURVEY'; orderId: string; preference: SurveyPreference; date: string; slot: string }
   | { type: 'PAY_DEPOSIT'; orderId: string }
-  | { type: 'REPORT_FIELD_DISCREPANCY'; orderId: string }
-  | { type: 'CONFIRM_FIELD_ADJUSTMENT'; orderId: string }
+  | { type: 'STAFF_PROPOSE_SURCHARGE'; orderId: string; report: SurchargeReportDraft }
+  | { type: 'STAFF_CANCEL_SURCHARGE'; orderId: string; surchargeId: string }
+  /** Chốt & gửi khách (PROPOSED), hoặc gửi lại với số liệu mới khi khách đã từ chối (REJECTED_BY_CUSTOMER). */
+  | { type: 'COORD_SEND_SURCHARGE'; orderId: string; items: SurchargeDecision[]; note: string }
+  | { type: 'COORD_REJECT_SURCHARGE'; orderId: string; surchargeId: string; note: string }
+  | { type: 'COORD_WITHDRAW_SURCHARGE'; orderId: string; surchargeId: string; note: string }
+  /** Đồng ý một hoặc nhiều dòng cùng lúc ("Đồng ý tất cả"). */
+  | { type: 'CUSTOMER_ACCEPT_SURCHARGE'; orderId: string; surchargeIds: string[] }
+  | { type: 'CUSTOMER_REJECT_SURCHARGE'; orderId: string; surchargeId: string; note: string }
+  /** Công cụ demo: bật = thêm một đề xuất mẫu; tắt = hủy mọi khoản đang chặn. */
+  | { type: 'DEMO_SURCHARGE'; orderId: string; on: boolean }
   | { type: 'ADVANCE_FIELD_STAGE'; orderId: string; stage: FieldStage }
-  | { type: 'TOGGLE_EQUIPMENT'; orderId: string; itemId: string }
+  /** addedLines: dòng thủ kho thêm tay lúc xuất (đồ ngoài kế hoạch) — kế hoạch 0, vẫn phải quyết toán như dòng khác. */
+  | { type: 'ISSUE_MATERIALS'; orderId: string; issued: MaterialQuantities; addedLines: MaterialLine[] }
+  | { type: 'CONFIRM_MATERIALS_RECEIVED'; orderId: string; received: MaterialQuantities; note: string }
+  | { type: 'REPORT_MATERIAL_USAGE'; orderId: string; used: MaterialQuantities }
+  | { type: 'RETURN_MATERIALS'; orderId: string; returned: MaterialQuantities; note: string }
   | { type: 'START_WAIT_TIMER'; orderId: string }
   | { type: 'STOP_WAIT_TIMER'; orderId: string }
   | { type: 'TICK_WAIT_TIMERS' }
   | { type: 'REPORT_VEHICLE_INCIDENT'; orderId: string; kind: VehicleIncidentKind; note: string }
   | { type: 'TRANSFER_VEHICLE'; orderId: string; plateNumber: string; driverName: string; /** Xe cũ hỏng — sửa tới ngày nào (YYYY-MM-DD). */ repairUntil: string }
-  | { type: 'UPDATE_QUOTE_ITEMS'; orderId: string; patches: QuoteItemPatch[]; discountPercent: number; note: string }
-  | { type: 'ASSIGN_RESOURCES'; orderId: string; vehicleIds: string[]; crewIds: string[] }
+  /**
+   * Sửa báo giá khi đang chờ khách chốt: số lượng mọi dòng, đơn giá chỉ khoản ngoài bảng giá,
+   * bỏ dòng (removedIds), thêm dịch vụ bảng giá / khoản ngoài bảng giá (added). note bắt buộc.
+   */
+  | { type: 'UPDATE_QUOTE_ITEMS'; orderId: string; patches: QuoteItemPatch[]; removedIds: string[]; added: QuoteItem[]; discountPercent: number; note: string }
+  /** Trưởng nhóm suy ra từ crew (tài xế đầu tiên) — không truyền riêng. */
+  | { type: 'ASSIGN_RESOURCES'; orderId: string; vehicleIds: string[]; crew: CrewAssignment[]; materialPlan: MaterialLine[] }
+  /** Admin tạo / sửa hồ sơ nhân viên (kỹ năng, bằng lái, tình trạng). */
+  | { type: 'UPSERT_STAFF'; staff: StaffMember }
   | { type: 'RESCHEDULE'; orderId: string; newDate: string; newSlot: string }
   | { type: 'CANCEL_ORDER'; orderId: string; mode: CancelMode; reason: string }
   | { type: 'RUN_AUTO_CANCEL_CRON' }
   | { type: 'PAY_BALANCE'; orderId: string }
-  | { type: 'CONFIRM_WAREHOUSE_RETURN'; orderId: string }
+  | { type: 'CLOSE_ORDER'; orderId: string }
   | { type: 'CREATE_CLAIM'; orderId: string; title: string; description: string; requestedAmount: number }
   | { type: 'CLAIM_INVESTIGATE'; claimId: string }
   | { type: 'CLAIM_PROPOSE_PAYOUT'; claimId: string; amount: number; note: string }

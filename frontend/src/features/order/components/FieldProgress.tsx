@@ -1,8 +1,9 @@
 import { CheckCircle2, Lock, Radio, Siren, Timer } from 'lucide-react';
 import { Badge, Card, CardHeader, cx, type Tone } from '@/components/ui';
 import { FIELD_STAGE_LABEL, fieldStagesOf, isFieldStageDone, nextFieldStage } from '@/constants/order';
-import { STAFF_ROLE_LABEL } from '@/constants/resources';
+import { isSurchargeBlocking } from '@/constants/surcharge';
 import { agoText, fieldStageTimes, lastFieldUpdate } from '@/features/order/fieldProgress';
+import { TRIP_ROLE_LABEL } from '@/services/staff';
 import { useApp, useNow } from '@/services/store/AppStore';
 import type { Order } from '@/types';
 
@@ -35,7 +36,9 @@ export const FieldProgressCard = ({ order }: { order: Order }) => {
   const last = lastFieldUpdate(order);
   const vehicles = state.resources.vehicles.filter((v) => order.vehicleIds.includes(v.id));
   const crew = state.resources.staff.filter((s) => order.crewIds.includes(s.id));
-  const leader = crew.find((c) => c.role === 'TEAM_LEADER') ?? crew[0];
+  const leader = crew.find((c) => c.id === order.leaderId) ?? crew[0];
+  const leaderRole = order.crew.find((c) => c.staffId === leader?.id)?.role;
+  const surchargeLock = isSurchargeBlocking(order);
   const running = ['ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'].includes(order.status);
 
   return (
@@ -47,16 +50,16 @@ export const FieldProgressCard = ({ order }: { order: Order }) => {
         action={<FieldStageBadge order={order} />}
       />
 
-      {(order.flags.isVehicleIncident || order.flags.hasFieldDiscrepancyLock || order.status === 'PAUSED_WAITING_CUSTOMER') && (
+      {(order.flags.isVehicleIncident || surchargeLock || order.status === 'PAUSED_WAITING_CUSTOMER') && (
         <div className="mb-4 space-y-2">
           {order.flags.isVehicleIncident && (
             <p className="flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
               <Siren className="size-4 shrink-0" /> Xe báo sự cố — cần chuyển giao phương tiện (mục Sự cố).
             </p>
           )}
-          {order.flags.hasFieldDiscrepancyLock && (
+          {surchargeLock && (
             <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              <Lock className="size-4 shrink-0" /> Phát sinh hiện trường — đội xe bị khóa bước tiếp theo cho tới khi khách xác nhận.
+              <Lock className="size-4 shrink-0" /> Phát sinh hiện trường — đội xe bị khóa bước tiếp theo cho tới khi Điều phối duyệt và khách xác nhận.
             </p>
           )}
           {order.status === 'PAUSED_WAITING_CUSTOMER' && (
@@ -93,7 +96,7 @@ export const FieldProgressCard = ({ order }: { order: Order }) => {
         </div>
         <div>
           <p className="text-xs text-slate-500">Đội xe ({crew.length} người)</p>
-          <p className="truncate font-semibold">{leader ? `${leader.name} · ${STAFF_ROLE_LABEL[leader.role]}` : 'Chưa gán'}</p>
+          <p className="truncate font-semibold">{leader ? `${leader.name} · Trưởng nhóm${leaderRole ? ` (${TRIP_ROLE_LABEL[leaderRole].toLowerCase()})` : ''}` : 'Chưa gán'}</p>
         </div>
       </div>
     </Card>

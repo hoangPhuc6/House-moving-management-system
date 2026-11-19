@@ -1,26 +1,23 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import {
   CalendarClock,
   Camera,
-  CheckCircle2,
   ClipboardList,
   Footprints,
   type LucideIcon,
   Phone,
-  Sparkles,
   Truck,
   Undo2,
   UserCheck,
   Video,
 } from 'lucide-react';
-import { Alert, Button, cx, Field, Input, NumberStepper, Select } from '@/components/ui';
-import { CARTON_ORDER, CARTON_SIZES, maxLaborOf, qtyOf, setVehicleQty, totalVehicles, VEHICLE_CAPACITIES, VEHICLE_PRICING, vehicleLinesLabel } from '@/constants/pricing';
-import { hoursLabel } from '@/constants/resources';
-import { surveyInputFromOrder } from '@/features/coordinator/utils';
-import { QuoteBreakdownTable } from '@/features/order/components/QuoteBreakdownTable';
+import { Alert, Button, cx, Field, Input, Select } from '@/components/ui';
+import { QuoteForm } from '@/features/coordinator/components/QuoteForm';
+import { SitePhotoGallery } from '@/features/order/components/SitePhotoGallery';
+import { proposalParts } from '@/features/order/proposal';
 import { SurveyMediaGallery } from '@/features/order/components/SurveyMediaGallery';
 import { SurveyItemList } from '@/features/order/components/SurveyItemList';
-import { surveyItemsTotal } from '@/features/order/surveyItems';
+import { photosOutsideItems, surveyItemsTotal } from '@/features/order/surveyItems';
 import {
   appointmentLabel,
   isMediaSubmitted,
@@ -31,10 +28,10 @@ import {
 } from '@/features/order/surveyStage';
 import { parseCapacityTons } from '@/services/dispatch';
 import { downtimeLabel, downtimeOn, todayLocalISO } from '@/services/downtime';
-import { formatTime, formatVND } from '@/services/format';
-import { buildSurveyQuote, quoteSubtotal } from '@/services/pricing';
+import { formatTime } from '@/services/format';
+import { isActiveStaff, WORK_STATUS_META } from '@/services/staff';
 import { useApp } from '@/services/store/AppStore';
-import type { Order, SurveyInput } from '@/types';
+import type { Order } from '@/types';
 
 const KIND_ICON: Record<SurveyStageKind, LucideIcon> = {
   TRUCK_CONFIRM: Truck,
@@ -117,15 +114,18 @@ const AssignForm = ({ order, onDone }: { order: Order; onDone?: () => void }) =>
       <Field label="Người khảo sát *" error={tried && !surveyorId ? 'Chọn người khảo sát' : null} className="sm:w-64">
         <Select value={surveyorId} onChange={(e) => setSurveyorId(e.target.value)} className={cx(tried && !surveyorId && 'border-rose-400')}>
           <option value="">— Chọn nhân viên —</option>
-          {state.resources.staff.map((s) => {
-            // Ảnh khách gửi không có ngày hẹn → xét theo hôm nay.
-            const off = downtimeOn(state.resources.downtimes, 'STAFF', s.id, order.bookingDetails?.surveyDate || todayLocalISO());
-            return (
-              <option key={s.id} value={s.id} disabled={!!off}>
-                {s.name} ({s.code}){off ? ` — ${downtimeLabel(off)}` : ''}
-              </option>
-            );
-          })}
+          {state.resources.staff
+            .filter((s) => s.status !== 'RESIGNED')
+            .map((s) => {
+              // Ảnh khách gửi không có ngày hẹn → xét theo hôm nay.
+              const off = downtimeOn(state.resources.downtimes, 'STAFF', s.id, order.bookingDetails?.surveyDate || todayLocalISO());
+              const inactive = !isActiveStaff(s);
+              return (
+                <option key={s.id} value={s.id} disabled={!!off || inactive}>
+                  {s.name} ({s.code}){off ? ` — ${downtimeLabel(off)}` : inactive ? ` — ${WORK_STATUS_META[s.status].label.toLowerCase()}` : ''}
+                </option>
+              );
+            })}
         </Select>
       </Field>
       <Field label="Ghi chú cho người khảo sát" className="flex-1">
@@ -188,17 +188,7 @@ export const ReportSummary = ({ order }: { order: Order }) => {
   const r = order.surveyReport!;
   const p = r.proposal;
   const surveyor = state.resources.staff.find((x) => x.id === r.surveyorId);
-  const proposal = [
-    vehicleLinesLabel(p.vehicles),
-    p.estimatedHours > 0 ? `dự kiến ${hoursLabel(p.estimatedHours)}` : '',
-    `${p.workers} người bốc xếp`,
-    `${p.distanceKm} km`,
-    ...CARTON_ORDER.map((size) => (p.cartons[size] ? `${p.cartons[size]} ${CARTON_SIZES[size].label.toLowerCase()}` : '')),
-    p.tapeRolls ? `${p.tapeRolls} cuộn băng keo` : '',
-    p.peFilmRolls ? `${p.peFilmRolls} cuộn màng PE` : '',
-    p.floors ? `${p.floors} lầu thang bộ` : '',
-    p.alleyMeters ? `hẻm ${p.alleyMeters} m` : '',
-  ].filter(Boolean);
+  const proposal = proposalParts(p);
 
   return (
     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 text-sm">
@@ -218,124 +208,15 @@ export const ReportSummary = ({ order }: { order: Order }) => {
           <p className="whitespace-pre-line text-slate-800">{r.note || '—'}</p>
         </div>
       </div>
+      {photosOutsideItems(r).length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-semibold text-slate-500">Lối đi & chỗ đỗ xe · {photosOutsideItems(r).length} ảnh / video</p>
+          <SitePhotoGallery photos={photosOutsideItems(r)} />
+        </div>
+      )}
       <div>
         <p className="mb-1 text-xs font-semibold text-slate-500">Đề xuất nguồn lực</p>
         <p className="text-slate-800">{proposal.join(' · ')}</p>
-      </div>
-    </div>
-  );
-};
-
-/** Bước 3 — lập báo giá: điền sẵn theo đề xuất khảo sát (hoặc khai báo của khách với gói chỉ thuê xe). */
-const QuoteForm = ({ order, truckOnly }: { order: Order; truckOnly: boolean }) => {
-  const { dispatch } = useApp();
-  const initial = useMemo(() => surveyInputFromOrder(order), [order.id, order.surveyReport]);
-  const [s, setS] = useState<SurveyInput>(initial);
-  const set = <K extends keyof SurveyInput>(k: K, v: SurveyInput[K]) => setS((x) => ({ ...x, [k]: v }));
-  const items = useMemo(() => buildSurveyQuote(truckOnly ? { ...s, cartons: { S: 0, M: 0, L: 0 }, tapeRolls: 0, peFilmRolls: 0 } : s), [s, truckOnly]);
-  const maxLabor = maxLaborOf(s.vehicles);
-  const noVehicle = totalVehicles(s.vehicles) === 0;
-
-  type NumKey = 'distanceKm' | 'workers' | 'tapeRolls' | 'peFilmRolls' | 'floors' | 'alleyMeters' | 'estimatedHours';
-  const noHours = !(s.estimatedHours > 0);
-  const num = (k: NumKey, opts: { min?: number; max: number; step?: number; suffix?: string }) => ({
-    value: s[k],
-    input: <NumberStepper value={s[k]} onChange={(v) => set(k, v)} {...opts} />,
-  });
-
-  /** Mọi mục có thể chỉnh; chỉ hiện mục đang > 0, mục còn lại thêm bằng nút "+". */
-  const fields: { key: string; label: string; value: number; input: ReactNode; hint?: string }[] = [
-    { key: 'distanceKm', label: 'Quãng đường', ...num('distanceKm', { min: 1, max: 200, suffix: 'km' }) },
-    {
-      key: 'estimatedHours',
-      label: 'Thời gian dự kiến *',
-      ...num('estimatedHours', { min: 0, max: 24, step: 0.5, suffix: 'giờ' }),
-      hint: noHours ? 'Bắt buộc — xe & người bận trong khoảng này' : truckOnly ? 'Gợi ý theo quãng đường — xác nhận lại khi gọi khách' : 'Bốc xếp + di chuyển + dỡ',
-    },
-    ...VEHICLE_CAPACITIES.map((cap) => ({
-      key: `veh-${cap}`,
-      label: VEHICLE_PRICING[cap]!.label,
-      value: qtyOf(s.vehicles, cap),
-      input: <NumberStepper value={qtyOf(s.vehicles, cap)} onChange={(v) => set('vehicles', setVehicleQty(s.vehicles, cap, v))} max={5} suffix="xe" />,
-    })),
-    {
-      key: 'workers',
-      label: truckOnly ? 'Bốc vác thuê thêm' : 'Nhân viên bốc xếp',
-      ...num('workers', { min: 0, max: 12, suffix: 'người' }),
-      hint: truckOnly && s.workers > maxLabor ? `Vượt số chỗ trên xe (tối đa ${maxLabor} người cho các xe đã chọn)` : undefined,
-    },
-    ...(truckOnly
-      ? []
-      : [
-          ...CARTON_ORDER.map((size) => ({
-            key: `carton-${size}`,
-            label: `${CARTON_SIZES[size].label} ${CARTON_SIZES[size].dims}`,
-            value: s.cartons[size],
-            hint: CARTON_SIZES[size].use,
-            input: <NumberStepper value={s.cartons[size]} onChange={(v) => set('cartons', { ...s.cartons, [size]: v })} max={200} step={5} />,
-          })),
-          { key: 'tapeRolls', label: 'Băng keo', ...num('tapeRolls', { max: 50, suffix: 'cuộn' }) },
-          { key: 'peFilmRolls', label: 'Màng PE', ...num('peFilmRolls', { max: 20, suffix: 'cuộn' }) },
-        ]),
-    { key: 'floors', label: 'Số lầu (thang bộ)', ...num('floors', { max: 20 }) },
-    { key: 'alleyMeters', label: 'Độ sâu hẻm', ...num('alleyMeters', { max: 500, step: 50, suffix: 'm' }) },
-  ];
-  // Mục đang hiện: lúc mở form là các mục > 0; giảm về 0 vẫn giữ để không bị nhảy mất khi đang bấm.
-  // Thời gian dự kiến bắt buộc nên luôn hiện, kể cả khi chưa điền.
-  const [initialShown] = useState(() => fields.filter((f) => f.value > 0 || f.key === 'estimatedHours').map((f) => f.key));
-  const [shown, setShown] = useState<Set<string>>(() => new Set(initialShown));
-  const visible = fields.filter((f) => shown.has(f.key));
-  const hidden = fields.filter((f) => !shown.has(f.key));
-  const reset = () => {
-    setS(initial);
-    setShown(new Set(initialShown));
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">Lập báo giá</p>
-        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-          <Sparkles className="size-3.5" /> {truckOnly ? 'Điền sẵn theo khách khai báo' : 'Điền sẵn theo đề xuất khảo sát'}
-          <button type="button" className="font-semibold text-brand hover:underline" onClick={reset}>
-            Đặt lại
-          </button>
-        </span>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {visible.map((f) => (
-          <Field key={f.key} label={f.label} hint={f.hint}>
-            {f.input}
-          </Field>
-        ))}
-      </div>
-      {noVehicle && <p className="text-xs font-medium text-rose-600">Báo giá cần ít nhất một xe — thêm loại xe bên dưới.</p>}
-      {hidden.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500">Thêm mục:</span>
-          {hidden.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setShown((x) => new Set(x).add(f.key))}
-              className="h-8 rounded-full border border-dashed border-slate-300 px-2.5 text-xs font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
-            >
-              + {f.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <QuoteBreakdownTable items={items} reference={truckOnly ? (order.referenceQuote?.financialSummary.totalEstimated ?? null) : null} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
-        <div>
-          <p className="text-xs text-slate-500">Tổng gửi khách</p>
-          <p className="text-xl font-bold tabular-nums">{formatVND(quoteSubtotal(items))}</p>
-        </div>
-        <Button icon={CheckCircle2} disabled={noVehicle || noHours} onClick={() => dispatch({ type: 'SUBMIT_SURVEY', orderId: order.id, items, estimatedHours: s.estimatedHours })}>
-          Gửi báo giá cho khách
-        </Button>
       </div>
     </div>
   );
@@ -369,7 +250,7 @@ export const SurveyPanel = ({ order }: { order: Order }) => {
             Khách chọn: <b>{vehicle ?? 'chưa chọn xe'}</b> · <b>{d && d.laborCount > 0 ? `${d.laborCount} người bốc vác` : 'không thuê bốc vác'}</b>
           </span>
         </Alert>
-        <QuoteForm order={order} truckOnly />
+        <QuoteForm order={order} kind={kind} blocked={null} />
       </div>
     );
   }
@@ -392,7 +273,7 @@ export const SurveyPanel = ({ order }: { order: Order }) => {
               </div>
             </details>
           )}
-          <QuoteForm order={order} truckOnly={false} />
+          <QuoteForm order={order} kind={kind} blocked={null} proposal={order.surveyReport?.proposal ?? null} />
         </>
       )}
     </div>

@@ -16,7 +16,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Badge, Button, Card, cx, StatusBadge } from '@/components/ui';
+import { useNavigate } from 'react-router-dom';
 import { AUTO_CANCEL_MS, TELESALES_THRESHOLD_MS } from '@/constants/pricing';
+import { surchargesNeedingReview } from '@/constants/surcharge';
+import { ROUTES } from '@/routes/paths';
 import type { CoordTab } from '@/features/coordinator/types';
 import { AutoCancelCountdown } from '@/features/order/components/AutoCancelCountdown';
 import { coordinatorSurveyBadge, shortDate, SURVEY_STAGE_META, surveyPhaseOf, surveyStageOf, weekdayOf } from '@/features/order/surveyStage';
@@ -50,7 +53,8 @@ interface UrgentItem {
   level: 'danger' | 'warning';
   reason: string;
   action: string;
-  tab: CoordTab;
+  /** 'surcharge' mở trang Phát sinh hiện trường thay vì chi tiết đơn. */
+  tab: CoordTab | 'surcharge';
   rank: number;
 }
 
@@ -76,8 +80,9 @@ const urgencyOf = (o: Order, now: number): UrgentItem | null => {
   if (o.status === 'PAUSED_WAITING_CUSTOMER' || (o.flags.waitingMinutes > 30 && ['ASSIGNED', 'IN_TRANSIT'].includes(o.status))) {
     return { order: o, level: 'danger', reason: `Đội xe đang chờ khách${o.flags.waitingMinutes > 0 ? ` · ${o.flags.waitingMinutes} phút` : ''}`, action: 'Xem', tab: 'overview', rank: 1 };
   }
-  if (o.flags.hasFieldDiscrepancyLock) {
-    return { order: o, level: 'warning', reason: 'Phát sinh hiện trường — chờ khách duyệt báo giá điều chỉnh', action: 'Xem', tab: 'quote', rank: 2 };
+  const reviews = surchargesNeedingReview(o).length;
+  if (reviews > 0) {
+    return { order: o, level: 'danger', reason: `${reviews} khoản phát sinh hiện trường cần duyệt — đội xe đang tạm dừng`, action: 'Duyệt phát sinh', tab: 'surcharge', rank: 2 };
   }
   if (o.status === 'SURVEYED_PENDING_CONFIRM' && o.autoCancelDeadline) {
     const left = o.autoCancelDeadline - now;
@@ -186,6 +191,7 @@ const BucketDetail = ({ id, order }: { id: BucketId; order: Order }) => {
 /** Trang đầu của Điều phối: việc gấp trước, rồi việc theo từng bước quy trình. */
 export const TodoView = ({ onOpen, query }: { onOpen: (id: string, t: CoordTab) => void; query: string }) => {
   const { state } = useApp();
+  const navigate = useNavigate();
   const now = useNow(30_000);
   const today = localISO(now);
 
@@ -257,7 +263,7 @@ export const TodoView = ({ onOpen, query }: { onOpen: (id: string, t: CoordTab) 
                     <Phone className="size-4" /> {u.order.phone}
                   </a>
                 )}
-                <Button size="sm" variant={u.level === 'danger' ? 'primary' : 'dark'} onClick={() => onOpen(u.order.id, u.tab)}>
+                <Button size="sm" variant={u.level === 'danger' ? 'primary' : 'dark'} onClick={() => (u.tab === 'surcharge' ? navigate(ROUTES.coordinator.surcharge) : onOpen(u.order.id, u.tab))}>
                   {u.action === 'Gọi khách' ? 'Mở đơn' : u.action} <ArrowRight className="size-4" />
                 </Button>
               </li>

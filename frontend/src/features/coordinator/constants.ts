@@ -22,7 +22,8 @@ export const COLUMNS: { title: string; statuses: OrderStatus[]; accent: string }
     accent: "bg-blue-600",
   },
   {
-    title: "Chờ quyết toán",
+    // Đã bàn giao: chờ khách thanh toán và / hoặc chờ thu hồi vật tư (thẻ đơn ghi rõ từng việc).
+    title: "Bàn giao · quyết toán",
     statuses: ["PENDING_PAYMENT_OR_CLAIM"],
     accent: "bg-amber-600",
   },

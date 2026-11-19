@@ -1,11 +1,12 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarOff, CalendarRange, ChevronLeft, ChevronRight, Footprints, Truck, Users } from 'lucide-react';
 import { Badge, Button, Card, CardHeader, cx, Input, PageHeader, Select } from '@/components/ui';
-import { orderShift, STAFF_ROLE_LABEL } from '@/constants/resources';
+import { orderShift } from '@/constants/resources';
 import { DowntimeModal, type DowntimeSubject } from '@/features/coordinator/components/DowntimeModal';
 import type { OrderSection } from '@/features/coordinator/types';
 import { shortDate, weekdayOf } from '@/features/order/surveyStage';
 import { addDaysISO, DOWNTIME_REASON_META, downtimeLabel, downtimeOn, downtimeRangeLabel, localISO } from '@/services/downtime';
+import { SKILL_LABEL, SKILL_ORDER } from '@/services/staff';
 import { useApp, useNow } from '@/services/store/AppStore';
 import type { Order, ResourceDowntime } from '@/types';
 
@@ -298,7 +299,8 @@ export const ScheduleBoard = ({ onOpen }: { onOpen: (id: string, s?: OrderSectio
     v,
     blocks: moves.filter((m) => m.o.vehicleIds.includes(v.id)).map<Block>((m) => ({ order: m.o, range: m.range, kind: 'move', date: m.day })),
   }));
-  const staffRows = state.resources.staff.map((s) => ({
+  // Nhân viên đã nghỉ việc không còn trên bảng lịch.
+  const staffRows = state.resources.staff.filter((s) => s.status !== 'RESIGNED').map((s) => ({
     s,
     blocks: [
       ...moves.filter((m) => m.o.crewIds.includes(s.id)).map<Block>((m) => ({ order: m.o, range: m.range, kind: 'move', date: m.day })),
@@ -489,7 +491,7 @@ export const ScheduleBoard = ({ onOpen }: { onOpen: (id: string, s?: OrderSectio
                 blocks,
                 off: offOf('STAFF', s.id),
                 label: (
-                  <RowLabel title={s.name} sub={STAFF_ROLE_LABEL[s.role]} off={offInView('STAFF', s.id, staffSpan)} onClick={() => setSubject({ target: 'STAFF', id: s.id, name: s.name })} />
+                  <RowLabel title={s.name} sub={SKILL_ORDER.filter((k) => s.skills.includes(k)).map((k) => SKILL_LABEL[k]).join(', ')} off={offInView('STAFF', s.id, staffSpan)} onClick={() => setSubject({ target: 'STAFF', id: s.id, name: s.name })} />
                 ),
               })),
         )}

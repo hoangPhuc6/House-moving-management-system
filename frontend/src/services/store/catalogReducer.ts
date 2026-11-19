@@ -33,7 +33,8 @@ export const catalogReducer = (state: CatalogState, action: CatalogAction): Cata
       return { ...state, users: state.users.map((u) => (u.id === action.id ? { ...u, locked: !u.locked } : u)) };
     case 'ADD_USER':
       if (state.users.some((u) => u.email.toLowerCase() === action.user.email.toLowerCase())) return state;
-      return { ...state, users: [...state.users, { ...action.user, id: uid('u'), locked: false, emailVerified: false }] };
+      if (action.user.id && state.users.some((u) => u.id === action.user.id)) return state;
+      return { ...state, users: [...state.users, { ...action.user, id: action.user.id ?? uid('u'), locked: false, emailVerified: false }] };
     case 'ADD_INVENTORY_ITEM':
       return { ...state, inventory: [...state.inventory, { ...action.item, id: uid('inv') }] };
     case 'INVENTORY_TXN': {

@@ -11,6 +11,7 @@ import { defaultSectionOf, sectionsOf } from '@/features/coordinator/orderSectio
 import type { OrderSection } from '@/features/coordinator/types';
 import { coordinatorSurveyBadge, shortDate, surveyPhaseOf, weekdayOf } from '@/features/order/surveyStage';
 import { routeSummaryOf } from '@/features/order/route';
+import { settlementBadges } from '@/features/order/settlementStage';
 import { FieldStageBadge } from '@/features/order/components/FieldProgress';
 import { hasFieldProgress } from '@/features/order/fieldProgress';
 import { ROUTES } from '@/routes/paths';
@@ -61,6 +62,11 @@ export const CoordinatorOrderDetail = ({ order }: { order: Order }) => {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-2xl">#{order.id}</h1>
               <StatusBadge status={order.status} />
+              {settlementBadges(order)?.map((b) => (
+                <Badge key={b.label} tone={b.tone} dot>
+                  {b.label}
+                </Badge>
+              ))}
               {surveyBadge && <Badge tone={surveyBadge.tone}>{surveyBadge.label}</Badge>}
               {order.negotiation && <Badge tone="warning">Khách thương lượng</Badge>}
               {hasFieldProgress(order) && <FieldStageBadge order={order} />}

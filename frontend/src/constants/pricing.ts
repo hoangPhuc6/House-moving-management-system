@@ -11,6 +11,10 @@ export const DEPOSIT_AMOUNT = 500_000;
 export const AUTO_CANCEL_MS = 24 * 60 * 60 * 1000;
 
 export const TELESALES_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+/** Điều phối phải gửi báo giá trong 2 giờ sau khi NV hoàn tất khảo sát trực tiếp. */
+export const ONSITE_QUOTE_SLA_MS = 2 * 60 * 60 * 1000;
+/** Báo giá lệch quá 10% so với đề xuất của NV khảo sát → bắt buộc ghi lý do. */
+export const PROPOSAL_DEVIATION_LIMIT = 0.1;
 
 /** perTrip: giá chuyến đã gồm INCLUDED_KM đầu; perKm: cước mỗi km vượt; maxLabor: số người tối đa xe chở được. */
 export const VEHICLE_PRICING: Record<number, { label: string; perTrip: number; perKm: number; maxLabor: number }> = {
@@ -30,8 +34,10 @@ export const MIN_SURVEY_INPUT: SurveyInput = {
   cartons: { S: 0, M: 0, L: 0 },
   tapeRolls: 0,
   peFilmRolls: 0,
-  floors: 0,
-  alleyMeters: 0,
+  floorsFrom: 0,
+  floorsTo: 0,
+  alleyFrom: 0,
+  alleyTo: 0,
   estimatedHours: 0,
 };
 

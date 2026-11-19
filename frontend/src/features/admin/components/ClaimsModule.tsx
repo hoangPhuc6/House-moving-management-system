@@ -16,6 +16,8 @@ import {
 } from '@/components/ui';
 import { isTruckOnly, TRUCK_ONLY_CLAIM_SCOPE } from '@/constants/order';
 import { EvidenceTile } from '@/features/admin/components/EvidenceTile';
+import { AdminPeriodPicker, OutOfPeriodNotice } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
 import { CLAIM_STATUS } from '@/features/admin/constants';
 import { matches } from '@/features/admin/utils';
 import { formatVND } from '@/services/format';
@@ -155,12 +157,31 @@ const AdminDecision = ({ claim }: { claim: ClaimTicket }) => {
   );
 };
 
-export const ClaimsModule = ({ query, role = 'ADMIN' }: { query: string; role?: ClaimsRole }) => {
+/** Trang khiếu nại của Admin: lọc theo kỳ chọn chung (cần outlet context của AdminLayout). */
+export const AdminClaimsModule = ({ query }: { query: string }) => {
+  const { inPeriodTs } = useAdminPeriod();
+  return <ClaimsModule query={query} role="ADMIN" inPeriodTs={inPeriodTs} />;
+};
+
+export const ClaimsModule = ({
+  query,
+  role = 'ADMIN',
+  inPeriodTs,
+}: {
+  query: string;
+  role?: ClaimsRole;
+  /** Lọc theo kỳ (chỉ khu Admin) — bỏ trống để thấy mọi phiếu. */
+  inPeriodTs?: (t: number) => boolean;
+}) => {
   const { state } = useApp();
-  const visibleClaims = state.claims.filter((c) => matches(query, c.id, c.orderId, c.customerName, c.title));
+  // Admin lọc theo kỳ chọn chung (ngày khách gửi khiếu nại); Điều phối luôn thấy mọi phiếu cần xử lý.
+  const searched = state.claims.filter((c) => matches(query, c.id, c.orderId, c.customerName, c.title));
+  const visibleClaims = inPeriodTs ? searched.filter((c) => inPeriodTs(c.createdAt)) : searched;
+  const openOutside =
+    inPeriodTs ? searched.filter((c) => SECTIONS[role][0]!.statuses.includes(c.status) && !inPeriodTs(c.createdAt)).length : 0;
   const sections = SECTIONS[role].map((s) => ({ ...s, items: visibleClaims.filter((c) => s.statuses.includes(c.status)) }));
-  const [selectedId, setSelectedId] = useState(() => sections.find((s) => s.items.length)?.items[0]?.id ?? state.claims[0]?.id ?? '');
-  const claim = state.claims.find((c) => c.id === selectedId) ?? state.claims[0];
+  const [selectedId, setSelectedId] = useState(() => sections.find((s) => s.items.length)?.items[0]?.id ?? visibleClaims[0]?.id ?? '');
+  const claim = visibleClaims.find((c) => c.id === selectedId) ?? visibleClaims[0];
   const order = claim ? state.orders.find((o) => o.id === claim.orderId) : undefined;
   // Khiếu nại có thể đến trước khi đóng hồ sơ: khi đó doanh thu chưa khóa, hiển thị tổng hóa đơn hiện tại.
   const revenueLocked = order?.finalRevenue != null;
@@ -176,7 +197,9 @@ export const ClaimsModule = ({ query, role = 'ADMIN' }: { query: string; role?: 
             ? 'Điều phối đối chiếu và đề xuất mức bồi thường — Admin duyệt khoản chi. Doanh thu gốc của đơn không bị thay đổi.'
             : 'Đối chiếu ảnh đóng gói với ảnh khách gửi, rồi đề xuất mức bồi thường để Admin duyệt chi hoặc từ chối kèm lý do.'
         }
+        actions={inPeriodTs ? <AdminPeriodPicker /> : undefined}
       />
+      <OutOfPeriodNotice count={openOutside} what="khiếu nại chưa xử lý" />
       <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
         <div className="h-fit space-y-4">
           {sections.map((section) => (

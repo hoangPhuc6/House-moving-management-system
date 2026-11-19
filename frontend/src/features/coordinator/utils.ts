@@ -55,7 +55,9 @@ export const surveyInputFromOrder = (order: Order): SurveyInput => {
     // Không qua khảo sát → gợi ý thời gian theo quãng đường, Điều phối xác nhận lại khi gọi khách.
     input.estimatedHours = suggestTruckHours(input.distanceKm);
   }
-  input.floors = stairFloors(d.from) + stairFloors(d.to);
-  input.alleyMeters = alleyMeters(d.from) + alleyMeters(d.to);
+  input.floorsFrom = stairFloors(d.from);
+  input.floorsTo = stairFloors(d.to);
+  input.alleyFrom = alleyMeters(d.from);
+  input.alleyTo = alleyMeters(d.to);
   return input;
 };

@@ -26,10 +26,12 @@ export const ROUTES = {
     schedule: '/coordinator/schedule',
     incident: '/coordinator/incident',
     claims: '/coordinator/claims',
+    surcharge: '/coordinator/surcharge',
   },
   admin: {
     root: '/admin',
     dashboard: '/admin/dashboard',
+    orders: '/admin/orders',
     settlement: '/admin/settlement',
     payments: '/admin/payments',
     finance: '/admin/finance',

@@ -15,6 +15,7 @@ import {
 import { SectionTitle } from '@/features/customer/components/SectionTitle';
 import { isTruckOnly, TRUCK_ONLY_CLAIM_SCOPE } from '@/constants/order';
 import { CLAIM_PRESETS } from '@/features/customer/constants';
+import { isCustomerSettled } from '@/features/customer/utils';
 import { StickyActionBar } from '@/layouts/MobileShell';
 import { formatVND } from '@/services/format';
 import { canFileClaim, computeTotals } from '@/services/pricing';
@@ -40,7 +41,8 @@ export const PaymentSection = ({ order }: { order: Order }) => {
   const extras = totals.fieldAdjustments + totals.waitFee;
   const payable =
     order.status === "PENDING_PAYMENT_OR_CLAIM" && totals.remaining > 0;
-  const completed = order.status === "COMPLETED";
+  // Trả đủ là được đánh giá ngay — không chờ Admin đóng hồ sơ nội bộ.
+  const completed = isCustomerSettled(order);
   const claimable = canFileClaim(order);
   const claims = state.claims.filter((c) => c.orderId === order.id);
 

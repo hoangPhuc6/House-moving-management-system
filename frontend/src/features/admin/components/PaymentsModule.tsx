@@ -28,6 +28,8 @@ import {
   METHOD_LABEL,
   PAYMENT_STATUS_META,
 } from '@/features/admin/constants';
+import { AdminPeriodPicker, OutOfPeriodNotice } from '@/features/admin/components/PeriodPicker';
+import { useAdminPeriod } from '@/features/admin/hooks';
 import { formatTime, formatVND } from '@/services/format';
 import { computeTotals } from '@/services/pricing';
 import { useApp } from '@/services/store/AppStore';
@@ -55,7 +57,7 @@ export const PaymentsModule = ({ query }: { query: string }) => {
   };
 
   // Sổ giao dịch = giao dịch lưu riêng + giao dịch đã thanh toán trên đơn (chưa có bản ghi xác nhận thủ công).
-  const ledger: PaymentRecord[] = useMemo(() => {
+  const ledgerAll: PaymentRecord[] = useMemo(() => {
     const confirmed = new Set(catalog.payments.filter((p) => p.status === 'SUCCESS').map((p) => `${p.orderId}:${p.kind}`));
     const derived: PaymentRecord[] = state.orders.flatMap((o) => {
       const rows: PaymentRecord[] = [];
@@ -70,13 +72,18 @@ export const PaymentsModule = ({ query }: { query: string }) => {
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [catalog.payments, state.orders, query]);
 
-  const collected = state.orders.reduce((s, o) => s + o.depositPaid + o.balancePaid, 0);
-  const debtors = state.orders
+  // Lọc theo kỳ chọn chung: giao dịch theo ngày tạo, công nợ theo ngày chuyển của đơn.
+  const { inPeriod, inPeriodTs } = useAdminPeriod();
+  const ledger = ledgerAll.filter((p) => inPeriodTs(p.createdAt));
+  const collected = ledger.filter((p) => p.status === 'SUCCESS').reduce((s, p) => s + p.amount, 0);
+  const debtorsAll = state.orders
     .filter((o) => o.status !== 'CANCELLED_EXPIRED' && o.status !== 'COMPLETED' && o.depositPaid > 0)
     .map((o) => ({ o, t: computeTotals(o) }))
     .filter(({ t }) => t.remaining > 0);
+  const debtors = debtorsAll.filter(({ o }) => inPeriod(o.scheduledDate));
   const receivable = debtors.reduce((s, { t }) => s + t.remaining, 0);
-  const pending = catalog.payments.filter((p) => p.status === 'PENDING');
+  const pendingAll = catalog.payments.filter((p) => p.status === 'PENDING');
+  const pending = pendingAll.filter((p) => inPeriodTs(p.createdAt));
 
   const canConfirm = (p: PaymentRecord): string | null => {
     const o = state.orders.find((x) => x.id === p.orderId);
@@ -101,9 +108,15 @@ export const PaymentsModule = ({ query }: { query: string }) => {
 
   return (
     <>
-      <PageHeader eyebrow="Tài chính" title="Thanh toán & công nợ" subtitle="Đặt cọc và thanh toán cuối là hai giao dịch riêng. Giao dịch chỉ tính khi được xác nhận." />
+      <PageHeader
+        eyebrow="Tài chính"
+        title="Thanh toán & công nợ"
+        actions={<AdminPeriodPicker />}
+      />
+      <OutOfPeriodNotice count={pendingAll.length - pending.length} what="giao dịch chờ xác nhận" />
+      <OutOfPeriodNotice count={debtorsAll.length - debtors.length} what="đơn còn công nợ" />
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
-        <Stat label="Đã thu thành công" value={formatVND(collected)} icon={Wallet} tone="success" />
+        <Stat label="Đã thu thành công" value={formatVND(collected)} icon={Wallet} tone="success" hint="Giao dịch thành công trong kỳ" />
         <Stat label="Còn phải thu" value={formatVND(receivable)} icon={CircleDollarSign} tone="warning" hint={`${debtors.length} đơn còn nợ`} />
         <Stat label="Chờ xác nhận" value={pending.length} icon={Clock} tone="brand" hint="Không tính vào số đã thu" />
       </div>
@@ -111,7 +124,7 @@ export const PaymentsModule = ({ query }: { query: string }) => {
       <div className="grid gap-4 xl:grid-cols-[1fr_360px] xl:items-start">
         <div className="space-y-4">
           <Card padded={false}>
-            <div className="p-6 pb-4"><CardHeader title="Lịch sử giao dịch" icon={Banknote} /></div>
+            <div className="p-6 pb-4"><CardHeader title="Giao dịch trong kỳ" icon={Banknote} /></div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] text-sm">
                 <thead>
@@ -150,7 +163,7 @@ export const PaymentsModule = ({ query }: { query: string }) => {
           </Card>
 
           <Card padded={false}>
-            <div className="p-6 pb-4"><CardHeader title="Công nợ theo đơn" icon={CircleDollarSign} subtitle="Tổng phải trả − giao dịch thành công (đã gồm phụ phí được khách xác nhận)" /></div>
+            <div className="p-6 pb-4"><CardHeader title="Công nợ theo đơn" icon={CircleDollarSign} subtitle="Tổng phải trả − giao dịch thành công, đã gồm phụ phí khách xác nhận" /></div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
@@ -193,7 +206,7 @@ export const PaymentsModule = ({ query }: { query: string }) => {
             </Field>
             {totals && <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">Công nợ hiện tại: <b className="tabular-nums text-slate-800">{formatVND(totals.remaining)}</b></p>}
             <Button block icon={Plus} disabled={!order || amount <= 0 || !!amountError} onClick={submit}>Ghi nhận giao dịch</Button>
-            <Alert tone="info">QR/VietQR chỉ hiển thị thông tin chuyển khoản; hệ thống chưa tự đối soát nên cần Admin xác nhận.</Alert>
+            <Alert tone="info">VietQR chỉ hiển thị thông tin chuyển khoản; hệ thống chưa tự đối soát nên cần Admin xác nhận.</Alert>
           </div>
         </Card>
       </div>

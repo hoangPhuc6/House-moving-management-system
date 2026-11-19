@@ -20,6 +20,7 @@ import {
   isAddressComplete,
   needsSurveyAppointment,
 } from './constants';
+import { isQuoteExtraService, quoteItemFromService } from '@/services/pricing';
 
 export interface WizardDraft {
   from: AddressDetail;
@@ -298,6 +299,12 @@ export const useBookingWizard = () => {
       requestedServices,
       referenceQuote,
       details,
+      // Gói chỉ thuê xe không khảo sát — báo giá chính thức lập tự động khi tạo đơn, kèm dịch vụ khách chọn.
+      extraQuoteItems: fullPackage
+        ? undefined
+        : activeServices
+            .filter((s) => isQuoteExtraService(s) && requestedServices.includes(s.name))
+            .map((s) => quoteItemFromService(s, 1, 'Bạn chọn khi đặt xe · theo bảng giá')),
     };
   };
 

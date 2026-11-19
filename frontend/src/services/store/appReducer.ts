@@ -1,13 +1,38 @@
+import { createInitialCatalog } from '@/constants/catalog';
 import { FIELD_STAGE_LOG_ACTION, FIELD_STAGE_LOG_LABEL, FIELD_STAGE_ORDER, isTruckOnly, nextFieldStage, STATUS_META } from '@/constants/order';
 import { AUTO_CANCEL_MS, DEPOSIT_AMOUNT, RESCHEDULE_LOCK_HOURS, totalVehicles, vehicleLinesLabel } from '@/constants/pricing';
 import { hoursLabel, orderShift, PLATE_REGEX, VEHICLE_INCIDENT_KINDS } from '@/constants/resources';
-import { getAssignmentRequirement, isDriverRole, validateAssignment } from '@/services/dispatch';
+import { isSurchargeBlocking, SURCHARGE_BLOCKING, SURCHARGE_TYPE_META, surchargeAmount, sumSurcharges, systemUnitPrice } from '@/constants/surcharge';
+import { getAssignmentRequirement, validateAssignment } from '@/services/dispatch';
+import {
+  crewIdsOf,
+  describeCrew,
+  driveBlockReason,
+  isActiveStaff,
+  leaderOf,
+  staffChangeBlocker,
+  validateCrew,
+  validateStaffProfile,
+  WORK_STATUS_META,
+} from '@/services/staff';
 import { formatVND, uid } from '@/services/format';
+import {
+  buildMaterialPlan,
+  discrepancyOf,
+  emptyMaterialSlip,
+  hasMaterialsOutside,
+  usedOf,
+  validateIssue,
+  validateReceive,
+  validateReturn,
+  validateUsage,
+  withAddedLines,
+} from '@/services/materials';
 import { canCloseOrder, canFileClaim, computeTotals, selectSettlement } from '@/services/pricing';
 import {
   audit,
-  fieldAdjustmentItem,
   findOrder,
+  findSurcharge,
   nextOrderId,
   patchOrder,
   releaseVehicle,
@@ -17,7 +42,7 @@ import {
   withLog,
 } from '@/services/store/helpers';
 import { createInitialState } from '@/services/store/initialState';
-import { appointmentLabel, isMediaSubmitted, SURVEY_STAGE_META, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
+import { appointmentLabel, isMediaSubmitted, missingVideoPhotos, SURVEY_STAGE_META, type SurveyStageKind, surveyStageOf } from '@/features/order/surveyStage';
 import { cleanSurveyItems } from '@/features/order/surveyItems';
 import { addDaysISO, DOWNTIME_REASON_META, downtimeLabel, downtimeOn, downtimeRangeLabel, todayLocalISO } from '@/services/downtime';
 import type {
@@ -26,12 +51,77 @@ import type {
   AuditLogEntry,
   ClaimTicket,
   FieldStage,
+  MaterialLine,
+  MaterialSlip,
+  MaterialSlipStatus,
   Order,
   OrderStatus,
+  QuoteItem,
+  Surcharge,
+  SurchargeType,
+  SurveyRecord,
   SurveyMethod,
   ToastTone,
   Vehicle,
 } from '@/types';
+
+/** Lệnh đang thực hiện — được báo phát sinh hiện trường. */
+const SURCHARGE_OPEN_STATUSES: OrderStatus[] = ['ASSIGNED', 'IN_TRANSIT', 'PAUSED_WAITING_CUSTOMER'];
+
+/**
+ * Tự đóng hồ sơ khi đủ điều kiện (đã bàn giao, công nợ = 0, vật tư đã quyết toán) — không bắt đơn chờ Admin bấm tay.
+ * Gọi sau mọi thao tác có thể làm đơn đủ điều kiện: khách thanh toán, kho kiểm nhận vật tư.
+ */
+const autoCloseIfReady = (state: AppState, orderId: string): { state: AppState; closed: boolean } => {
+  const o = findOrder(state, orderId);
+  if (!o || o.status !== 'PENDING_PAYMENT_OR_CLAIM' || !canCloseOrder(selectSettlement(o))) return { state, closed: false };
+  const revenue = computeTotals(o).grandTotal;
+  const next = patchOrder(state, orderId, (ord) =>
+    withLog(
+      { ...ord, status: 'COMPLETED', finalRevenue: revenue },
+      audit('SYSTEM', 'Tự động đóng hồ sơ', `Khách đã thanh toán đủ & vật tư đã quyết toán — doanh thu ${formatVND(revenue)} được khóa.`),
+    ),
+  );
+  return { state: next, closed: true };
+};
+
+const SLIP_RANK: MaterialSlipStatus[] =['NONE', 'DRAFT', 'ISSUED', 'RECEIVED', 'USAGE_REPORTED', 'RETURNED'];
+
+/** Mô tả ngắn các dòng phiếu cho nhật ký, VD: "Thùng carton 20 thùng, Xe đẩy hàng 1 chiếc". */
+const describeLines = (lines: MaterialLine[], qty: (l: MaterialLine) => number): string =>
+  lines
+    .filter((l) => qty(l) > 0)
+    .map((l) => `${l.name} ${qty(l)} ${l.unit}`)
+    .join(', ') || 'không có dòng nào';
+
+/**
+ * Chế độ demo (JUMP_STATUS): dựng phiếu vật tư khớp trạng thái đích, KHÔNG đụng tồn kho thật.
+ * Chỉ tiến phiếu lên, không lùi — phiếu đã đi xa hơn trạng thái đích thì giữ nguyên.
+ */
+const simulateMaterials = (o: Order, status: OrderStatus): MaterialSlip => {
+  if (status === 'CANCELLED_EXPIRED' || statusIndex(status) < statusIndex('ASSIGNED')) return o.materials;
+  const lines = o.materials.lines.length
+    ? o.materials.lines
+    : buildMaterialPlan(o.quoteItems, createInitialCatalog().inventory);
+  if (lines.length === 0) return emptyMaterialSlip();
+  const target: MaterialSlipStatus =
+    status === 'ASSIGNED' ? 'DRAFT' : status === 'COMPLETED' ? 'RETURNED' : 'RECEIVED';
+  if (SLIP_RANK.indexOf(o.materials.status) >= SLIP_RANK.indexOf(target)) return o.materials;
+  const now = Date.now();
+  if (target === 'DRAFT') return { ...emptyMaterialSlip(), status: 'DRAFT', lines };
+  const held = lines.map((l) => ({ ...l, issued: l.planned, received: l.planned }));
+  if (target === 'RECEIVED') return { ...o.materials, status: 'RECEIVED', lines: held, issuedAt: now, receivedAt: now };
+  return {
+    ...o.materials,
+    status: 'RETURNED',
+    lines: held.map((l) => ({ ...l, used: l.kind === 'TOOL' ? 0 : l.planned, returned: l.kind === 'TOOL' ? l.planned : 0, lost: 0 })),
+    issuedAt: now,
+    receivedAt: now,
+    usageReportedAt: now,
+    returnedAt: now,
+    resolutionNote: 'Mô phỏng: quyết toán đủ.',
+  };
+};
 
 /** Phương thức ghi nhận vào báo giá theo hình thức khảo sát của đơn. */
 const SURVEY_METHOD_OF: Record<SurveyStageKind, SurveyMethod> = {
@@ -46,33 +136,13 @@ const patchClaim = (state: AppState, claimId: string, patch: Partial<ClaimTicket
   return message ? toast(next, tone, message) : next;
 };
 
-/**
- * Step 7 Hard-Lock: đủ 2 điều kiện (công nợ = 0đ, đã trả dụng cụ về kho) thì tự đóng hồ sơ và khóa doanh thu —
- * không cần ai bấm. Gọi sau mỗi thao tác có thể làm thỏa điều kiện cuối cùng.
- */
-const closeIfSettled = (state: AppState, orderId: string): AppState => {
-  const o = findOrder(state, orderId);
-  if (!o || o.status !== 'PENDING_PAYMENT_OR_CLAIM' || !canCloseOrder(selectSettlement(o))) return state;
-  const revenue = computeTotals(o).grandTotal;
-  const next = patchOrder(state, orderId, (ord) =>
-    withLog({ ...ord, status: 'COMPLETED', finalRevenue: revenue }, audit('SYSTEM', 'Tự động đóng hồ sơ', `Đã thu đủ & trả dụng cụ về kho. Doanh thu ${formatVND(revenue)} được khóa.`)),
-  );
-  return toast(next, 'success', `${orderId} đã hoàn tất — doanh thu ${formatVND(revenue)} được khóa.`);
-};
-
 export const appReducer = (state: AppState, action: AppAction): AppState => {
   switch (action.type) {
     case 'SET_ACTIVE_ORDER':
       return { ...state, activeOrderId: action.orderId };
 
     case 'SET_FLAGS': {
-      return patchOrder(state, action.orderId, (o) => {
-        const flags = { ...o.flags, ...action.patch };
-        let pendingAdjustment = o.pendingAdjustment;
-        if (action.patch.hasFieldDiscrepancyLock === true && !pendingAdjustment) pendingAdjustment = fieldAdjustmentItem();
-        if (action.patch.hasFieldDiscrepancyLock === false) pendingAdjustment = null;
-        return { ...o, flags, pendingAdjustment };
-      });
+      return patchOrder(state, action.orderId, (o) => ({ ...o, flags: { ...o.flags, ...action.patch } }));
     }
 
     case 'JUMP_STATUS': {
@@ -87,7 +157,14 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         if (idx >= statusIndex('ASSIGNED') && action.status !== 'CANCELLED_EXPIRED' && !updated.vehicleId) {
           updated.vehicleId = 'veh-1';
           updated.vehicleIds = ['veh-1'];
-          updated.crewIds = ['st-1', 'st-2', 'st-3', 'st-4'];
+          // Đội mẫu: st-1 lái xe kiêm trưởng nhóm, st-3 / st-4 bốc xếp.
+          updated.crew = [
+            { staffId: 'st-1', role: 'DRIVER', vehicleId: 'veh-1' },
+            { staffId: 'st-3', role: 'LOADER', vehicleId: null },
+            { staffId: 'st-4', role: 'LOADER', vehicleId: null },
+          ];
+          updated.leaderId = 'st-1';
+          updated.crewIds = crewIdsOf(updated.crew);
         }
         const stageFor: Partial<Record<OrderStatus, FieldStage>> = {
           NEW_PENDING_SURVEY: 'NOT_STARTED',
@@ -100,8 +177,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
           COMPLETED: 'HANDED_OVER',
         };
         updated.fieldStage = stageFor[action.status] ?? updated.fieldStage;
+        updated.materials = simulateMaterials(updated, action.status);
         if (action.status === 'COMPLETED') {
-          updated.isWarehouseReturned = true;
           updated.balancePaid = Math.max(0, computeTotals(updated).grandTotal - updated.depositPaid);
           updated.finalRevenue = computeTotals(updated).grandTotal;
         }
@@ -146,19 +223,21 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         surveyMethod: null,
         quoteItems: [],
         discountPercent: 0,
-        pendingAdjustment: null,
+        surcharges: [],
+        surveyRecord: null,
         depositRequired: DEPOSIT_AMOUNT,
         depositPaid: 0,
         balancePaid: 0,
-        // Gói chỉ thuê xe không xuất dụng cụ / vật tư → không có gì phải trả kho.
-        isWarehouseReturned: action.input.details?.serviceMode === 'TRUCK_ONLY',
+        // Gói chỉ thuê xe: phiếu rỗng → coi như đã quyết toán vật tư (isMaterialsSettled).
+        materials: emptyMaterialSlip(),
         finalRevenue: null,
-        flags: { hasFieldDiscrepancyLock: false, isVehicleIncident: false, waitingMinutes: 0, hoursUntilDeparture: 72 },
+        flags: { isVehicleIncident: false, waitingMinutes: 0, hoursUntilDeparture: 72 },
         fieldStage: 'NOT_STARTED',
         vehicleId: null,
         vehicleIds: [],
         crewIds: [],
-        equipment: [],
+        crew: [],
+        leaderId: null,
         auditLog: [audit('CUSTOMER', 'Tạo yêu cầu vận chuyển', `Khách gửi yêu cầu: ${action.input.items.length} món đồ, ${action.input.requestedServices.length} dịch vụ, ${action.input.photoNames.length} ảnh.`)],
         autoCancelDeadline: null,
         depositReservedUntil: null,
@@ -175,6 +254,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (o.surveyReport) return toast(state, 'info', `${o.id} đã có kết quả khảo sát.`);
       const surveyor = state.resources.staff.find((s) => s.id === action.surveyorId);
       if (!surveyor) return toast(state, 'warning', 'Cần chọn người khảo sát.');
+      if (!isActiveStaff(surveyor)) return toast(state, 'warning', `${surveyor.name} đang ${WORK_STATUS_META[surveyor.status].label.toLowerCase()}, hãy chọn người khác.`);
       const surveyDay = o.bookingDetails?.surveyDate || todayLocalISO();
       const surveyorOff = downtimeOn(state.resources.downtimes, 'STAFF', surveyor.id, surveyDay);
       if (surveyorOff) return toast(state, 'warning', `${surveyor.name}: ${downtimeLabel(surveyorOff).toLowerCase()} — hãy chọn người khác.`);
@@ -223,13 +303,14 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
               surveyorId: ord.surveyAssignment!.surveyorId,
               items: cleanSurveyItems(action.items),
               note: action.note.trim(),
+              photos: action.photos,
               proposal: p,
             },
           },
           audit(
             'STAFF',
             'Gửi kết quả khảo sát',
-            `${surveyor?.name ?? 'Người khảo sát'} đề xuất ${vehicleLinesLabel(p.vehicles)}, ${p.workers} người, ${p.distanceKm} km.`,
+            `${surveyor?.name ?? 'Người khảo sát'} đề xuất ${vehicleLinesLabel(p.vehicles)}, ${p.workers} người, ${p.distanceKm} km${action.photos.length ? `, ${action.photos.length} ảnh hiện trường` : ''}.`,
           ),
         ),
       );
@@ -281,19 +362,49 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const o = findOrder(state, action.orderId);
       if (!o || o.status !== 'NEW_PENDING_SURVEY') return toast(state, 'warning', 'Đơn không còn ở trạng thái chờ khảo sát.');
       const kind = surveyStageOf(o);
-      if (kind !== 'TRUCK_CONFIRM' && !o.surveyReport) return toast(state, 'warning', 'Chưa có kết quả khảo sát — chờ người khảo sát gửi về rồi mới lập báo giá.');
+      const report = o.surveyReport;
+      if (kind !== 'TRUCK_CONFIRM' && !report) return toast(state, 'warning', 'Chưa có kết quả khảo sát — chờ người khảo sát gửi về rồi mới lập báo giá.');
       if (!(action.estimatedHours > 0)) return toast(state, 'warning', 'Ghi tổng thời gian dự kiến của chuyến để biết xe & người bận bao lâu.');
+      const evidenceNote = action.evidence.note.trim();
+      if (kind === 'VIDEO_CALL') {
+        // Cuộc gọi không để lại dấu vết → cần ảnh (người khảo sát đính kèm, Điều phối bổ sung, hoặc khách đã gửi).
+        const missing = missingVideoPhotos([...(report?.photos ?? []), ...action.evidence.photos]);
+        if (missing && !isMediaSubmitted(o)) return toast(state, 'warning', `${missing} Hoặc yêu cầu khách gửi bổ sung ảnh.`);
+      }
+      if (action.removedRequested.some((r) => !r.reason.trim())) return toast(state, 'warning', 'Ghi lý do khi bỏ dịch vụ khách đã chọn lúc đặt đơn.');
+      const offCatalog = action.items.filter((i) => i.offCatalog);
+      if (offCatalog.some((i) => !i.note?.trim() || i.unitPrice <= 0 || !i.name.trim())) return toast(state, 'warning', 'Khoản ngoài bảng giá cần tên, đơn giá và lý do.');
       const method = SURVEY_METHOD_OF[kind];
+      const adjustReason = action.adjustReason?.trim();
+      const surveyRecord: SurveyRecord = {
+        method,
+        baseline: action.input,
+        // Ghi chú & ảnh của người khảo sát + phần Điều phối bổ sung khi lập báo giá.
+        note: [report?.note ?? '', evidenceNote].filter(Boolean).join(' — '),
+        photos: [...(report?.photos ?? []), ...action.evidence.photos],
+        recordedAt: Date.now(),
+      };
+      const extraLog = [
+        ...action.removedRequested.map((r) => `Bỏ dịch vụ khách chọn "${r.name}": ${r.reason.trim()}`),
+        ...offCatalog.map((i) => `Ngoài bảng giá "${i.name}" ${i.quantity} × ${formatVND(i.unitPrice)}: ${i.note}`),
+      ];
       const methodLabel: Record<SurveyMethod, string> = {
-        ON_SITE: 'Khảo sát trực tiếp',
-        VIDEO_CALL: 'Khảo sát qua video call',
+        ON_SITE: `Khảo sát trực tiếp (${o.surveyReport?.photos.length ?? 0} ảnh hiện trường)`,
+        VIDEO_CALL: `Khảo sát qua video call (${(o.surveyReport?.photos.length ?? 0) + action.evidence.photos.length} ảnh)`,
         TRUCK_CONFIRM: 'Xác nhận xe qua điện thoại (chỉ thuê xe)',
         PHOTO: `Khảo sát qua ${o.customerPhotos.length} ảnh / video khách gửi`,
       };
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
-          { ...ord, quoteItems: action.items, estimatedHours: action.estimatedHours, surveyMethod: method, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
-          audit('COORDINATOR', 'Gửi báo giá', `${methodLabel[method]} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}, dự kiến ${hoursLabel(action.estimatedHours)}.`),
+          { ...ord, quoteItems: action.items, estimatedHours: action.estimatedHours, surveyMethod: method, surveyRecord, status: 'SURVEYED_PENDING_CONFIRM', autoCancelDeadline: Date.now() + AUTO_CANCEL_MS },
+          audit(
+            'COORDINATOR',
+            'Gửi báo giá',
+            `${methodLabel[method]} — ${action.items.length} hạng mục, tổng ${formatVND(action.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}, dự kiến ${hoursLabel(action.estimatedHours)}.` +
+              (surveyRecord.photos.length > 0 ? ` ${surveyRecord.photos.length} ảnh làm căn cứ.` : '') +
+              (adjustReason ? ` Điều chỉnh so với đề xuất người khảo sát: ${adjustReason}.` : '') +
+              (extraLog.length > 0 ? ` ${extraLog.join('; ')}.` : ''),
+          ),
         ),
       );
       return toast(next, 'success', `Đã gửi báo giá cho ${action.orderId}. Bộ đếm tự hủy 24h bắt đầu chạy.`);
@@ -336,27 +447,222 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       return toast(next, 'success', `Đã nhận cọc ${formatVND(o.depositRequired)}. Đơn chuyển sang Điều phối.`);
     }
 
-    case 'REPORT_FIELD_DISCREPANCY': {
-      const next = patchOrder(state, action.orderId, (o) =>
-        withLog(
-          { ...o, flags: { ...o.flags, hasFieldDiscrepancyLock: true }, pendingAdjustment: o.pendingAdjustment ?? fieldAdjustmentItem() },
-          audit('STAFF', 'Báo cáo sai lệch hiện trường (Mã 1.1.1)', 'Hẻm sâu 200m (khảo sát ghi 100m) + phát sinh tháo lắp tủ gỗ. Đề xuất +350.000đ.'),
-        ),
-      );
-      return toast(next, 'warning', 'Đã khóa luồng vận chuyển. Chờ khách xác nhận báo giá điều chỉnh.');
+    case 'STAFF_PROPOSE_SURCHARGE': {
+      const o = findOrder(state, action.orderId);
+      if (!o || !SURCHARGE_OPEN_STATUSES.includes(o.status) || o.fieldStage === 'HANDED_OVER') return toast(state, 'warning', 'Chỉ báo sai lệch khi lệnh đang thực hiện và chưa bàn giao.');
+      const { report } = action;
+      if (report.lines.length === 0) return toast(state, 'warning', 'Thêm ít nhất 1 dòng sai lệch.');
+      const reportId = uid('rp');
+      const now = Date.now();
+      const lines: Surcharge[] = [];
+      for (const [i, d] of report.lines.entries()) {
+        const label = `Dòng ${i + 1} (${SURCHARGE_TYPE_META[d.type].label})`;
+        if (!d.actual.trim()) return toast(state, 'warning', `${label}: ghi rõ thực tế tại hiện trường.`);
+        if (!d.description.trim()) return toast(state, 'warning', `${label}: mô tả sai lệch.`);
+        // Mỗi dòng có thể bị bác / từ chối riêng nên phải có bằng chứng riêng.
+        if (d.photos.length === 0) return toast(state, 'warning', `${label}: cần ít nhất 1 ảnh bằng chứng.`);
+        if (d.quantity < 1) return toast(state, 'warning', `${label}: số lượng chênh lệch phải lớn hơn 0.`);
+        // Loại hệ thống tự tính: không dùng đơn giá phía NV gửi lên.
+        const unitPrice = SURCHARGE_TYPE_META[d.type].mode === 'SYSTEM' ? systemUnitPrice(d.type, o, state.resources.vehicles) : d.unitPrice;
+        if (unitPrice <= 0) return toast(state, 'warning', `${label}: chưa có đơn giá.`);
+        lines.push({
+          ...d,
+          id: uid('sc'),
+          reportId,
+          // Ghi chú chung chỉ có nghĩa khi báo nhiều dòng.
+          reportNote: report.lines.length > 1 ? report.note.trim() : '',
+          surveyed: d.surveyed.trim(),
+          actual: d.actual.trim(),
+          description: d.description.trim(),
+          unitPrice,
+          proposedQuantity: d.quantity,
+          proposedUnitPrice: unitPrice,
+          status: 'PROPOSED',
+          proposedAt: now,
+          reviewedAt: null,
+          reviewNote: '',
+          respondedAt: null,
+          customerNote: '',
+        });
+      }
+      const next = patchOrder(state, action.orderId, (ord) => ({ ...ord, surcharges: [...ord.surcharges, ...lines] }));
+      return toast(next, 'warning', `Đã gửi ${lines.length} dòng sai lệch cho Điều phối duyệt. Tạm khóa bước bắt đầu làm / di chuyển.`);
     }
 
-    case 'CONFIRM_FIELD_ADJUSTMENT': {
+    case 'STAFF_CANCEL_SURCHARGE': {
+      const s = findSurcharge(state, action.orderId, action.surchargeId);
+      if (s?.status !== 'PROPOSED') return toast(state, 'warning', 'Chỉ rút được đề xuất chưa được Điều phối xử lý.');
+      const next = patchOrder(state, action.orderId, (ord) => ({
+        ...ord,
+        surcharges: ord.surcharges.map((x) => (x.id === s.id ? { ...x, status: 'CANCELLED' as const } : x)),
+      }));
+      return toast(next, 'info', `Đã rút đề xuất "${s.name}".`);
+    }
+
+    case 'COORD_SEND_SURCHARGE': {
       const o = findOrder(state, action.orderId);
-      if (!o?.pendingAdjustment) return state;
-      const adj = o.pendingAdjustment;
+      if (!o || action.items.length === 0) return state;
+      const note = action.note.trim();
+      const now = Date.now();
+      const sent: Surcharge[] = [];
+      const cancelledIds = new Set<string>();
+      const logLines: string[] = [];
+      for (const it of action.items) {
+        const s = o.surcharges.find((x) => x.id === it.surchargeId);
+        if (!s || (s.status !== 'PROPOSED' && s.status !== 'REJECTED_BY_CUSTOMER')) return toast(state, 'warning', 'Có dòng phát sinh không còn chờ Điều phối xử lý.');
+        if (it.quantity < 1) return toast(state, 'warning', `${s.name}: số lượng phải lớn hơn 0.`);
+        // Chỉ loại nhập tay mới được sửa đơn giá; loại bảng giá chỉ được đổi sang dịch vụ khác cùng loại (giữ giá bảng giá).
+        const mode = SURCHARGE_TYPE_META[s.type].mode;
+        const swap = mode === 'CATALOG' && it.service && it.service.name !== s.name ? it.service : null;
+        const unitPrice = mode === 'MANUAL' ? it.unitPrice : (swap?.unitPrice ?? s.unitPrice);
+        if (unitPrice <= 0) return toast(state, 'warning', `${s.name}: đơn giá phải lớn hơn 0.`);
+        const changed = it.quantity !== s.proposedQuantity || unitPrice !== s.proposedUnitPrice;
+        const line: Surcharge = {
+          ...s,
+          name: swap?.name ?? s.name,
+          unit: swap?.unit ?? s.unit,
+          quantity: it.quantity,
+          unitPrice,
+          status: 'WAITING_CUSTOMER',
+          reviewedAt: now,
+          reviewNote: note,
+        };
+        if (s.status === 'REJECTED_BY_CUSTOMER') {
+          // Gửi lại sau khi khách từ chối: dòng cũ hủy, tạo dòng mới để giữ lịch sử thương lượng.
+          cancelledIds.add(s.id);
+          sent.push({ ...line, id: uid('sc'), respondedAt: null, customerNote: '' });
+        } else {
+          sent.push(line);
+        }
+        logLines.push(
+          `${line.name} (${s.surveyed || 'khảo sát'} → ${s.actual}): ${it.quantity} ${line.unit} × ${formatVND(unitPrice)}` +
+            (swap ? ` [NV chọn "${s.name}" → Điều phối đổi dịch vụ]` : '') +
+            (changed ? ` [NV đề xuất ${s.proposedQuantity} × ${formatVND(s.proposedUnitPrice)}]` : ''),
+        );
+      }
+      const total = formatVND(sumSurcharges(sent));
+      const resend = cancelledIds.size > 0;
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog(
-          { ...ord, quoteItems: [...ord.quoteItems, adj], pendingAdjustment: null, flags: { ...ord.flags, hasFieldDiscrepancyLock: false } },
-          audit('CUSTOMER', 'Xác nhận báo giá điều chỉnh', `${adj.name}: +${formatVND(adj.unitPrice)}. Mở khóa luồng vận chuyển.`),
+          {
+            ...ord,
+            surcharges: [
+              ...ord.surcharges.map((x) => {
+                if (cancelledIds.has(x.id)) return { ...x, status: 'CANCELLED' as const, reviewedAt: now };
+                return sent.find((y) => y.id === x.id) ?? x;
+              }),
+              ...sent.filter((y) => !ord.surcharges.some((x) => x.id === y.id)),
+            ],
+          },
+          audit(
+            'COORDINATOR',
+            resend ? 'Gửi lại phát sinh hiện trường' : 'Chốt phát sinh hiện trường',
+            `${logLines.join('; ')}. Tổng ${total}.${note ? ` Ghi chú: ${note}.` : ''} Gửi khách xác nhận.`,
+          ),
         ),
       );
-      return toast(next, 'success', 'Khách đã xác nhận. Đội xe được phép bắt đầu vận chuyển.');
+      return toast(next, 'success', `Đã gửi khách xác nhận ${sent.length} dòng phát sinh, tổng ${total}.`);
+    }
+
+    case 'COORD_REJECT_SURCHARGE': {
+      const s = findSurcharge(state, action.orderId, action.surchargeId);
+      if (s?.status !== 'PROPOSED') return toast(state, 'warning', 'Chỉ bác được đề xuất đang chờ duyệt.');
+      const note = action.note.trim();
+      if (!note) return toast(state, 'warning', 'Bắt buộc ghi lý do bác đề xuất để nhân viên nắm.');
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, surcharges: ord.surcharges.map((x) => (x.id === s.id ? { ...x, status: 'REJECTED' as const, reviewedAt: Date.now(), reviewNote: note } : x)) },
+          audit('COORDINATOR', 'Bác đề xuất phát sinh hiện trường', `${s.name} (${s.surveyed || 'khảo sát'} → ${s.actual}). Lý do: ${note}`),
+        ),
+      );
+      return toast(next, 'info', `Đã bác dòng "${s.name}".`);
+    }
+
+    case 'COORD_WITHDRAW_SURCHARGE': {
+      const s = findSurcharge(state, action.orderId, action.surchargeId);
+      if (s?.status !== 'WAITING_CUSTOMER' && s?.status !== 'REJECTED_BY_CUSTOMER') return toast(state, 'warning', 'Chỉ rút được khoản đang chờ khách hoặc khách đã từ chối.');
+      const note = action.note.trim();
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, surcharges: ord.surcharges.map((x) => (x.id === s.id ? { ...x, status: 'CANCELLED' as const, reviewedAt: Date.now(), reviewNote: note || x.reviewNote } : x)) },
+          audit('COORDINATOR', 'Rút phát sinh hiện trường', `${s.name}: ${formatVND(surchargeAmount(s))}.${note ? ` Lý do: ${note}` : ''}`),
+        ),
+      );
+      return toast(next, 'info', `Đã rút khoản "${s.name}".`);
+    }
+
+    case 'CUSTOMER_ACCEPT_SURCHARGE': {
+      const o = findOrder(state, action.orderId);
+      const lines = o?.surcharges.filter((x) => action.surchargeIds.includes(x.id)) ?? [];
+      if (!o || lines.length === 0 || lines.some((x) => x.status !== 'WAITING_CUSTOMER')) return toast(state, 'warning', 'Khoản phát sinh không còn chờ bạn xác nhận.');
+      const items: QuoteItem[] = lines.map((s) => ({
+        id: uid('qi'),
+        name: `Phát sinh: ${s.name}`,
+        category: 'FIELD_ADJUSTMENT',
+        unit: s.unit,
+        unitPrice: s.unitPrice,
+        quantity: s.quantity,
+        note: `${s.surveyed || 'Khảo sát'} → ${s.actual}`,
+      }));
+      const now = Date.now();
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          {
+            ...ord,
+            quoteItems: [...ord.quoteItems, ...items],
+            surcharges: ord.surcharges.map((x) => (action.surchargeIds.includes(x.id) ? { ...x, status: 'ACCEPTED' as const, respondedAt: now } : x)),
+          },
+          audit('CUSTOMER', 'Xác nhận phát sinh hiện trường', `${lines.map((s) => `${s.name} +${formatVND(surchargeAmount(s))}`).join('; ')}. Tổng ${formatVND(sumSurcharges(lines))}.`),
+        ),
+      );
+      const updated = findOrder(next, action.orderId);
+      return toast(next, 'success', updated && isSurchargeBlocking(updated) ? 'Đã xác nhận. Còn khoản phát sinh khác đang chờ xử lý.' : 'Đã xác nhận. Đội xe được phép tiếp tục.');
+    }
+
+    case 'CUSTOMER_REJECT_SURCHARGE': {
+      const s = findSurcharge(state, action.orderId, action.surchargeId);
+      if (s?.status !== 'WAITING_CUSTOMER') return toast(state, 'warning', 'Khoản phát sinh không còn chờ bạn xác nhận.');
+      const note = action.note.trim();
+      if (!note) return toast(state, 'warning', 'Vui lòng cho biết lý do từ chối để chúng tôi liên hệ lại.');
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, surcharges: ord.surcharges.map((x) => (x.id === s.id ? { ...x, status: 'REJECTED_BY_CUSTOMER' as const, respondedAt: Date.now(), customerNote: note } : x)) },
+          audit('CUSTOMER', 'Từ chối phát sinh hiện trường', `${s.name}: ${formatVND(surchargeAmount(s))}. Lý do: ${note}`),
+        ),
+      );
+      return toast(next, 'info', 'Đã gửi phản hồi. Điều phối viên sẽ liên hệ bạn ngay.');
+    }
+
+    case 'DEMO_SURCHARGE': {
+      const o = findOrder(state, action.orderId);
+      if (!o) return state;
+      if (!action.on) {
+        return patchOrder(state, action.orderId, (ord) => ({
+          ...ord,
+          surcharges: ord.surcharges.map((x) => (SURCHARGE_BLOCKING.includes(x.status) ? { ...x, status: 'CANCELLED' as const } : x)),
+        }));
+      }
+      const reportId = uid('rp');
+      const now = Date.now();
+      const base = {
+        reportId,
+        reportNote: 'Đầu hẻm có cổng chắn, xe tải phải đỗ ngoài đường lớn; nhà thực tế cao hơn khảo sát 1 lầu.',
+        description: '',
+        photos: [],
+        status: 'PROPOSED' as const,
+        proposedAt: now,
+        reviewedAt: null,
+        reviewNote: '',
+        respondedAt: null,
+        customerNote: '',
+      };
+      const line = (type: SurchargeType, surveyed: string, actual: string, quantity: number, description: string): Surcharge => {
+        const unitPrice = systemUnitPrice(type, o, state.resources.vehicles);
+        const meta = SURCHARGE_TYPE_META[type];
+        return { ...base, id: uid('sc'), type, name: meta.label, unit: meta.unit, surveyed, actual, description, quantity, unitPrice, proposedQuantity: quantity, proposedUnitPrice: unitPrice };
+      };
+      const sample = [line('LONG_CARRY', 'Hẻm 50m', 'Hẻm 200m, xe tải không vào được', 3, 'Đầu hẻm có cổng chắn, phải trung chuyển thủ công thêm 150m.'), line('EXTRA_FLOOR', 'Lầu 2', 'Lầu 3', 1, 'Nhà có thêm tầng lửng, đồ đạc để ở lầu 3.')];
+      return patchOrder(state, action.orderId, (ord) => ({ ...ord, surcharges: [...ord.surcharges, ...sample] }));
     }
 
     case 'ADVANCE_FIELD_STAGE': {
@@ -364,7 +670,11 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (!o) return state;
       if (o.status !== 'ASSIGNED' && o.status !== 'IN_TRANSIT') return toast(state, 'warning', 'Lệnh công tác chưa sẵn sàng hoặc đang tạm dừng.');
       if (nextFieldStage(o)?.stage !== action.stage) return state;
-      if ((action.stage === 'WORKING' || action.stage === 'MOVING') && o.flags.hasFieldDiscrepancyLock) {
+      // Bước nhận vật tư chỉ hoàn thành qua CONFIRM_MATERIALS_RECEIVED (kiểm từng dòng phiếu xuất).
+      if (action.stage === 'MATERIALS_PICKED' && o.materials.lines.length > 0) {
+        return toast(state, 'warning', o.materials.status === 'DRAFT' ? 'Kho chưa xuất phiếu vật tư cho lệnh này.' : 'Hãy kiểm và xác nhận số vật tư thực nhận trên phiếu.');
+      }
+      if ((action.stage === 'WORKING' || action.stage === 'MOVING') && isSurchargeBlocking(o)) {
         return toast(state, 'danger', 'Chưa thể bắt đầu: chờ khách xác nhận báo giá điều chỉnh.');
       }
       if (action.stage === 'MOVING' && o.flags.isVehicleIncident) {
@@ -378,16 +688,98 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       );
       if (action.stage === 'HANDED_OVER') {
         next = { ...next, resources: { ...next.resources, vehicles: releaseVehicle(next.resources.vehicles, o.vehicleIds) } };
-        next = toast(next, 'success', 'Đã lập biên bản bàn giao. Đơn chuyển sang chờ quyết toán.');
+        // Đã trả đủ từ trước & không dùng vật tư kho → đóng hồ sơ ngay khi bàn giao.
+        const closed = autoCloseIfReady(next, action.orderId);
+        next = toast(closed.state, 'success', closed.closed ? 'Đã lập biên bản bàn giao. Đơn đã hoàn tất.' : 'Đã lập biên bản bàn giao. Đơn chuyển sang chờ quyết toán.');
       }
       return next;
     }
 
-    case 'TOGGLE_EQUIPMENT':
-      return patchOrder(state, action.orderId, (o) => ({
-        ...o,
-        equipment: o.equipment.map((e) => (e.id === action.itemId ? { ...e, checked: !e.checked } : e)),
-      }));
+    // Tồn kho (CatalogStore) được trừ / cộng ở giao diện admin, sau khi kiểm bằng cùng các hàm validate*.
+    case 'ISSUE_MATERIALS': {
+      const o = findOrder(state, action.orderId);
+      if (!o) return state;
+      if (o.status !== 'ASSIGNED') return toast(state, 'warning', 'Chỉ xuất vật tư cho lệnh đã gán đội và chưa bắt đầu.');
+      const draftSlip = withAddedLines(o.materials, action.addedLines);
+      const err = validateIssue(draftSlip, action.issued);
+      if (err) return toast(state, 'danger', err);
+      // Dòng xuất 0 thì bỏ khỏi phiếu — không có gì để nhận / trả.
+      const lines = draftSlip.lines.map((l) => ({ ...l, issued: action.issued[l.id] ?? 0 })).filter((l) => l.issued > 0);
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, materials: { ...ord.materials, status: 'ISSUED', lines, issuedAt: Date.now() } },
+          audit('ADMIN', 'Xuất kho vật tư', describeLines(lines, (l) => l.issued)),
+        ),
+      );
+      return toast(next, 'success', `${o.id}: đã xuất kho, chờ đội xe xác nhận nhận.`);
+    }
+
+    case 'CONFIRM_MATERIALS_RECEIVED': {
+      const o = findOrder(state, action.orderId);
+      if (!o) return state;
+      if (o.status !== 'ASSIGNED' || o.fieldStage !== 'NOT_STARTED') return toast(state, 'warning', 'Chỉ xác nhận nhận vật tư trước khi bắt đầu lệnh.');
+      const err = validateReceive(o.materials, action.received, action.note);
+      if (err) return toast(state, 'danger', err);
+      const lines = o.materials.lines.map((l) => ({ ...l, received: action.received[l.id] ?? 0 }));
+      const short = lines.filter((l) => (l.received ?? 0) < l.issued);
+      const note = action.note.trim();
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, fieldStage: 'MATERIALS_PICKED', materials: { ...ord.materials, status: 'RECEIVED', lines, receivedAt: Date.now(), receiveNote: note } },
+          audit(
+            'STAFF',
+            'Nhận vật tư tại kho',
+            short.length
+              ? `Nhận thiếu: ${describeLines(short, (l) => l.issued - (l.received ?? 0))}. Ghi chú: ${note}.`
+              : `Nhận đủ theo phiếu: ${describeLines(lines, (l) => l.received ?? 0)}.`,
+          ),
+        ),
+      );
+      return toast(next, short.length ? 'warning' : 'success', short.length ? 'Đã ghi nhận nhận thiếu — kho sẽ đối chiếu khi quyết toán.' : 'Đã nhận đủ vật tư theo phiếu.');
+    }
+
+    case 'REPORT_MATERIAL_USAGE': {
+      const o = findOrder(state, action.orderId);
+      if (!o) return state;
+      if (o.fieldStage !== 'HANDED_OVER') return toast(state, 'warning', 'Khai vật tư đã dùng sau khi lập biên bản bàn giao.');
+      const err = validateUsage(o.materials, action.used);
+      if (err) return toast(state, 'danger', err);
+      const lines = o.materials.lines.map((l) => ({ ...l, used: l.kind === 'TOOL' ? 0 : (action.used[l.id] ?? 0) }));
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, materials: { ...ord.materials, status: 'USAGE_REPORTED', lines, usageReportedAt: Date.now() } },
+          audit('STAFF', 'Khai vật tư đã dùng', `Đã dùng: ${describeLines(lines, usedOf)}. Mang về kho: ${describeLines(lines, (l) => (l.received ?? 0) - usedOf(l))}.`),
+        ),
+      );
+      return toast(next, 'success', 'Đã gửi báo cáo vật tư. Hãy mang vật tư dư & dụng cụ về kho.');
+    }
+
+    case 'RETURN_MATERIALS': {
+      const o = findOrder(state, action.orderId);
+      if (!o) return state;
+      const err = validateReturn(o, action.returned, action.note);
+      if (err) return toast(state, 'danger', err);
+      const cancelled = o.status === 'CANCELLED_EXPIRED';
+      const lines = o.materials.lines.map((l) => {
+        const returned = action.returned[l.id] ?? 0;
+        return { ...l, used: usedOf(l), returned, lost: Math.max(0, discrepancyOf(l, returned)) };
+      });
+      const lost = lines.filter((l) => l.lost > 0);
+      const note = action.note.trim();
+      const next = patchOrder(state, action.orderId, (ord) =>
+        withLog(
+          { ...ord, materials: { ...ord.materials, status: 'RETURNED', lines, returnedAt: Date.now(), resolutionNote: note } },
+          audit(
+            'ADMIN',
+            cancelled ? 'Thu hồi vật tư do hủy đơn' : 'Kiểm nhận vật tư trả về',
+            `Nhập lại kho: ${describeLines(lines, (l) => l.returned ?? 0)}.${lost.length ? ` Chênh lệch: ${describeLines(lost, (l) => l.lost)} — ${note}.` : ' Không chênh lệch.'}`,
+          ),
+        ),
+      );
+      const closed = autoCloseIfReady(next, action.orderId);
+      const base = lost.length ? `${o.id}: đã quyết toán vật tư, ghi nhận chênh lệch vào biên bản.` : `${o.id}: vật tư đã về kho đủ.`;
+      return toast(closed.state, lost.length ? 'warning' : 'success', closed.closed ? `${base} Hồ sơ đã tự động đóng.` : base);
+    }
 
     case 'START_WAIT_TIMER': {
       const o = findOrder(state, action.orderId);
@@ -455,20 +847,29 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ? vehicles.map((v) => (v.id === existing.id ? { ...v, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: orderShift(o) } : v))
         : [...vehicles, replacement];
       const driver = state.resources.staff.find((s) => s.name === action.driverName);
+      // Tài xế mới phải lái được xe thay thế (đúng hạng bằng, còn hạn vào ngày chuyển).
+      const driveError = driver ? driveBlockReason(driver, replacement.capacityTons, o.scheduledDate) : 'Không tìm thấy tài xế.';
+      if (driveError) return toast(state, 'danger', `Không thể tăng bo: ${driver?.name ?? action.driverName} — ${driveError}.`);
       const oldPlate = state.resources.vehicles.find((v) => v.id === o.vehicleId)?.plateNumber ?? '—';
-      const next = patchOrder({ ...state, resources: { ...state.resources, vehicles, downtimes } }, action.orderId, (ord) =>
-        withLog(
+      const next = patchOrder({ ...state, resources: { ...state.resources, vehicles, downtimes } }, action.orderId, (ord) => {
+        // Tài xế mới thay đúng vị trí tài xế của xe hỏng; nếu người này đang bốc xếp trong đội thì chuyển sang lái.
+        const others = ord.crew.filter((c) => c.vehicleId !== o.vehicleId && c.staffId !== driver!.id);
+        const crew = [...others, { staffId: driver!.id, role: 'DRIVER' as const, vehicleId: replacement.id }];
+        return withLog(
           {
             ...ord,
             vehicleId: replacement.id,
             vehicleIds: ord.vehicleIds.map((id) => (id === o.vehicleId ? replacement.id : id)),
-            crewIds: driver && !ord.crewIds.includes(driver.id) ? [...ord.crewIds, driver.id] : ord.crewIds,
+            crew,
+            crewIds: crewIdsOf(crew),
+            // Trưởng nhóm là tài xế bị thay thì quyền trưởng nhóm chuyển cho tài xế mới.
+            leaderId: crew.some((c) => c.staffId === ord.leaderId) ? ord.leaderId : driver!.id,
             flags: { ...ord.flags, isVehicleIncident: false },
             vehicleIncident: null,
           },
           audit('COORDINATOR', 'Chuyển giao phương tiện (Tăng bo)', `${oldPlate} → ${action.plateNumber}, tài xế mới: ${action.driverName}.`),
-        ),
-      );
+        );
+      });
       return toast(next, 'success', `Tăng bo thành công: xe ${action.plateNumber} — tài xế ${action.driverName}.`);
     }
 
@@ -477,20 +878,47 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       if (!o) return state;
       // Chỉ cho sửa giá khi báo giá đang chờ khách xác nhận — sau khi cọc/vận chuyển/kết thúc thì giá đã chốt.
       if (o.status !== 'SURVEYED_PENDING_CONFIRM') return toast(state, 'warning', 'Chỉ chỉnh sửa báo giá khi đơn đang chờ khách xác nhận.');
+      const note = action.note.trim();
+      if (!note) return toast(state, 'warning', 'Ghi lý do chỉnh sửa báo giá (khách sẽ thấy diễn giải trên từng dòng).');
+      // Đơn giá theo bảng giá: chỉ khoản ngoài bảng giá được sửa đơn giá — thương lượng giá dùng giảm giá toàn đơn.
+      const priceLocked = action.patches.find((p) => {
+        const it = o.quoteItems.find((x) => x.id === p.id);
+        return it && !it.offCatalog && p.unitPrice !== it.unitPrice;
+      });
+      if (priceLocked) return toast(state, 'warning', 'Đơn giá theo bảng giá không sửa được — dùng giảm giá toàn đơn để thương lượng.');
+      const remaining = o.quoteItems.filter((it) => !action.removedIds.includes(it.id));
+      if (!remaining.some((it) => it.category === 'VEHICLE') && o.quoteItems.some((it) => it.category === 'VEHICLE')) {
+        return toast(state, 'warning', 'Báo giá phải còn ít nhất 1 dòng xe.');
+      }
+      if (action.added.some((i) => i.offCatalog && (!i.name.trim() || i.unitPrice <= 0 || !i.note?.trim()))) {
+        return toast(state, 'warning', 'Khoản ngoài bảng giá cần tên, đơn giá và lý do.');
+      }
       const entries: AuditLogEntry[] = [];
-      const items = o.quoteItems.map((it) => {
+      o.quoteItems
+        .filter((it) => action.removedIds.includes(it.id))
+        .forEach((it) => entries.push(audit('COORDINATOR', 'Chỉnh sửa báo giá', `Bỏ "${it.name}" (${it.quantity} × ${formatVND(it.unitPrice)}) — ${note}.`)));
+      action.added.forEach((it) =>
+        entries.push(
+          audit(
+            'COORDINATOR',
+            'Chỉnh sửa báo giá',
+            `Thêm ${it.offCatalog ? 'khoản ngoài bảng giá' : 'dịch vụ'} "${it.name}" ${it.quantity} × ${formatVND(it.unitPrice)}${it.offCatalog ? ` (${it.note})` : ''} — ${note}.`,
+          ),
+        ),
+      );
+      const items = remaining.map((it) => {
         const p = action.patches.find((x) => x.id === it.id);
         if (!p) return it;
         const changes: string[] = [];
         if (p.quantity !== it.quantity) changes.push(`SL ${it.quantity} → ${p.quantity}`);
         if (p.unitPrice !== it.unitPrice) changes.push(`đơn giá ${formatVND(it.unitPrice)} → ${formatVND(p.unitPrice)}`);
         if (!changes.length) return it;
-        entries.push(audit('COORDINATOR', 'Chỉnh sửa báo giá', `${it.name}: ${changes.join(', ')}${action.note ? ` — ${action.note}` : ''}.`));
-        // Cách tính tự động không còn đúng sau khi sửa tay — thay bằng diễn giải chỉnh sửa.
-        return { ...it, quantity: p.quantity, unitPrice: p.unitPrice, note: `Điều phối chỉnh ${changes.join(', ')}${action.note ? ` — ${action.note}` : ''}` };
-      });
+        entries.push(audit('COORDINATOR', 'Chỉnh sửa báo giá', `${it.name}: ${changes.join(', ')} — ${note}.`));
+        // Cách tính tự động không còn đúng sau khi sửa tay — thay bằng diễn giải chỉnh sửa (khoản ngoài bảng giá giữ lý do gốc).
+        return { ...it, quantity: p.quantity, unitPrice: p.unitPrice, note: it.offCatalog ? it.note : `Điều phối chỉnh ${changes.join(', ')} — ${note}` };
+      }).concat(action.added);
       const discountPercent = Math.min(100, Math.max(0, action.discountPercent));
-      if (discountPercent !== o.discountPercent) entries.push(audit('COORDINATOR', 'Cập nhật giảm giá toàn đơn', `Giảm giá ${o.discountPercent}% → ${discountPercent}% trên toàn đơn${action.note ? ` — ${action.note}` : ''}.`));
+      if (discountPercent !== o.discountPercent) entries.push(audit('COORDINATOR', 'Cập nhật giảm giá toàn đơn', `Giảm giá ${o.discountPercent}% → ${discountPercent}% trên toàn đơn — ${note}.`));
       if (!entries.length) return toast(state, 'info', 'Không có thay đổi nào để lưu.');
       const next = patchOrder(state, action.orderId, (ord) => ({ ...ord, quoteItems: items, discountPercent, auditLog: [...ord.auditLog, ...entries] }));
       return toast(next, 'success', `Đã lưu ${entries.length} thay đổi vào nhật ký báo giá.`);
@@ -505,30 +933,52 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const unavailable = picked.find((v) => v.status !== 'AVAILABLE' && !o.vehicleIds.includes(v.id));
       if (unavailable) return toast(state, 'danger', `Hệ thống chặn thao tác gán: xe ${unavailable.plateNumber} không khả dụng.`);
       if (o.status !== 'QUOTED_PENDING_SCHEDULE' && o.status !== 'ASSIGNED') return toast(state, 'warning', 'Chỉ gán nguồn lực cho đơn đã cọc và chờ điều phối.');
-      const crewMembers = state.resources.staff.filter((m) => action.crewIds.includes(m.id));
+      const req = getAssignmentRequirement(o);
+      const mismatch = validateAssignment(req, picked.map((v) => v.capacityTons));
+      // Xe / người có lịch nghỉ (bảo dưỡng, nghỉ phép…) đúng ngày chuyển thì không gán được.
       const offOf = (target: 'VEHICLE' | 'STAFF', id: string) => downtimeOn(state.resources.downtimes, target, id, o.scheduledDate);
       const offVehicle = picked.find((v) => offOf('VEHICLE', v.id));
       if (offVehicle) return toast(state, 'danger', `Xe ${offVehicle.plateNumber} không chạy ngày chuyển: ${downtimeLabel(offOf('VEHICLE', offVehicle.id)!).toLowerCase()}.`);
-      const offStaff = crewMembers.find((m) => offOf('STAFF', m.id));
+      const offStaff = state.resources.staff.find((m) => crewIdsOf(action.crew).includes(m.id) && offOf('STAFF', m.id));
       if (offStaff) return toast(state, 'danger', `${offStaff.name} nghỉ vào ngày chuyển: ${downtimeLabel(offOf('STAFF', offStaff.id)!).toLowerCase()}.`);
-      const mismatch = validateAssignment(
-        getAssignmentRequirement(o),
-        picked.map((v) => v.capacityTons),
-        crewMembers.filter((m) => isDriverRole(m.role)).length,
-        crewMembers.filter((m) => !isDriverRole(m.role)).length,
-      );
       if (mismatch) return toast(state, 'danger', `Không khớp báo giá: ${mismatch}`);
+      const crewError = validateCrew(req, picked, action.crew, state.resources.staff, o.scheduledDate);
+      if (crewError) return toast(state, 'danger', `Đội chưa hợp lệ: ${crewError}`);
+      // Tài xế mặc định là trưởng nhóm (nhiều xe: tài xế đầu tiên — xe lớn nhất).
+      const leaderId = leaderOf(action.crew);
       let vehicles = releaseVehicle(state.resources.vehicles, o.vehicleIds);
       vehicles = vehicles.map((x) => (action.vehicleIds.includes(x.id) ? { ...x, status: 'BUSY', busyOrderId: shortId(o.id), currentShiftTime: orderShift(o) } : x));
-      const crewNames = state.resources.staff.filter((s) => action.crewIds.includes(s.id)).map((s) => s.name);
+      const crewText = describeCrew(action.crew, leaderId, state.resources.staff, picked);
       const plates = picked.map((v) => v.plateNumber).join(', ');
+      // Phiếu chưa xuất kho thì lập lại theo số xe mới; đã xuất thì giữ nguyên (kho đã trừ tồn).
+      const replan = o.materials.status === 'NONE' || o.materials.status === 'DRAFT';
+      const materials: MaterialSlip = replan
+        ? { ...emptyMaterialSlip(), status: action.materialPlan.length ? 'DRAFT' : 'NONE', lines: action.materialPlan }
+        : o.materials;
       const next = patchOrder({ ...state, resources: { ...state.resources, vehicles } }, action.orderId, (ord) =>
         withLog(
-          { ...ord, vehicleId: picked[0]?.id ?? null, vehicleIds: action.vehicleIds, crewIds: action.crewIds, status: 'ASSIGNED' },
-          audit('COORDINATOR', 'Gán nguồn lực', `${picked.length} xe (${plates}) + ${crewNames.length} nhân sự: ${crewNames.join(', ')}.`),
+          {
+            ...ord,
+            vehicleId: picked[0]?.id ?? null,
+            vehicleIds: action.vehicleIds,
+            crew: action.crew,
+            crewIds: crewIdsOf(action.crew),
+            leaderId,
+            status: 'ASSIGNED',
+            materials,
+          },
+          audit(
+            'COORDINATOR',
+            'Gán nguồn lực',
+            `${picked.length} xe (${plates}) · ${crewText}.${replan && action.materialPlan.length ? ` Lập phiếu vật tư nháp: ${describeLines(action.materialPlan, (l) => l.planned)}.` : ''}`,
+          ),
         ),
       );
-      return toast(next, 'success', `Đã gán ${picked.length} xe (${plates}) cho ${o.id}. Lệnh công tác đã gửi tới đội xe.`);
+      return toast(
+        next,
+        'success',
+        `Đã gán ${picked.length} xe (${plates}) cho ${o.id}. ${replan && action.materialPlan.length ? 'Phiếu vật tư đã chuyển cho kho.' : 'Lệnh công tác đã gửi tới đội xe.'}`,
+      );
     }
 
     case 'RESCHEDULE': {
@@ -556,10 +1006,21 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         FORFEIT: `Hủy sát giờ (${o.flags.hoursUntilDeparture}h) — cọc ${formatVND(o.depositPaid)} ghi nhận phí phạt.`,
         RESERVE_3_MONTHS: `Bảo lưu cọc ${formatVND(o.depositPaid)} tới ${reservedUntil}.`,
       };
+      const materialsOut = hasMaterialsOutside(o.materials);
       next = patchOrder(next, action.orderId, (ord) =>
         withLog(
-          { ...ord, status: 'CANCELLED_EXPIRED', depositReservedUntil: action.mode === 'RESERVE_3_MONTHS' ? reservedUntil : null },
-          audit('CUSTOMER', 'Hủy đơn hàng (Mã 1.1.6)', `${detail[action.mode]} Lý do: ${action.reason.trim() || 'Không nêu'}.`),
+          {
+            ...ord,
+            status: 'CANCELLED_EXPIRED',
+            depositReservedUntil: action.mode === 'RESERVE_3_MONTHS' ? reservedUntil : null,
+            // Phiếu nháp chưa xuất kho thì hủy theo đơn; đã xuất thì giữ để kho thu hồi.
+            materials: ord.materials.status === 'DRAFT' ? emptyMaterialSlip() : ord.materials,
+          },
+          audit(
+            'CUSTOMER',
+            'Hủy đơn hàng (Mã 1.1.6)',
+            `${detail[action.mode]} Lý do: ${action.reason.trim() || 'Không nêu'}.${materialsOut ? ' Vật tư đã xuất kho — chờ kho thu hồi.' : ''}`,
+          ),
         ),
       );
       if (o.depositPaid > 0 && action.mode === 'REFUND_FULL') {
@@ -609,16 +1070,20 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const next = patchOrder(state, action.orderId, (ord) =>
         withLog({ ...ord, balancePaid: ord.balancePaid + remaining }, audit('CUSTOMER', 'Thanh toán QR', `Thanh toán ${formatVND(remaining)} — công nợ = 0đ.`)),
       );
-      return closeIfSettled(toast(next, 'success', `Thanh toán thành công ${formatVND(remaining)}. Công nợ khách hàng = 0đ.`), action.orderId);
+      // Với khách, đơn đã xong ngay khi trả đủ; hồ sơ nội bộ tự đóng nếu vật tư cũng đã quyết toán.
+      const closed = autoCloseIfReady(next, action.orderId);
+      return toast(closed.state, 'success', `Thanh toán thành công ${formatVND(remaining)}. Đơn đã hoàn tất — cảm ơn bạn!`);
     }
 
-    case 'CONFIRM_WAREHOUSE_RETURN': {
+    case 'CLOSE_ORDER': {
       const o = findOrder(state, action.orderId);
-      if (!o || o.status !== 'PENDING_PAYMENT_OR_CLAIM' || o.isWarehouseReturned) return state;
+      if (!o) return state;
+      if (!canCloseOrder(selectSettlement(o))) return toast(state, 'danger', 'Chưa thể đóng hồ sơ: cần công nợ = 0đ và đã quyết toán phiếu vật tư.');
+      const revenue = computeTotals(o).grandTotal;
       const next = patchOrder(state, action.orderId, (ord) =>
-        withLog({ ...ord, isWarehouseReturned: true }, audit('STAFF', 'Trả dụng cụ về kho', 'Đội xe xác nhận đã trả đủ dụng cụ & nhập lại vật tư dư.')),
+        withLog({ ...ord, status: 'COMPLETED', finalRevenue: revenue }, audit('ADMIN', 'Đóng hồ sơ (Hoàn tất)', `Doanh thu cuối cùng ${formatVND(revenue)} — đã khóa bất biến.`)),
       );
-      return closeIfSettled(toast(next, 'success', `${action.orderId}: đã trả dụng cụ về kho.`), action.orderId);
+      return toast(next, 'success', `${action.orderId} đã hoàn tất. Doanh thu ${formatVND(revenue)} được khóa.`);
     }
 
     case 'CREATE_CLAIM': {
@@ -779,6 +1244,18 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const inUse = state.orders.some((o) => o.vehicleIds.includes(v.id) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED_EXPIRED');
       if (v.status === 'BUSY' || inUse) return toast(state, 'danger', 'Xe đang gắn với đơn hàng chưa hoàn tất — không thể xóa.');
       return toast({ ...state, resources: { ...state.resources, vehicles: state.resources.vehicles.filter((x) => x.id !== v.id) } }, 'success', `Đã xóa xe ${v.plateNumber}.`);
+    }
+
+    case 'UPSERT_STAFF': {
+      const s = { ...action.staff, name: action.staff.name.trim(), code: action.staff.code.trim().toUpperCase() };
+      const err = validateStaffProfile(s, state.resources.staff);
+      if (err) return toast(state, 'danger', err);
+      // Không để hồ sơ mâu thuẫn với lệnh đang chạy: đổi đội ở Điều phối trước.
+      const blocker = staffChangeBlocker(s, state.orders);
+      if (blocker) return toast(state, 'danger', blocker);
+      const exists = state.resources.staff.some((x) => x.id === s.id);
+      const staff = exists ? state.resources.staff.map((x) => (x.id === s.id ? s : x)) : [...state.resources.staff, s];
+      return toast({ ...state, resources: { ...state.resources, staff } }, 'success', `${exists ? 'Đã cập nhật' : 'Đã tạo'} hồ sơ ${s.code} · ${s.name}.`);
     }
 
     case 'RESET_DEMO':

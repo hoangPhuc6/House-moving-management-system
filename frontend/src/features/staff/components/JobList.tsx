@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { AlertOctagon, ChevronRight, ClipboardList, Truck } from 'lucide-react';
 import { cx, EmptyState, StatusBadge } from '@/components/ui';
+import { isSurchargeBlocking } from '@/constants/surcharge';
 import { CustomerInfo } from '@/features/staff/components/CustomerInfo';
 import { isOpenJob, needsToolReturn } from '@/features/staff/constants';
 import { ROUTES } from '@/routes/paths';
@@ -14,7 +15,7 @@ export const JobList = ({ jobs }: { jobs: Order[] }) => {
 
   const row = (o: Order) => {
     const v = state.resources.vehicles.find((x) => x.id === o.vehicleId);
-    const alert = o.flags.hasFieldDiscrepancyLock || o.flags.isVehicleIncident;
+    const alert = isSurchargeBlocking(o) || o.flags.isVehicleIncident;
     return (
       <li key={o.id}>
         <Link

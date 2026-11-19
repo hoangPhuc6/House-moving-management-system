@@ -1,12 +1,14 @@
 import { cx } from '@/components/ui';
 import { CUSTOMER_PROCESS_STEPS as PROCESS_STEPS } from '@/constants/order';
 import { customerStepMeta } from '@/features/customer/surveyStage';
+import { customerViewStatus } from '@/features/customer/utils';
 import { customerStepIndexOf as stepIndexOf } from '@/services/order';
 import type { Order } from '@/types';
 
 export const CompactProgress = ({ order }: { order: Order }) => {
-  const idx = stepIndexOf(order.status);
-  const done = order.status === "COMPLETED";
+  const status = customerViewStatus(order);
+  const idx = stepIndexOf(status);
+  const done = status === "COMPLETED";
   const cancelled = order.status === "CANCELLED_EXPIRED";
   const step = PROCESS_STEPS[Math.max(0, idx)];
   return (

@@ -14,7 +14,6 @@ import {
   Tabs,
 } from '@/components/ui';
 import { SERVICE_GROUP_LABEL } from '@/constants/catalog';
-import { PricingEstimator } from '@/features/admin/components/PricingEstimator';
 import { EMPTY_SERVICE } from '@/features/admin/constants';
 import { formatVND } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
@@ -46,7 +45,6 @@ export const ServicesModule = ({ query }: { query: string }) => {
       <PageHeader
         eyebrow="Danh mục"
         title="Dịch vụ & bảng giá"
-        subtitle="Dịch vụ ngừng hoạt động không thể dùng cho đơn mới."
         actions={<Button icon={Plus} onClick={() => setEditing({ ...EMPTY_SERVICE })}>Thêm dịch vụ</Button>}
       />
       <Tabs<ServiceGroup | 'ALL'>
@@ -83,7 +81,6 @@ export const ServicesModule = ({ query }: { query: string }) => {
           </table>
         </div>
       </Card>
-      <PricingEstimator />
 
       <Modal
         open={!!editing}

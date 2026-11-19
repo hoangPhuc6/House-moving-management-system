@@ -24,10 +24,17 @@ export interface UserAccount {
   emailVerified: boolean;
 }
 
+/**
+ * CONSUMABLE — vật tư tiêu hao (carton, băng keo, màng PE): dùng hết thì thôi, còn dư nhập lại kho.
+ * TOOL       — dụng cụ dùng lại (xe đẩy, dây chằng, chăn bọc): xuất cho mượn, phải trả đủ.
+ */
+export type MaterialKind = 'CONSUMABLE' | 'TOOL';
+
 export interface InventoryItem {
   id: string;
   name: string;
   unit: string;
+  kind: MaterialKind;
   stock: number;
   minStock: number;
 }
@@ -76,11 +83,19 @@ export interface FeedbackEntry {
   createdAt: number;
 }
 
-/** Dữ liệu lịch sử giả lập (đơn đã hoàn tất trước đây) để dashboard có chuỗi thời gian. */
-export interface HistoricRevenue {
+/**
+ * Đơn đã đóng trước đây (dữ liệu giả lập cho dashboard báo cáo).
+ * Chỉ dùng cho thống kê — không xuất hiện ở các màn hình vận hành (khách, điều phối, nhân viên).
+ */
+export interface HistoricOrder {
   id: string;
+  /** Ngày đóng đơn (ISO yyyy-mm-dd). */
   date: string;
+  customerName: string;
+  status: 'COMPLETED' | 'CANCELLED';
+  /** Doanh thu đã khóa; đơn hủy = 0. Đơn hoàn tất coi như đã thu đủ. */
   revenue: number;
+  /** Tên các dịch vụ trên báo giá (khớp danh mục dịch vụ). */
   services: string[];
 }
 
@@ -91,7 +106,7 @@ export interface CatalogState {
   txns: InventoryTxn[];
   payments: PaymentRecord[];
   feedbacks: FeedbackEntry[];
-  history: HistoricRevenue[];
+  history: HistoricOrder[];
 }
 
 export type CatalogAction =
@@ -99,7 +114,8 @@ export type CatalogAction =
   | { type: 'TOGGLE_SERVICE'; id: string }
   | { type: 'SET_USER_ROLE'; id: string; role: UserRole }
   | { type: 'TOGGLE_USER_LOCK'; id: string }
-  | { type: 'ADD_USER'; user: Omit<UserAccount, 'id' | 'locked' | 'emailVerified'> }
+  /** id tùy chọn: truyền sẵn khi cần gắn hồ sơ khác (VD hồ sơ nhân viên) vào tài khoản vừa tạo. */
+  | { type: 'ADD_USER'; user: Omit<UserAccount, 'id' | 'locked' | 'emailVerified'> & { id?: string } }
   | { type: 'ADD_INVENTORY_ITEM'; item: Omit<InventoryItem, 'id'> }
   | { type: 'INVENTORY_TXN'; itemId: string; txnType: InventoryTxnType; quantity: number; orderId: string | null; note: string }
   | { type: 'RECORD_PAYMENT'; payment: Pick<PaymentRecord, 'orderId' | 'kind' | 'method' | 'amount' | 'receivedBy'> }

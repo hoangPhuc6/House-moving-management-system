@@ -37,14 +37,14 @@ export const customerStepMeta = (order: Order): { title?: string; sub?: string |
   const d = order.bookingDetails;
   const kind = surveyStageOf(order);
   const surveySub = (() => {
-    if (kind === 'TRUCK_CONFIRM') return 'Điều phối gọi xác nhận';
+    if (kind === 'TRUCK_CONFIRM') return 'Báo giá tự động';
     if (kind === 'PHOTOS') return isMediaSubmitted(order) ? 'Đã gửi ảnh / video' : 'Chờ bạn gửi ảnh';
     const label = kind === 'VIDEO_CALL' ? 'Video call' : 'Tận nơi';
     return d && hasAppointment(order) ? `${label} ${shortDate(d.surveyDate)}` : label;
   })();
   return [
     { sub: `Đã gửi ${formatTime(order.createdAt)}` },
-    { title: kind === 'TRUCK_CONFIRM' ? 'Xác nhận xe' : undefined, sub: surveySub },
+    { title: kind === 'TRUCK_CONFIRM' ? 'Báo giá xe' : undefined, sub: surveySub },
     { sub: order.status === 'SURVEYED_PENDING_CONFIRM' ? 'Đang chờ bạn duyệt' : null },
     { sub: `Dự kiến ${shortDate(order.scheduledDate)}` },
     { sub: null },

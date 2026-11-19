@@ -1,6 +1,7 @@
 import { CARTON_ORDER, CARTON_SIZES, INCLUDED_KM, LABOR_PER_PERSON, VEHICLE_PRICING, WAIT_FEE_PER_HOUR, WAIT_FREE_MINUTES, vehicleTripPrice } from '@/constants/pricing';
 import { formatVND, uid } from '@/services/format';
-import type { Order, OrderTotals, QuoteItem, SettlementLockState, SurveyInput } from '@/types';
+import { isMaterialsSettled } from '@/services/materials';
+import type { Order, OrderTotals, QuoteItem, ServiceItem, SettlementLockState, SurveyInput } from '@/types';
 
 export const lineTotal = (item: QuoteItem): number => item.unitPrice * item.quantity;
 
@@ -38,7 +39,7 @@ export const computeTotals = (order: Order): OrderTotals => {
 
 export const selectSettlement = (order: Order): SettlementLockState => ({
   remainingBalance: computeTotals(order).remaining,
-  isWarehouseReturned: order.isWarehouseReturned,
+  materialsSettled: isMaterialsSettled(order.materials),
 });
 
 /**
@@ -48,7 +49,7 @@ export const selectSettlement = (order: Order): SettlementLockState => ({
 export const canFileClaim = (order: Order): boolean =>
   (order.status === 'PENDING_PAYMENT_OR_CLAIM' || order.status === 'COMPLETED') && computeTotals(order).remaining === 0;
 
-export const canCloseOrder =(s: SettlementLockState): boolean => s.remainingBalance === 0 && s.isWarehouseReturned;
+export const canCloseOrder = (s: SettlementLockState): boolean => s.remainingBalance === 0 && s.materialsSettled;
 
 /** Đơn giá vật tư & phụ phí trong báo giá chính thức. */
 export const SURVEY_UNIT_PRICES = {
@@ -82,7 +83,6 @@ export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
     const c = CARTON_SIZES[size];
     return { id: uid('qi'), name: `${c.label} ${c.dims}`, category: 'MATERIAL', unit: 'thùng', unitPrice: c.price, quantity: s.cartons[size], note: `Vật tư — dùng cho ${c.use}` };
   });
-  const segments = Math.ceil(s.alleyMeters / p.alleySegmentMeters);
   const items: QuoteItem[] = [
     ...vehicleItems,
     { id: uid('qi'), name: 'Nhân viên bốc xếp', category: 'LABOR', unit: 'người', unitPrice: LABOR_PER_PERSON, quantity: s.workers, note: 'Đơn giá bốc xếp cố định / người' },
@@ -90,11 +90,52 @@ export const buildSurveyQuote = (s: SurveyInput): QuoteItem[] => {
     { id: uid('qi'), name: 'Băng keo đóng gói', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.tape, quantity: s.tapeRolls, note: 'Vật tư — đơn giá cố định' },
     { id: uid('qi'), name: 'Màng PE bọc đồ', category: 'MATERIAL', unit: 'cuộn', unitPrice: p.peFilm, quantity: s.peFilmRolls, note: 'Vật tư — đơn giá cố định' },
   ];
-  if (s.floors > 0) {
-    items.push({ id: uid('qi'), name: 'Phụ phí lầu (không thang máy)', category: 'SURCHARGE', unit: 'lầu', unitPrice: p.perFloor, quantity: s.floors, note: `Khiêng thang bộ ${s.floors} lầu (tổng 2 đầu) × ${formatVND(p.perFloor)}/lầu` });
+  // Lầu & hẻm tính riêng từng đầu (điểm đi / điểm đến) — hẻm làm tròn đoạn 50m theo từng đầu.
+  const ends = [
+    { label: 'điểm đi', floors: s.floorsFrom, alley: s.alleyFrom },
+    { label: 'điểm đến', floors: s.floorsTo, alley: s.alleyTo },
+  ];
+  for (const e of ends) {
+    if (e.floors > 0) {
+      items.push({ id: uid('qi'), name: `Phụ phí lầu — ${e.label}`, category: 'SURCHARGE', unit: 'lầu', unitPrice: p.perFloor, quantity: e.floors, note: `Khiêng thang bộ ${e.floors} lầu ở ${e.label} × ${formatVND(p.perFloor)}/lầu` });
+    }
   }
-  if (s.alleyMeters > 0) {
-    items.push({ id: uid('qi'), name: 'Phụ phí hẻm (trung chuyển)', category: 'SURCHARGE', unit: 'đoạn 50m', unitPrice: p.perAlleySegment, quantity: segments, note: `Hẻm ${s.alleyMeters} m ÷ ${p.alleySegmentMeters} m = ${segments} đoạn (làm tròn lên) × ${formatVND(p.perAlleySegment)}` });
+  for (const e of ends) {
+    if (e.alley > 0) {
+      const seg = Math.ceil(e.alley / p.alleySegmentMeters);
+      items.push({ id: uid('qi'), name: `Phụ phí hẻm — ${e.label}`, category: 'SURCHARGE', unit: 'đoạn 50m', unitPrice: p.perAlleySegment, quantity: seg, note: `Hẻm ${e.alley} m ở ${e.label} ÷ ${p.alleySegmentMeters} m = ${seg} đoạn (làm tròn lên) × ${formatVND(p.perAlleySegment)}` });
+    }
   }
   return items.filter((i) => i.quantity > 0);
 };
+
+/** Tên các dòng báo giá tự tính từ số liệu khảo sát — dịch vụ bảng giá trùng tên không cho thêm tay (tránh tính 2 lần). */
+const AUTO_LINE_NAMES = [...CARTON_ORDER.map((size) => `${CARTON_SIZES[size].label} ${CARTON_SIZES[size].dims}`), 'Băng keo đóng gói', 'Màng PE bọc đồ'];
+
+/** Nhóm dịch vụ được thêm tay vào báo giá: tháo lắp & đóng gói. Xe / bốc xếp / lầu / hẻm đã có ô số liệu riêng. */
+export const QUOTE_EXTRA_GROUPS: ServiceItem['group'][] = ['ASSEMBLY', 'PACKING'];
+
+/** Thùng carton đã có ô số liệu theo cỡ — dịch vụ "Thùng carton 60x40x40" trong bảng giá cũng tính là trùng. */
+const isCartonLine = (name: string) => /^thùng .*\d+x\d+x\d+$/i.test(name.trim());
+
+export const isQuoteExtraService = (s: ServiceItem): boolean =>
+  s.active && QUOTE_EXTRA_GROUPS.includes(s.group) && !AUTO_LINE_NAMES.includes(s.name) && !isCartonLine(s.name);
+
+/** Dòng báo giá từ dịch vụ trong bảng giá — đơn giá theo bảng giá, không sửa tay. */
+export const quoteItemFromService = (s: ServiceItem, quantity: number, note?: string): QuoteItem => ({
+  id: uid('qi'),
+  name: s.name,
+  category: s.group === 'PACKING' ? 'MATERIAL' : 'SERVICE',
+  unit: s.unit,
+  unitPrice: s.basePrice,
+  quantity,
+  note: note ?? 'Theo bảng giá dịch vụ',
+});
+
+/** Đội xe theo số liệu khảo sát: "2 × 2 tấn + 1 × 1,25 tấn". */
+export const fleetText = (s: SurveyInput): string =>
+  [...s.vehicles]
+    .sort((a, b) => b.capacity - a.capacity)
+    .filter((v) => v.qty > 0)
+    .map((v) => `${v.qty} × ${String(v.capacity).replace('.', ',')} tấn`)
+    .join(' + ');

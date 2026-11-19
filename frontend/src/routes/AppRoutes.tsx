@@ -8,6 +8,7 @@ import { AdminClaimsPage } from '@/pages/admin/AdminClaimsPage';
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage';
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage';
 import { AdminInventoryPage } from '@/pages/admin/AdminInventoryPage';
+import { AdminOrdersPage } from '@/pages/admin/AdminOrdersPage';
 import { AdminPaymentsPage } from '@/pages/admin/AdminPaymentsPage';
 import { AdminServicesPage } from '@/pages/admin/AdminServicesPage';
 import { AdminSettlementPage } from '@/pages/admin/AdminSettlementPage';
@@ -20,6 +21,7 @@ import { CoordinatorOrderDetailPage } from '@/pages/coordinator/CoordinatorOrder
 import { CoordinatorOrdersPage } from '@/pages/coordinator/CoordinatorOrdersPage';
 import { CoordinatorQueuePage } from '@/pages/coordinator/CoordinatorQueuePage';
 import { CoordinatorSchedulePage } from '@/pages/coordinator/CoordinatorSchedulePage';
+import { CoordinatorSurchargePage } from '@/pages/coordinator/CoordinatorSurchargePage';
 import { CustomerCreatePage } from '@/pages/customer/CustomerCreatePage';
 import { CustomerHistoryPage } from '@/pages/customer/CustomerHistoryPage';
 import { CustomerOrderDetailPage } from '@/pages/customer/CustomerOrderDetailPage';
@@ -63,11 +65,13 @@ export const AppRoutes = () => (
         {/* Đường dẫn cũ — chuyển về danh sách đơn. */}
         <Route path="editor" element={<Navigate to="../orders" replace />} />
         <Route path="dispatch" element={<Navigate to="../schedule" replace />} />
+        <Route path="surcharge" element={<CoordinatorSurchargePage />} />
       </Route>
 
       <Route path="admin" element={<AdminLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboardPage />} />
+        <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="settlement" element={<AdminSettlementPage />} />
         <Route path="payments" element={<AdminPaymentsPage />} />
         <Route path="finance" element={<AdminFinancePage />} />

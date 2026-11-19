@@ -1,6 +1,6 @@
 import type { Tone } from '@/components/ui';
 import { formatDateVN } from '@/services/format';
-import type { Order } from '@/types';
+import type { Order, SitePhotoCategory } from '@/types';
 
 /** Cách đơn đi qua bước khảo sát — dùng chung cho Khách hàng, Điều phối và Nhân viên. */
 export type SurveyStageKind = 'TRUCK_CONFIRM' | 'VIDEO_CALL' | 'ON_SITE' | 'PHOTOS';
@@ -15,7 +15,55 @@ export const SURVEY_MEDIA_CATEGORIES = [
 
 export type SurveyMediaCategory = (typeof SURVEY_MEDIA_CATEGORIES)[number];
 
-export const mediaPrefix = (c: SurveyMediaCategory): string => `[${c.label}] `;
+/** Checklist ảnh hiện trường NV phải chụp khi khảo sát trực tiếp — mỗi nhóm tối thiểu 1 ảnh. */
+export const SITE_PHOTO_CHECKLIST: { key: SitePhotoCategory; label: string; hint: string }[] = [
+  { key: 'ROOMS', label: 'Toàn cảnh từng phòng', hint: 'Phòng khách, phòng ngủ, bếp — mỗi phòng 1 ảnh' },
+  { key: 'BIG', label: 'Đồ lớn / dễ vỡ / giá trị cao', hint: 'Chụp rõ tình trạng trước khi chuyển' },
+  { key: 'ACCESS', label: 'Lối đi, cầu thang, thang máy', hint: 'Độ rộng cửa, chiếu nghỉ, thang máy' },
+  { key: 'PARKING', label: 'Cổng, hẻm, chỗ đỗ xe', hint: 'Căn cứ chọn loại xe & phí trung chuyển' },
+];
+
+/**
+ * TẠM TẮT khi đang test: không chặn gửi kết quả khảo sát / báo giá vì thiếu ảnh.
+ * Bật lại (true) trước khi demo / bàn giao.
+ */
+export const REQUIRE_SURVEY_PHOTOS = false;
+
+/** Tổng số ảnh hiện trường tối thiểu để hoàn tất khảo sát. */
+export const MIN_SITE_PHOTOS = 5;
+
+/**
+ * Tận nơi: bắt buộc ảnh đồ đạc (gắn theo món), lối đi và chỗ đỗ xe. Ảnh toàn cảnh phòng không bắt buộc
+ * vì người khảo sát đã chụp theo từng món đồ.
+ */
+export const SITE_REQUIRED_CATEGORIES: SitePhotoCategory[] = ['BIG', 'ACCESS', 'PARKING'];
+
+/** Tên ngắn của nhóm ảnh bắt buộc — dùng trong dòng nhắc "Cần ảnh: …". */
+export const REQUIRED_PHOTO_LABEL: Record<SitePhotoCategory, string> = { ROOMS: 'toàn cảnh phòng', BIG: 'đồ đạc', ACCESS: 'lối đi', PARKING: 'chỗ đỗ xe' };
+
+/** Khảo sát tận nơi: lý do chưa gửi được kết quả vì thiếu ảnh hiện trường; null khi đã đủ. */
+export const missingSitePhotos = (photos: { category: SitePhotoCategory }[]): string | null => {
+  if (!REQUIRE_SURVEY_PHOTOS) return null;
+  const missing = SITE_REQUIRED_CATEGORIES.filter((c) => !photos.some((p) => p.category === c));
+  if (missing.length > 0) return `Còn thiếu ảnh: ${missing.map((c) => REQUIRED_PHOTO_LABEL[c]).join(', ')}.`;
+  if (photos.length < MIN_SITE_PHOTOS) return `Cần tối thiểu ${MIN_SITE_PHOTOS} ảnh / video (mới có ${photos.length}).`;
+  return null;
+};
+
+/** Video call: tối thiểu 3 ảnh chụp màn hình, bắt buộc có lối đi và chỗ đỗ xe (nguồn phát sinh phổ biến nhất). */
+export const MIN_VIDEO_PHOTOS = 3;
+export const VIDEO_REQUIRED_CATEGORIES: SitePhotoCategory[] = ['ACCESS', 'PARKING'];
+
+/** Lý do chưa đủ ảnh chụp màn hình video call; null khi đã đủ. */
+export const missingVideoPhotos = (photos: { category: SitePhotoCategory }[]): string | null => {
+  if (!REQUIRE_SURVEY_PHOTOS) return null;
+  const missing = VIDEO_REQUIRED_CATEGORIES.filter((c) => !photos.some((p) => p.category === c));
+  if (missing.length > 0) return `Còn thiếu ảnh: ${missing.map((c) => REQUIRED_PHOTO_LABEL[c]).join(', ')}.`;
+  if (photos.length < MIN_VIDEO_PHOTOS) return `Cần tối thiểu ${MIN_VIDEO_PHOTOS} ảnh chụp màn hình (mới có ${photos.length}).`;
+  return null;
+};
+
+export const mediaPrefix =(c: SurveyMediaCategory): string => `[${c.label}] `;
 
 export const mediaOfCategory = (order: Order, c: SurveyMediaCategory): string[] =>
   order.customerPhotos.filter((n) => n.startsWith(mediaPrefix(c))).map((n) => n.slice(mediaPrefix(c).length));

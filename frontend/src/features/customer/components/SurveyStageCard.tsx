@@ -5,19 +5,17 @@ import { SURVEY_PREFERENCES, SURVEY_TIME_SLOTS, needsSurveyAppointment } from '@
 import { todayISO } from '@/features/customer/booking/useBookingWizard';
 import {
   SURVEY_MEDIA_CATEGORIES,
-  type SurveyMediaCategory,
   hasAppointment,
   isMediaSubmitted,
   mediaOfCategory,
-  mediaPrefix,
+  optionalMediaReason,
   surveyStageOf,
-  uncategorizedMedia,
   weekdayOf,
 } from '@/features/customer/surveyStage';
 import { parseCapacityTons } from '@/services/dispatch';
 import { formatDateVN, formatTime } from '@/services/format';
 import { useApp } from '@/services/store/AppStore';
-import type { Order, SurveyPreference } from '@/types';
+import type { Order, SurveyMediaKey, SurveyPreference } from '@/types';
 
 const HOTLINE_TEL = 'tel:19006868';
 
@@ -34,34 +32,22 @@ const prevDay = (iso: string): string => {
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
 };
 
-/** Tải ảnh / video theo danh mục gợi ý. Bản demo chỉ lưu tên tệp vào order.customerPhotos. */
+/** Tải ảnh / video theo danh mục gợi ý. Bản demo chỉ lưu tên tệp + nhóm vào order.customerPhotos. */
 const MediaUploader = ({ order }: { order: Order }) => {
   const { dispatch } = useApp();
-  const add = (c: SurveyMediaCategory, files: FileList | null) => {
-    const names = Array.from(files ?? [])
+  const add = (category: SurveyMediaKey, files: FileList | null) => {
+    const picked = Array.from(files ?? [])
       .filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
-      .map((f) => mediaPrefix(c) + f.name);
-    if (names.length) dispatch({ type: 'CUSTOMER_ADD_SURVEY_MEDIA', orderId: order.id, names });
+      .map((f) => ({ category, name: f.name }));
+    if (picked.length) dispatch({ type: 'CUSTOMER_ADD_SURVEY_MEDIA', orderId: order.id, files: picked });
   };
 
-  const earlier = uncategorizedMedia(order);
   return (
     <ul className="space-y-2">
-      {earlier.length > 0 && (
-        <li className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-          <p className="text-xs font-semibold text-slate-500">Đã gửi kèm khi đặt đơn ({earlier.length})</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {earlier.map((n, i) => (
-              <span key={`${n}-${i}`} className="max-w-[180px] truncate rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600">
-                {n}
-              </span>
-            ))}
-          </div>
-        </li>
-      )}
       {SURVEY_MEDIA_CATEGORIES.map((c) => {
-        const files = mediaOfCategory(order, c);
+        const files = mediaOfCategory(order, c.key);
         const done = files.length > 0;
+        const optional = optionalMediaReason(order, c.key);
         return (
           <li key={c.key} className={cx('rounded-xl border p-3 transition-colors', done ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200')}>
             <div className="flex items-center gap-3">
@@ -71,6 +57,7 @@ const MediaUploader = ({ order }: { order: Order }) => {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-900">{c.label}</p>
                 <p className="text-xs text-slate-500">{c.hint}</p>
+                {optional && !done && <p className="mt-0.5 text-[11px] font-medium text-slate-400">{optional}</p>}
               </div>
               {done && <Badge tone="success">{files.length} tệp</Badge>}
               <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-brand/50 hover:text-brand">
@@ -81,7 +68,7 @@ const MediaUploader = ({ order }: { order: Order }) => {
                   accept="image/*,video/*"
                   className="sr-only"
                   onChange={(e) => {
-                    add(c, e.target.files);
+                    add(c.key, e.target.files);
                     e.target.value = '';
                   }}
                 />
@@ -250,7 +237,8 @@ export const SurveyStageCard = ({ order }: { order: Order }) => {
   if (kind === 'PHOTOS') {
     const submitted = isMediaSubmitted(order);
     const submittedAt = order.surveyMediaSubmittedAt;
-    const filled = SURVEY_MEDIA_CATEGORIES.filter((c) => mediaOfCategory(order, c).length > 0).length;
+    const needed = SURVEY_MEDIA_CATEGORIES.filter((c) => !optionalMediaReason(order, c.key));
+    const filled = needed.filter((c) => mediaOfCategory(order, c.key).length > 0).length;
     return (
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start gap-3">
@@ -259,10 +247,10 @@ export const SurveyStageCard = ({ order }: { order: Order }) => {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-semibold text-slate-900">Gửi ảnh / video để nhận báo giá</p>
-            <p className="text-sm text-slate-500">Chụp đủ 4 mục bên dưới giúp chuyên viên báo giá chính xác, hạn chế phát sinh ngày chuyển.</p>
+            <p className="text-sm text-slate-500">Chụp đủ các mục cần thiết bên dưới giúp chuyên viên báo giá chính xác, hạn chế phát sinh ngày chuyển.</p>
           </div>
-          <Badge tone={filled === SURVEY_MEDIA_CATEGORIES.length ? 'success' : 'neutral'}>
-            {filled}/{SURVEY_MEDIA_CATEGORIES.length} mục
+          <Badge tone={filled === needed.length ? 'success' : 'neutral'}>
+            {filled}/{needed.length} mục cần thiết
           </Badge>
         </div>
 

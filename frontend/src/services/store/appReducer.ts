@@ -211,7 +211,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         scheduledDate: action.input.scheduledDate,
         timeSlot: action.input.timeSlot,
         status: 'NEW_PENDING_SURVEY',
-        customerPhotos: action.input.photoNames,
+        customerPhotos: action.input.photoNames.map((name) => ({ category: 'OTHER' as const, name })),
         items: action.input.items,
         requestedServices: action.input.requestedServices,
         referenceQuote: action.input.referenceQuote,
@@ -319,11 +319,11 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
 
     case 'CUSTOMER_ADD_SURVEY_MEDIA': {
       const o = findOrder(state, action.orderId);
-      if (!o || o.status !== 'NEW_PENDING_SURVEY' || action.names.length === 0) return state;
+      if (!o || o.status !== 'NEW_PENDING_SURVEY' || action.files.length === 0) return state;
       const next = patchOrder(state, action.orderId, (ord) =>
-        withLog({ ...ord, customerPhotos: [...ord.customerPhotos, ...action.names] }, audit('CUSTOMER', 'Tải ảnh / video khảo sát', `Khách tải thêm ${action.names.length} tệp.`)),
+        withLog({ ...ord, customerPhotos: [...ord.customerPhotos, ...action.files] }, audit('CUSTOMER', 'Tải ảnh / video khảo sát', `Khách tải thêm ${action.files.length} tệp.`)),
       );
-      return toast(next, 'success', `Đã tải lên ${action.names.length} tệp.`);
+      return toast(next, 'success', `Đã tải lên ${action.files.length} tệp.`);
     }
 
     case 'CUSTOMER_SUBMIT_SURVEY_MEDIA': {

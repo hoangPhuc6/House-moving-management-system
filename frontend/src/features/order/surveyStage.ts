@@ -1,27 +1,57 @@
 import type { Tone } from '@/components/ui';
 import { formatDateVN } from '@/services/format';
-import type { Order, SitePhotoCategory } from '@/types';
+import type { Order, SitePhotoCategory, SurveyMediaKey } from '@/types';
 
 /** Cách đơn đi qua bước khảo sát — dùng chung cho Khách hàng, Điều phối và Nhân viên. */
 export type SurveyStageKind = 'TRUCK_CONFIRM' | 'VIDEO_CALL' | 'ON_SITE' | 'PHOTOS';
 
-/** Danh mục ảnh / video gợi ý khách chụp — tên tệp được lưu kèm tiền tố "[nhãn] ". */
-export const SURVEY_MEDIA_CATEGORIES = [
-  { key: 'ROOMS', label: 'Phòng khách / phòng ngủ', hint: 'Mỗi phòng 1–2 ảnh toàn cảnh' },
-  { key: 'BIG', label: 'Đồ lớn', hint: 'Tủ, giường, tủ lạnh, sofa, máy giặt…' },
-  { key: 'ACCESS', label: 'Lối đi, hành lang, thang', hint: 'Thang máy / thang bộ, cửa ra vào' },
-  { key: 'PARKING', label: 'Cổng / hẻm chỗ xe đậu', hint: 'Giúp chọn xe & tính trung chuyển' },
-] as const;
+/**
+ * Nhóm ảnh khảo sát — một nguồn duy nhất cho ảnh khách tự gửi và ảnh NV chụp tại hiện trường,
+ * để Điều phối xem hai loại ảnh theo cùng một cách phân nhóm. Chỉ khác lời gợi ý cho từng đối tượng.
+ */
+export const PHOTO_CATEGORIES: { key: SitePhotoCategory; label: string; short: string; customerHint: string; siteHint: string }[] = [
+  {
+    key: 'ROOMS',
+    label: 'Toàn cảnh từng phòng',
+    short: 'toàn cảnh phòng',
+    customerHint: 'Phòng khách, phòng ngủ, bếp — mỗi phòng 1–2 ảnh',
+    siteHint: 'Phòng khách, phòng ngủ, bếp — mỗi phòng 1 ảnh',
+  },
+  {
+    key: 'BIG',
+    label: 'Đồ lớn / dễ vỡ / giá trị cao',
+    short: 'đồ đạc',
+    customerHint: 'Tủ, giường, tủ lạnh, sofa, máy giặt, TV, gương…',
+    siteHint: 'Chụp rõ tình trạng trước khi chuyển',
+  },
+  {
+    key: 'ACCESS',
+    label: 'Lối đi, cầu thang, thang máy',
+    short: 'lối đi',
+    customerHint: 'Hành lang, cửa ra vào, thang bộ / thang máy',
+    siteHint: 'Độ rộng cửa, chiếu nghỉ, thang máy',
+  },
+  {
+    key: 'PARKING',
+    label: 'Cổng, hẻm, chỗ đỗ xe',
+    short: 'chỗ đỗ xe',
+    customerHint: 'Giúp chọn loại xe & tính phí trung chuyển',
+    siteHint: 'Căn cứ chọn loại xe & phí trung chuyển',
+  },
+];
 
-export type SurveyMediaCategory = (typeof SURVEY_MEDIA_CATEGORIES)[number];
+/** Danh mục ảnh / video gợi ý khách tự chụp: 4 nhóm chung + "Khác". */
+export const SURVEY_MEDIA_CATEGORIES: { key: SurveyMediaKey; label: string; hint: string }[] = [
+  ...PHOTO_CATEGORIES.map(({ key, label, customerHint }) => ({ key, label, hint: customerHint })),
+  { key: 'OTHER', label: 'Khác', hint: 'Đồ cần tháo lắp, cây cảnh, bể cá… hoặc bất cứ gì bạn muốn lưu ý' },
+];
 
 /** Checklist ảnh hiện trường NV phải chụp khi khảo sát trực tiếp — mỗi nhóm tối thiểu 1 ảnh. */
-export const SITE_PHOTO_CHECKLIST: { key: SitePhotoCategory; label: string; hint: string }[] = [
-  { key: 'ROOMS', label: 'Toàn cảnh từng phòng', hint: 'Phòng khách, phòng ngủ, bếp — mỗi phòng 1 ảnh' },
-  { key: 'BIG', label: 'Đồ lớn / dễ vỡ / giá trị cao', hint: 'Chụp rõ tình trạng trước khi chuyển' },
-  { key: 'ACCESS', label: 'Lối đi, cầu thang, thang máy', hint: 'Độ rộng cửa, chiếu nghỉ, thang máy' },
-  { key: 'PARKING', label: 'Cổng, hẻm, chỗ đỗ xe', hint: 'Căn cứ chọn loại xe & phí trung chuyển' },
-];
+export const SITE_PHOTO_CHECKLIST: { key: SitePhotoCategory; label: string; hint: string }[] = PHOTO_CATEGORIES.map(({ key, label, siteHint }) => ({
+  key,
+  label,
+  hint: siteHint,
+}));
 
 /**
  * TẠM TẮT khi đang test: không chặn gửi kết quả khảo sát / báo giá vì thiếu ảnh.
@@ -39,7 +69,7 @@ export const MIN_SITE_PHOTOS = 5;
 export const SITE_REQUIRED_CATEGORIES: SitePhotoCategory[] = ['BIG', 'ACCESS', 'PARKING'];
 
 /** Tên ngắn của nhóm ảnh bắt buộc — dùng trong dòng nhắc "Cần ảnh: …". */
-export const REQUIRED_PHOTO_LABEL: Record<SitePhotoCategory, string> = { ROOMS: 'toàn cảnh phòng', BIG: 'đồ đạc', ACCESS: 'lối đi', PARKING: 'chỗ đỗ xe' };
+export const REQUIRED_PHOTO_LABEL = Object.fromEntries(PHOTO_CATEGORIES.map((c) => [c.key, c.short])) as Record<SitePhotoCategory, string>;
 
 /** Khảo sát tận nơi: lý do chưa gửi được kết quả vì thiếu ảnh hiện trường; null khi đã đủ. */
 export const missingSitePhotos = (photos: { category: SitePhotoCategory }[]): string | null => {
@@ -63,10 +93,9 @@ export const missingVideoPhotos = (photos: { category: SitePhotoCategory }[]): s
   return null;
 };
 
-export const mediaPrefix =(c: SurveyMediaCategory): string => `[${c.label}] `;
-
-export const mediaOfCategory = (order: Order, c: SurveyMediaCategory): string[] =>
-  order.customerPhotos.filter((n) => n.startsWith(mediaPrefix(c))).map((n) => n.slice(mediaPrefix(c).length));
+/** Tên các tệp khách đã gửi trong một nhóm. */
+export const mediaOfCategory = (order: Order, key: SurveyMediaKey): string[] =>
+  order.customerPhotos.filter((m) => m.category === key).map((m) => m.name);
 
 const WEEKDAYS = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
@@ -93,10 +122,6 @@ export const surveyStageOf = (order: Order): SurveyStageKind => {
 
 /** Đơn cũ (không qua wizard) đính kèm ảnh ngay khi đặt nên coi như đã gửi. */
 export const isMediaSubmitted = (order: Order): boolean => Boolean(order.surveyMediaSubmittedAt) || (!order.bookingDetails && order.customerPhotos.length > 0);
-
-/** Ảnh / video không thuộc danh mục nào (gửi kèm lúc đặt đơn). */
-export const uncategorizedMedia = (order: Order): string[] =>
-  order.customerPhotos.filter((n) => !SURVEY_MEDIA_CATEGORIES.some((c) => n.startsWith(mediaPrefix(c))));
 
 export const hasAppointment = (order: Order): boolean => Boolean(order.bookingDetails?.surveyDate && order.bookingDetails.surveyContactSlot);
 

@@ -245,8 +245,17 @@ export type MaterialQuantities = Record<string, number>;
  */
 export type SurveyMethod = 'PHOTO' | 'VIDEO_CALL' | 'TRUCK_CONFIRM' | 'ON_SITE';
 
-/** Nhóm ảnh hiện trường bắt buộc khi khảo sát trực tiếp (khớp SURVEY_MEDIA_CATEGORIES). */
+/** Nhóm ảnh khảo sát — dùng chung cho ảnh NV chụp tại hiện trường và ảnh khách tự gửi (PHOTO_CATEGORIES). */
 export type SitePhotoCategory = 'ROOMS' | 'BIG' | 'ACCESS' | 'PARKING';
+
+/** Nhóm ảnh khách tự gửi: 4 nhóm chung + "Khác" cho những gì không thuộc nhóm nào. */
+export type SurveyMediaKey = SitePhotoCategory | 'OTHER';
+
+/** Một ảnh / video khách tải lên ở bước khảo sát. Bản demo chỉ lưu tên tệp. */
+export interface CustomerMedia {
+  category: SurveyMediaKey;
+  name: string;
+}
 
 /** Ảnh bằng chứng nhân viên chụp tại hiện trường. Bản demo giữ object URL trong phiên làm việc. */
 export interface EvidencePhoto {
@@ -490,8 +499,8 @@ export interface Order {
   /** Giờ xe bắt đầu đi (HH:MM) — đơn cũ có thể là khung "07:00 - 09:00". */
   timeSlot: string;
   status: OrderStatus;
-  /** Tên các ảnh đồ đạc khách tải lên khi đặt lịch — căn cứ khảo sát qua ảnh. */
-  customerPhotos: string[];
+  /** Ảnh / video khách tải lên, gắn nhóm — căn cứ khảo sát qua ảnh. */
+  customerPhotos: CustomerMedia[];
   /** Danh sách đồ đạc khách khai báo. */
   items: BookingItem[];
   /** Tên các dịch vụ khách chọn khi đặt đơn. */
@@ -715,7 +724,7 @@ export type AppAction =
     }
   | { type: 'CUSTOMER_REQUEST_NEGOTIATION'; orderId: string; message: string }
   | { type: 'RESEND_QUOTE'; orderId: string; note: string }
-  | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; names: string[] }
+  | { type: 'CUSTOMER_ADD_SURVEY_MEDIA'; orderId: string; files: CustomerMedia[] }
   | { type: 'CUSTOMER_SUBMIT_SURVEY_MEDIA'; orderId: string }
   | { type: 'CUSTOMER_UPDATE_SURVEY'; orderId: string; preference: SurveyPreference; date: string; slot: string }
   | { type: 'PAY_DEPOSIT'; orderId: string }

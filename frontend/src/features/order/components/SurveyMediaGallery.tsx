@@ -1,13 +1,10 @@
 import { Image as ImageIcon } from 'lucide-react';
-import { mediaOfCategory, SURVEY_MEDIA_CATEGORIES, uncategorizedMedia } from '@/features/order/surveyStage';
+import { mediaOfCategory, SURVEY_MEDIA_CATEGORIES } from '@/features/order/surveyStage';
 import type { Order } from '@/types';
 
 /** Ảnh / video khách gửi, nhóm theo danh mục gợi ý ở trang khách. */
 export const SurveyMediaGallery = ({ order }: { order: Order }) => {
-  const groups = [
-    ...SURVEY_MEDIA_CATEGORIES.map((c) => ({ label: c.label, files: mediaOfCategory(order, c) })),
-    { label: 'Khác', files: uncategorizedMedia(order) },
-  ].filter((g) => g.files.length > 0);
+  const groups = SURVEY_MEDIA_CATEGORIES.map((c) => ({ label: c.label, files: mediaOfCategory(order, c.key) })).filter((g) => g.files.length > 0);
   if (groups.length === 0) return null;
   return (
     <div className="space-y-3">

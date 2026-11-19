@@ -5,10 +5,24 @@ import {
   shortDate,
   surveyStageOf,
 } from '@/features/order/surveyStage';
+import { FLOOR_OPTIONS, PROPERTY_TYPES } from '@/features/customer/booking/constants';
 import { formatTime } from '@/services/format';
-import type { Order } from '@/types';
+import type { Order, SurveyMediaKey } from '@/types';
 
 export * from '@/features/order/surveyStage';
+
+/**
+ * Nhóm ảnh nào không bắt buộc với đơn này, kèm lý do để hiện cho khách; null = nên chụp.
+ * Dựa trên nhà hiện tại (nơi đi) vì khách chụp ảnh ở đó.
+ */
+export const optionalMediaReason = (order: Order, key: SurveyMediaKey): string | null => {
+  if (key === 'OTHER') return 'Không bắt buộc';
+  const from = order.bookingDetails?.from;
+  if (!from) return null;
+  if (key === 'ACCESS' && from.floor === FLOOR_OPTIONS[0]) return 'Không bắt buộc với nhà tầng trệt';
+  if (key === 'PARKING' && from.propertyType === PROPERTY_TYPES[0]?.label) return 'Không bắt buộc vì xe đỗ sát cửa';
+  return null;
+};
 
 /** Lời nhắn ở phần đầu trang khi đơn đang ở bước 2 (chỉ áp dụng đơn tạo qua wizard). */
 export const surveyHeroCopy = (order: Order): { title: string; desc: string } => {
